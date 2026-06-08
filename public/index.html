@@ -361,6 +361,40 @@ function parseDur(str){
   return u.startsWith('s')?n:n*60;
 }
 
+function buildBankedCurve(x1,y1,z1, x2,y2,z2, eL, eR){
+  // Banked curve: smoothly transitions from (x1,y1,z1) to (x2,y2,z2)
+  // Intermediate nodes lean into the turn
+  const steps = 6;
+  let prevX=x1, prevY=y1, prevZ=z1;
+  for(let i=1;i<=steps;i++){
+    const t=i/steps;
+    // Ease in-out
+    const et=t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
+    const nx=x1+(x2-x1)*et;
+    const ny=y1+(y2-y1)*et;
+    const nz=z1+(z2-z1)*et;
+    // Build a short straight segment for each step
+    const from=new THREE.Vector3(prevX,prevY,prevZ);
+    const to=new THREE.Vector3(nx,ny,nz);
+    // Add path nodes along this mini-segment
+    const dir=new THREE.Vector3().subVectors(to,from).normalize();
+    const segLen=from.distanceTo(to);
+    const segSteps=Math.max(2,Math.ceil(segLen/2));
+    for(let j=0;j<=segSteps;j++){
+      const sp=from.clone().lerp(to,j/segSteps);
+      pathNodes.push({pos:sp, dir:dir.clone(), floorY:sp.y, halfW:TW_HALF});
+    }
+    // Visual geometry - flat plank for this sub-segment
+    const len=segLen, mz=(prevZ+nz)/2, my=(prevY+ny)/2, mx=(prevX+nx)/2;
+    makeBox(mx,my-0.2,mz, TW,0.4,len+0.2, 0x111128,0x001122);
+    makeBox(mx+TW_HALF+.15,my+.55,mz, 0.28,1.4,len, 0x0a1020);
+    makeBox(mx-TW_HALF-.15,my+.55,mz, 0.28,1.4,len, 0x0a1020);
+    makeGlow(mx+TW_HALF+.15,my+1.3,mz, 0.1,0.1,len, eL);
+    makeGlow(mx-TW_HALF-.15,my+1.3,mz, 0.1,0.1,len, eR);
+    prevX=nx; prevY=ny; prevZ=nz;
+  }
+}
+
 function buildCourse(durSecs){
   clearCourse();
   let complexity=3;
@@ -389,10 +423,43 @@ function buildCourse(durSecs){
   z-=8;
 
   // ── SECTIONS
-  // Straight track only - no turns
-  const trackLen = 80 + complexity * 25;
-  buildStraight(x, y, z, z - trackLen, 0x00f0ff, 0xff00cc);
-  z -= trackLen;
+  // Randomly pick sections - mix of straights, banked curves, drops
+  const sectionPool = ['straight','straight','drop','curve_bank','straight','drop','curve_bank','straight'];
+  // Shuffle pool for this race
+  for(let i=sectionPool.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [sectionPool[i],sectionPool[j]]=[sectionPool[j],sectionPool[i]];
+  }
+  const edgePalette=[[0x00f0ff,0xff00cc],[0xffff00,0xff8800],[0x00ff88,0x00aaff],[0xaa44ff,0xff4488]];
+
+  for(let s=0;s<numSections;s++){
+    const type=sectionPool[s%sectionPool.length];
+    const [eL,eR]=edgePalette[s%edgePalette.length];
+
+    if(type==='straight'){
+      const len=22+Math.floor(Math.random()*18); // 22-40 units
+      buildStraight(x,y,z,z-len,eL,eR);
+      z-=len;
+
+    } else if(type==='drop'){
+      // Ramp drops down 6-12 units over 14-20 units forward
+      const dropY=6+Math.floor(Math.random()*6);
+      const dropLen=14+Math.floor(Math.random()*6);
+      buildRamp(x,y,z, y-dropY, z-dropLen);
+      z-=dropLen; y-=dropY;
+      // Short flat after drop
+      buildStraight(x,y,z,z-12,eL,eR);
+      z-=12;
+
+    } else if(type==='curve_bank'){
+      // Banked curve: slight X shift + drop, with banked path nodes
+      const shift=(Math.random()<0.5?1:-1)*(8+Math.floor(Math.random()*8));
+      const dropY=2+Math.floor(Math.random()*4);
+      const len=20+Math.floor(Math.random()*12);
+      buildBankedCurve(x,y,z, x+shift, y-dropY, z-len, eL, eR);
+      x+=shift; y-=dropY; z-=len;
+    }
+  }
 
   // ── FINAL SPRINT
   const zFinal=z-22;
@@ -453,6 +520,7 @@ function createZorb(name,isSub,col){
     trailHistory:[],
     pos:new THREE.Vector3(sx, START_POS.y, sz),
     vel:new THREE.Vector3(0,0,0),
+    speedMult: 0.88 + Math.random()*0.24, // 0.88-1.12 random speed multiplier
     boost:0,
     onTrack:false,
     finished:false,finishTime:0,rank:0,
@@ -516,6 +584,12 @@ function stepPhysics(z,dt){
       z.onTrack=false;
     }
 
+    // Random micro-jitter simulates imperfect track surface
+    if(z.onTrack && Math.random()<0.05){
+      z.vel.x += (Math.random()-0.5)*0.8;
+      z.vel.z += (Math.random()-0.5)*0.8;
+    }
+
     // ── Wall constraint using path node's local frame
     // Project position onto path node's local XZ
     const toPos=new THREE.Vector3().subVectors(z.pos,node.pos);
@@ -539,13 +613,14 @@ function stepPhysics(z,dt){
     // Always push forward - runs every frame on track
     if(phase==='racing'){
       const fwdSpeed=z.vel.x*node.dir.x+z.vel.z*node.dir.z;
-      // Constant force like gravity on a slope - never stops
-      z.vel.x+=node.dir.x*6*dt;
-      z.vel.z+=node.dir.z*6*dt;
+      // Constant force - speedMult makes each ball slightly different
+      const sf = z.speedMult||1;
+      z.vel.x+=node.dir.x*6*sf*dt;
+      z.vel.z+=node.dir.z*6*sf*dt;
       // Extra kick if really slow
-      if(fwdSpeed<MIN_FWD){
-        z.vel.x+=node.dir.x*(MIN_FWD-fwdSpeed)*12*dt;
-        z.vel.z+=node.dir.z*(MIN_FWD-fwdSpeed)*12*dt;
+      if(fwdSpeed<MIN_FWD*sf){
+        z.vel.x+=node.dir.x*(MIN_FWD*sf-fwdSpeed)*12*dt;
+        z.vel.z+=node.dir.z*(MIN_FWD*sf-fwdSpeed)*12*dt;
       }
     }
 
@@ -884,6 +959,14 @@ function loop(ts){
   updateCamera(dt);
   pCyan.intensity=1.2+Math.sin(frame*0.033)*0.38;
   pCyan.position.set(Math.sin(frame*0.011)*30,8,FINISH_POS.z*0.5);
+  // Random gust every ~15s
+  if(frame%900===450 && phase==="racing" && zorbs.length>0){
+    const nhits=Math.ceil(zorbs.length*0.4);
+    for(let hi=0;hi<nhits;hi++){
+      const gz=zorbs[Math.floor(Math.random()*zorbs.length)];
+      if(!gz.finished){gz.vel.x+=(Math.random()-0.5)*6;gz.vel.z+=(Math.random()-0.5)*3;showKO("GUST: "+gz.name,0xaaaaff);}
+    }
+  }
   if(frame%18===0){updateLB();drawMinimap();}
   renderer.render(scene,camera);
 }
