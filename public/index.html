@@ -1077,10 +1077,25 @@ const autoModes=['follow','wide','top'];
 
 function setCam(m){
   camMode=m;
+  // Reset smooth cam when switching modes to avoid jump
+  _camInit=false;
+  // When entering free cam, seed target at current leader pos
+  if(m==='free' && zorbs.length>0){
+    const leader=zorbs.filter(z=>!z.finished&&!z.disqualified).sort((a,b)=>b.nodeIdx-a.nodeIdx)[0]||zorbs[0];
+    if(leader){ freeCam.target.copy(leader.pos); freeCam.target.y+=4; }
+  }
   document.querySelectorAll('.cb').forEach(b=>b.classList.remove('active'));
   const el=document.getElementById('btn-'+m); if(el)el.classList.add('active');
 }
 
+const freeCam = {
+  target: new THREE.Vector3(0,5,0),
+  phi: Math.PI/4,    // vertical angle
+  theta: 0,          // horizontal angle  
+  dist: 40,          // distance from target
+  dragging: false,
+  lastX: 0, lastY: 0
+};
 const _smoothCamPos = new THREE.Vector3();
 let _camInit = false;
 function updateCamera(dt){
@@ -1124,7 +1139,7 @@ function updateCamera(dt){
     // Camera pulls back more at high speed for dramatic feel
     const pullDist = 4.5 + spd*0.09;
     const cp=lp.clone().addScaledVector(back,pullDist).add(new THREE.Vector3(0,3.2,0));
-    camPos.lerp(cp,sm*3); camLook.lerp(lp.clone().add(new THREE.Vector3(0,0.5,0)),sm*4);
+    camPos.lerp(cp,sm*2.5); camLook.lerp(lp.clone().add(new THREE.Vector3(0,0.5,0)),sm*3);
   } else if(mode==='wide'){
     const avg=new THREE.Vector3(); zorbs.forEach(z=>avg.add(z.pos));
     if(zorbs.length>0) avg.divideScalar(zorbs.length);
@@ -1364,14 +1379,7 @@ setInterval(()=>{
 let frame=0;
 
 // Free cam - mouse drag orbit
-const freeCam = {
-  target: new THREE.Vector3(0,5,0),
-  phi: Math.PI/4,    // vertical angle
-  theta: 0,          // horizontal angle  
-  dist: 40,          // distance from target
-  dragging: false,
-  lastX: 0, lastY: 0
-};
+
 canvas.addEventListener('mousedown', e=>{
   if(camMode==='free'){ freeCam.dragging=true; freeCam.lastX=e.clientX; freeCam.lastY=e.clientY; }
 });
