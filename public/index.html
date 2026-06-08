@@ -10,7 +10,7 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;}
 #app{width:100%;height:100vh;position:relative;}
 #c{display:block;width:100%;height:100%;}
 #ui{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;font-family:'Courier New',monospace;}
-#topbar{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:linear-gradient(180deg,rgba(0,0,0,0.92)0%,transparent);}
+#topbar{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:linear-gradient(180deg,rgba(0,0,0,0.9)0%,transparent);}
 #logo{font-size:18px;font-weight:900;letter-spacing:4px;color:#00f0ff;text-shadow:0 0 18px #00f0ff;}
 #logo span{color:#ff00cc;}
 #cams{display:flex;gap:5px;pointer-events:auto;}
@@ -20,14 +20,15 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;}
 .pill{background:rgba(0,0,0,0.75);border:1px solid rgba(255,255,255,0.09);border-radius:20px;padding:4px 12px;font-size:10px;color:#fff;display:flex;align-items:center;gap:6px;letter-spacing:1px;}
 .dot{width:5px;height:5px;border-radius:50%;}.dg{background:#00ff88;box-shadow:0 0 6px #00ff88;animation:blink 1.5s infinite;}.dp{background:#ff00cc;}
 @keyframes blink{0%,100%{opacity:1;}50%{opacity:.3;}}
-#timer-display{font-size:13px;font-weight:700;}.urgent{color:#ff4444!important;}
-#lb{position:absolute;top:50px;right:12px;background:rgba(0,0,0,0.8);border:1px solid rgba(0,240,255,0.14);border-radius:10px;padding:10px 14px;min-width:170px;}
+#timer-display{font-size:13px;font-weight:700;color:#fff;}
+.urgent{color:#ff4444!important;}
+#lb{position:absolute;top:50px;right:12px;background:rgba(0,0,0,0.8);border:1px solid rgba(0,240,255,0.14);border-radius:10px;padding:10px 14px;min-width:168px;}
 #lb h3{font-size:9px;letter-spacing:3px;color:rgba(0,240,255,0.38);margin-bottom:8px;}
 .lr{display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:11px;}
 .lp{color:rgba(255,255,255,.22);width:14px;font-size:10px;}.lp.g{color:#ffd700;}
 .ln{flex:1;color:#ddd;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:85px;}.ln.sub{color:#ff00cc;}
 .ld{font-size:9px;color:rgba(255,255,255,.28);}
-#sp{position:absolute;top:50px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.85);border:1px solid rgba(0,240,255,0.18);border-radius:10px;padding:12px 16px;pointer-events:auto;display:flex;flex-direction:column;gap:8px;min-width:250px;}
+#sp{position:absolute;top:50px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.85);border:1px solid rgba(0,240,255,0.18);border-radius:10px;padding:12px 16px;pointer-events:auto;display:flex;flex-direction:column;gap:8px;min-width:240px;}
 #sp h3{font-size:9px;letter-spacing:3px;color:rgba(0,240,255,0.4);text-align:center;}
 #sp-row{display:flex;gap:6px;align-items:center;}
 #sp-lbl{font-size:10px;color:rgba(255,255,255,0.5);white-space:nowrap;}
@@ -37,9 +38,9 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;}
 #btn-go:disabled{opacity:0.3;cursor:not-allowed;}
 #btn-hide{font-size:9px;color:rgba(255,255,255,0.25);cursor:pointer;text-align:center;}
 #btn-show{position:absolute;top:50px;left:50%;transform:translateX(-50%);font-size:9px;color:rgba(0,240,255,0.4);cursor:pointer;background:rgba(0,0,0,0.6);border:1px solid rgba(0,240,255,0.15);border-radius:4px;padding:3px 10px;display:none;pointer-events:auto;}
-#chat{position:absolute;bottom:12px;left:12px;width:188px;background:rgba(0,0,0,0.78);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:9px;pointer-events:auto;}
+#chat{position:absolute;bottom:12px;left:12px;width:185px;background:rgba(0,0,0,0.78);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:9px;pointer-events:auto;}
 #ct{font-size:9px;letter-spacing:2px;color:rgba(255,255,255,.22);margin-bottom:5px;}
-#cl{height:88px;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;gap:2px;}
+#cl{height:85px;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;gap:2px;}
 .cm{font-size:10px;line-height:1.4;animation:fi .2s ease;}
 .cm .u{font-weight:700;}.cm .u.s{color:#ff00cc;}.cm .u.r{color:#00f0ff;}
 .cm .c{color:rgba(255,255,255,.38);}
@@ -65,7 +66,7 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;}
     <div id="cams">
       <button class="cb active" id="btn-follow" onclick="setCam('follow')">FOLLOW</button>
       <button class="cb" id="btn-wide" onclick="setCam('wide')">WIDE</button>
-      <button class="cb" id="btn-top" onclick="setCam('top')">TOP</button>
+      <button class="cb" id="btn-chase" onclick="setCam('chase')">CHASE</button>
       <button class="cb" id="btn-auto" onclick="setCam('auto')">AUTO</button>
     </div>
   </div>
@@ -79,7 +80,7 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;}
     <h3>STREAMER CONTROLS</h3>
     <div id="sp-row">
       <span id="sp-lbl">TIMER</span>
-      <input id="dur" type="text" placeholder="e.g. 3m" maxlength="4"/>
+      <input id="dur" type="text" placeholder="e.g. 3m" maxlength="5"/>
       <span id="sp-hint">optional</span>
     </div>
     <button id="btn-go" onclick="streamerStart()">START RACE</button>
@@ -98,665 +99,603 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;}
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-// ZORBS on Stream v0.4 - Path-based physics, stable track following
+// ZORBS on Stream - Marble Run / Hot Wheels style
+// Track is a TUBE the ball rolls THROUGH, gravity pulls it down and forward
 
-// ── RENDERER ─────────────────────────────────────────
 const canvas = document.getElementById('c');
 const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.2;
+
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x010115,0.011);
-scene.background = new THREE.Color(0x010115);
-const camera = new THREE.PerspectiveCamera(65,1,0.1,800);
+scene.fog = new THREE.FogExp2(0x05050f,0.012);
+scene.background = new THREE.Color(0x05050f);
+const camera = new THREE.PerspectiveCamera(70,1,0.1,600);
+camera.position.set(0,8,20);
 
-function onResize(){
+function resize(){
   const w=canvas.parentElement.offsetWidth,h=canvas.parentElement.offsetHeight||window.innerHeight;
-  renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix();
+  renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();
 }
-onResize(); window.addEventListener('resize',onResize);
+resize(); window.addEventListener('resize',resize);
 
-// ── LIGHTING ─────────────────────────────────────────
-scene.add(new THREE.AmbientLight(0x223355,4));
-const sun=new THREE.DirectionalLight(0xaabbff,2.5);
-sun.position.set(40,80,20); sun.castShadow=true;
-sun.shadow.mapSize.set(2048,2048);
-sun.shadow.camera.left=-150; sun.shadow.camera.right=150;
-sun.shadow.camera.top=150; sun.shadow.camera.bottom=-150;
-sun.shadow.camera.far=600;
+// Lighting
+scene.add(new THREE.AmbientLight(0x334466,5));
+const sun=new THREE.DirectionalLight(0xaaccff,2);
+sun.position.set(20,60,20);sun.castShadow=true;
+sun.shadow.mapSize.set(1024,1024);
 scene.add(sun);
-const fill=new THREE.DirectionalLight(0xff00cc,0.55);
-fill.position.set(-40,20,-40); scene.add(fill);
-const pCyan=new THREE.PointLight(0x00f0ff,1.4,120); scene.add(pCyan);
+const pinkFill=new THREE.DirectionalLight(0xff00cc,0.6);
+pinkFill.position.set(-20,10,-20);scene.add(pinkFill);
+const glow=new THREE.PointLight(0x00f0ff,2,80);scene.add(glow);
 
 // Stars
 const sv=[];
-for(let i=0;i<2500;i++) sv.push((Math.random()-.5)*600,(Math.random()-.5)*600,(Math.random()-.5)*600);
-const sg=new THREE.BufferGeometry();
-sg.setAttribute('position',new THREE.Float32BufferAttribute(sv,3));
-scene.add(new THREE.Points(sg,new THREE.PointsMaterial({color:0xffffff,size:0.35,transparent:true,opacity:0.6})));
+for(let i=0;i<2000;i++)sv.push((Math.random()-.5)*400,(Math.random()-.5)*400,(Math.random()-.5)*400);
+const stGeo=new THREE.BufferGeometry();
+stGeo.setAttribute('position',new THREE.Float32BufferAttribute(sv,3));
+scene.add(new THREE.Points(stGeo,new THREE.PointsMaterial({color:0xffffff,size:0.3,transparent:true,opacity:0.7})));
 
-// ── CONSTANTS ────────────────────────────────────────
-const BALL_R = 0.52;
-const TW     = 5.6;  // track full width
-const TW_HALF = TW/2;
-const GRAV   = -20;
-const BOUNCE = 0.2;
-const FRIC   = 0.985;
-const MIN_FWD = 1.2; // minimum forward speed on track
-const ZCOLORS= [0x00f0ff,0xff00cc,0xaaff00,0xff8800,0xff4488,0xaa44ff,0x00ffaa,0xffff00,0x44aaff,0xff6644];
+// ── CONSTANTS ─────────────────────────────
+const BALL_R = 0.45;
+const ZCOLORS = [0x00f0ff,0xff00cc,0xaaff00,0xff8800,0xff4488,0xaa44ff,0x00ffaa,0xffff00,0x44aaff,0xff6644];
 
-// ── PATH SYSTEM ───────────────────────────────────────
-// The track is defined as a series of PATH NODES.
-// Each node has: pos (Vector3), width (half-width), floorY
-// Physics uses the path to keep balls on track by finding nearest point.
+// ── SPLINE TRACK ──────────────────────────
+// The track is a CatmullRom spline.
+// We build a TUBE around it (open half-pipe style).
+// Balls live inside - gravity pulls them along naturally.
 
-let pathNodes = [];   // [{pos:V3, dir:V3, up:V3, floorY, halfW}]
+let spline = null;
+let splineLen = 0;
 let trackMeshes = [];
-let hammers = [], bumperObjs = [], funnels = [], boostPads = [];
-let FINISH_POS = new THREE.Vector3(0,0,-200);
-let START_POS  = new THREE.Vector3(0,1,4);
+let splinePts = [];   // sampled world positions along curve
+let splineTans = [];  // tangents
+let FINISH_IDX = 0;
+let START_POS = new THREE.Vector3();
 
-function clearCourse(){
-  trackMeshes.forEach(m=>scene.remove(m)); trackMeshes=[];
-  hammers=[]; bumperObjs=[]; funnels=[]; boostPads=[];
-  pathNodes=[];
+function clearTrack(){
+  trackMeshes.forEach(m=>scene.remove(m));
+  trackMeshes=[];
+  splinePts=[];
+  splineTans=[];
 }
+function tAdd(m){scene.add(m);trackMeshes.push(m);return m;}
 
-function addMesh(m){ scene.add(m); trackMeshes.push(m); return m; }
+function buildTrack(complexity){
+  clearTrack();
 
-function makeBox(px,py,pz,sx,sy,sz,col,emit,rx=0,ry=0,rz=0){
-  const m=new THREE.Mesh(new THREE.BoxGeometry(sx,sy,sz),
-    new THREE.MeshStandardMaterial({color:col||0x111128,roughness:0.22,metalness:0.78,
-      emissive:emit||0x001122,emissiveIntensity:0.18}));
-  m.position.set(px,py,pz); m.rotation.set(rx,ry,rz);
-  m.castShadow=m.receiveShadow=true; return addMesh(m);
-}
-function makeGlow(px,py,pz,sx,sy,sz,col){
-  const m=new THREE.Mesh(new THREE.BoxGeometry(sx,sy,sz),new THREE.MeshBasicMaterial({color:col}));
-  m.position.set(px,py,pz); return addMesh(m);
-}
+  // ── Generate control points ────────────
+  // Track starts high, flows DOWN and FORWARD through curves
+  // Like a marble run - gravity does the work
+  const cps = [];
 
-// Add path nodes along a segment
-function addPathSegment(from, to, floorY, halfW=TW_HALF){
-  const dir=new THREE.Vector3().subVectors(to,from).normalize();
-  const steps=Math.max(2,Math.ceil(from.distanceTo(to)/2));
-  for(let i=0;i<=steps;i++){
-    const t=i/steps;
-    const pos=new THREE.Vector3().lerpVectors(from,to,t);
-    pos.y=floorY;
-    pathNodes.push({pos:pos.clone(), dir:dir.clone(), floorY, halfW});
-  }
-}
+  // Always start with a flat-ish launch section
+  cps.push(new THREE.Vector3(0, 30, 0));
+  cps.push(new THREE.Vector3(0, 28, -8));
+  cps.push(new THREE.Vector3(0, 25, -18));
 
-// Find nearest path node to a world position
-function nearestNode(worldPos){
-  let best=null, bestDist=Infinity;
-  for(const n of pathNodes){
-    const d=n.pos.distanceTo(worldPos);
-    if(d<bestDist){bestDist=d;best=n;}
-  }
-  return {node:best, dist:bestDist};
-}
+  let cx=0, cy=25, cz=-18;
 
-// ── TRACK SEGMENT BUILDERS ────────────────────────────
+  // How many sections
+  const sections = 3 + complexity;
 
-function buildStraight(x,y,z1,z2,eL=0x00f0ff,eR=0xff00cc){
-  const len=Math.abs(z2-z1), mz=(z1+z2)/2;
-  makeBox(x,y-0.2,mz, TW,0.4,len);
-  makeBox(x+TW_HALF+0.15,y+0.55,mz, 0.28,1.4,len, 0x0a1020,0x000820);
-  makeBox(x-TW_HALF-0.15,y+0.55,mz, 0.28,1.4,len, 0x0a1020,0x000820);
-  makeGlow(x+TW_HALF+0.15,y+1.3,mz, 0.1,0.1,len, eL);
-  makeGlow(x-TW_HALF-0.15,y+1.3,mz, 0.1,0.1,len, eR);
-  const a=new THREE.Vector3(x,y,z1), b=new THREE.Vector3(x,y,z2);
-  addPathSegment(a,b,y);
-}
+  for(let i=0;i<sections;i++){
+    const roll = (i*7919+complexity*13)%100/100; // deterministic-ish variety
+    const seg = i % 5;
 
-function buildRamp(x,y1,z1,y2,z2){
-  const dz=z2-z1,dy=y2-y1,len=Math.sqrt(dz*dz+dy*dy);
-  const angle=Math.atan2(-dy,-dz);
-  const mz=(z1+z2)/2,my=(y1+y2)/2;
-  makeBox(x,my-0.1,mz, TW,0.4,len+0.3, 0x111128,0x001122, angle);
-  makeBox(x+TW_HALF+0.15,my+0.6,mz, 0.28,1.6,len, 0x0a1020,0x000820, angle);
-  makeBox(x-TW_HALF-0.15,my+0.6,mz, 0.28,1.6,len, 0x0a1020,0x000820, angle);
-  // Path nodes interpolate Y along the ramp
-  const steps=Math.max(4,Math.ceil(len/2));
-  for(let i=0;i<=steps;i++){
-    const t=i/steps;
-    const pz=z1+(z2-z1)*t, py=y1+(y2-y1)*t;
-    const dir=new THREE.Vector3(0,dy/len,dz/len).normalize().negate();
-    pathNodes.push({pos:new THREE.Vector3(x,py,pz), dir, floorY:py, halfW:TW_HALF});
-  }
-}
-
-// Curved section: horizontal arc (constant Y)
-// cx,cz = center of circle, radius, startAngle, endAngle (radians, 0=forward/-Z)
-function buildCurve(cx,cy,cz,radius,startAngle,endAngle,eL=0x00f0ff,eR=0xff00cc){
-  const steps=Math.max(10,Math.ceil(Math.abs(endAngle-startAngle)*radius/2));
-  for(let i=0;i<steps;i++){
-    const t1=i/steps, t2=(i+1)/steps;
-    const a1=startAngle+(endAngle-startAngle)*t1;
-    const a2=startAngle+(endAngle-startAngle)*t2;
-    const am=(a1+a2)/2;
-    // Position on arc
-    const px=cx+Math.sin(am)*radius;
-    const pz=cz-Math.cos(am)*radius;
-    const segLen=radius*Math.abs(endAngle-startAngle)/steps*1.05;
-    // Floor plank
-    const fm=new THREE.Mesh(new THREE.BoxGeometry(TW,0.4,segLen),
-      new THREE.MeshStandardMaterial({color:0x111128,roughness:0.22,metalness:0.78,emissive:0x001122,emissiveIntensity:0.18}));
-    fm.position.set(px,cy-0.2,pz); fm.rotation.y=-am;
-    fm.castShadow=fm.receiveShadow=true; addMesh(fm);
-    // Walls
-    for(const side of [-1,1]){
-      const wm=new THREE.Mesh(new THREE.BoxGeometry(0.28,1.4,segLen+0.1),
-        new THREE.MeshStandardMaterial({color:0x0a1020,roughness:0.22,metalness:0.78}));
-      wm.position.set(px+Math.cos(am)*side*(TW_HALF+0.15), cy+0.55, pz+Math.sin(am)*side*(TW_HALF+0.15));
-      wm.rotation.y=-am; wm.castShadow=wm.receiveShadow=true; addMesh(wm);
-      const gm=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.1,segLen+0.1),
-        new THREE.MeshBasicMaterial({color:side>0?eL:eR}));
-      gm.position.set(px+Math.cos(am)*side*(TW_HALF+0.15), cy+1.3, pz+Math.sin(am)*side*(TW_HALF+0.15));
-      gm.rotation.y=-am; addMesh(gm);
+    if(seg===0){
+      // Long sweeping drop to the right
+      cx += 15+roll*20; cy -= 8+roll*6; cz -= 25+roll*15;
+      cps.push(new THREE.Vector3(cx-8,cy+4,cz+8));
+      cps.push(new THREE.Vector3(cx,cy,cz));
+    } else if(seg===1){
+      // Sweeping left curve, slight drop
+      cx -= 20+roll*15; cy -= 5+roll*4; cz -= 20+roll*20;
+      cps.push(new THREE.Vector3(cx+10,cy+3,cz+10));
+      cps.push(new THREE.Vector3(cx,cy,cz));
+    } else if(seg===2){
+      // Big drop straight down then forward
+      cy -= 15+roll*10; cz -= 10;
+      cps.push(new THREE.Vector3(cx+roll*6-3,cy+5,cz-5));
+      cps.push(new THREE.Vector3(cx,cy,cz));
+      cz -= 20+roll*10;
+      cps.push(new THREE.Vector3(cx,cy,cz));
+    } else if(seg===3){
+      // Helix - spiral around going down
+      const hr=12+roll*8;
+      for(let h=0;h<4;h++){
+        const ang=(h/4)*Math.PI*2;
+        cps.push(new THREE.Vector3(
+          cx+Math.sin(ang)*hr,
+          cy-h*5,
+          cz-Math.cos(ang)*hr-h*8
+        ));
+      }
+      cx+=Math.sin(Math.PI*2)*hr; cy-=20; cz-=40;
+    } else {
+      // Gentle S-bend staying somewhat level
+      cx += (roll-.5)*30; cz -= 25+roll*10; cy -= 3+roll*3;
+      cps.push(new THREE.Vector3(cx,cy,cz));
     }
-    // Path node
-    const dir=new THREE.Vector3(Math.cos(am),0,-Math.sin(am)).normalize();
-    pathNodes.push({pos:new THREE.Vector3(px,cy,pz), dir, floorY:cy, halfW:TW_HALF});
   }
-}
 
-function buildFunnel(cx,cy,cz,rTop,rBot,h){
-  const yBot=cy-h;
-  // Funnel mesh
-  const fm=new THREE.Mesh(new THREE.CylinderGeometry(rTop,rBot,h,32,1,true),
-    new THREE.MeshStandardMaterial({color:0x0a0a1e,roughness:0.2,metalness:0.85,side:THREE.DoubleSide,emissive:0x000833,emissiveIntensity:0.28}));
-  fm.position.set(cx,cy-h/2,cz); addMesh(fm);
-  for(let i=0;i<5;i++){
-    const t=i/4,r=rBot+(rTop-rBot)*(1-t)*0.92;
-    const rm=new THREE.Mesh(new THREE.TorusGeometry(r,0.09,8,36),new THREE.MeshBasicMaterial({color:i%2===0?0x00f0ff:0xff00cc}));
-    rm.position.set(cx,cy-h*t,cz); rm.rotation.x=Math.PI/2; addMesh(rm);
-  }
-  // SOLID EXIT FLOOR
-  makeBox(cx,yBot-0.2,cz, TW+2,0.4,14);
-  makeBox(cx+TW_HALF+1.15,yBot+0.55,cz, 0.28,1.4,14, 0x0a1020);
-  makeBox(cx-TW_HALF-1.15,yBot+0.55,cz, 0.28,1.4,14, 0x0a1020);
-  makeGlow(cx+TW_HALF+1.15,yBot+1.3,cz, 0.1,0.1,14, 0x00f0ff);
-  makeGlow(cx-TW_HALF-1.15,yBot+1.3,cz, 0.1,0.1,14, 0xff00cc);
-  // Path nodes on the exit platform
-  for(let dz=-6;dz<=6;dz+=2){
-    pathNodes.push({pos:new THREE.Vector3(cx,yBot,cz+dz), dir:new THREE.Vector3(0,0,-1), floorY:yBot, halfW:TW_HALF+0.6});
-  }
-  funnels.push({cx,cz,yTop:cy,yBot,rTop,rBot});
-  return yBot;
-}
+  // Final straight approach to finish
+  cz -= 15; cps.push(new THREE.Vector3(cx,cy,cz));
+  cz -= 15; cps.push(new THREE.Vector3(cx,cy,cz));
 
-function buildBoostPad(x,y,z){
-  makeBox(x,y+0.02,z, TW-1.2,0.06,2.5, 0x00ff88,0x00ff44);
-  for(let j=0;j<3;j++) makeGlow(x,y+0.04,z-0.6+j*0.6, TW-2,0.05,0.22, 0x00ff88);
-  boostPads.push({z1:z-1.25,z2:z+1.25,x1:x-TW_HALF+0.6,x2:x+TW_HALF-0.6,y});
-}
+  spline = new THREE.CatmullRomCurve3(cps,false,'catmullrom',0.5);
 
-function buildHammers(x,y,z1,z2,count){
-  const spacing=Math.abs(z2-z1)/(count+1);
-  for(let i=0;i<count;i++){
-    const hz=z1-spacing*(i+1);
-    const grp=new THREE.Group();
-    const handle=new THREE.Mesh(new THREE.CylinderGeometry(0.13,0.13,4,8),
-      new THREE.MeshStandardMaterial({color:0x334455,roughness:0.4,metalness:0.7}));
-    grp.add(handle);
-    const head=new THREE.Mesh(new THREE.BoxGeometry(3.4,0.75,0.85),
-      new THREE.MeshStandardMaterial({color:0x223344,roughness:0.15,metalness:0.95,emissive:0xff2200,emissiveIntensity:0.28}));
-    head.position.y=-2.15; grp.add(head);
-    const gs=new THREE.Mesh(new THREE.BoxGeometry(3.5,0.12,0.9),new THREE.MeshBasicMaterial({color:0xff4400}));
-    gs.position.y=-2.52; grp.add(gs);
-    grp.position.set(x,y+4,hz); scene.add(grp); trackMeshes.push(grp);
-    hammers.push({grp,pivY:y+4,hz,x,phase:i*(Math.PI*2/count),speed:(0.8+Math.random()*0.4)*(i%2===0?1:-1)});
+  // ── Sample spline ─────────────────────
+  const N = 500 + complexity*80;
+  splinePts = [];
+  splineTans = [];
+  for(let i=0;i<=N;i++){
+    const t=i/N;
+    splinePts.push(spline.getPoint(t));
+    splineTans.push(spline.getTangent(t).normalize());
   }
-}
+  FINISH_IDX = splinePts.length-1;
 
-function buildBumpers(x,y,z1,z2,count){
-  const spacing=Math.abs(z2-z1)/(count+1);
-  for(let i=0;i<count;i++){
-    const bz=z1-spacing*(i+1);
-    const bx=x+(i%2===0?1.4:-1.4);
-    const cyl=new THREE.Mesh(new THREE.CylinderGeometry(0.65,0.65,1.4,12),
-      new THREE.MeshStandardMaterial({color:0x223355,roughness:0.2,metalness:0.9,emissive:0x003399,emissiveIntensity:0.55}));
-    cyl.position.set(bx,y+0.7,bz); cyl.castShadow=true; addMesh(cyl);
-    const ring=new THREE.Mesh(new THREE.TorusGeometry(0.78,0.08,8,16),new THREE.MeshBasicMaterial({color:0x0066ff}));
-    ring.position.set(bx,y+1.15,bz); ring.rotation.x=Math.PI/2; addMesh(ring);
-    bumperObjs.push({x:bx,y:y+0.7,z:bz,r:0.75});
-  }
-}
+  // Start = first point, elevated above track center
+  START_POS.copy(splinePts[0]).y += BALL_R + 0.3;
 
-function buildFinish(x,y,z){
-  FINISH_POS.set(x,y,z);
-  makeBox(x,y-0.2,z-2, TW+2,0.4,8, 0x111133,0x001133);
-  const am=new THREE.MeshBasicMaterial({color:0xffff00});
-  for(const ax of [TW_HALF+0.5,-TW_HALF-0.5]){
-    const p=new THREE.Mesh(new THREE.BoxGeometry(0.3,5,0.3),am);
-    p.position.set(x+ax,y+2.5,z); addMesh(p);
+  // ── Build tube geometry ────────────────
+  // Half-pipe: open top U-channel
+  // Balls roll inside under gravity
+  const TUBE_R = 1.8;      // inner radius of half-pipe
+  const TUBE_SEGS = 14;    // segments around circumference
+  const OPEN_ANGLE = Math.PI * 0.72; // how open the top is (0=fully closed, PI=flat)
+
+  // Build as a series of ring-cross-sections connected
+  const stepEvery = 1; // use every Nth sample for geometry
+  const frames = spline.computeFrenetFrames(N, false);
+
+  // Vertices: for each spline sample, place arc of vertices
+  const positions = [];
+  const normals2 = [];
+  const uvs2 = [];
+  const indices = [];
+
+  const arcSegs = TUBE_SEGS;
+  // Arc goes from -OPEN_ANGLE to +OPEN_ANGLE (bottom of pipe)
+  // 0 = bottom, PI = top
+
+  for(let i=0;i<=N;i++){
+    const pos=splinePts[i];
+    const tan=frames.tangents[i];
+    const norm=frames.normals[i];
+    const binorm=frames.binormals[i];
+
+    for(let j=0;j<=arcSegs;j++){
+      // angle: bottom of pipe is 0, goes up both sides
+      const a = -OPEN_ANGLE + (j/arcSegs)*OPEN_ANGLE*2;
+      // Rotate around tangent axis
+      const cosA=Math.cos(a), sinA=Math.sin(a);
+      // In Frenet frame: norm = "up" for the curve, binorm = "right"
+      // We want pipe bottom to face "down" in world space roughly
+      // So bottom of pipe at a=0 should point toward world -Y (gravity)
+      const rx = -norm.x*cosA + binorm.x*sinA;
+      const ry = -norm.y*cosA + binorm.y*sinA;
+      const rz = -norm.z*cosA + binorm.z*sinA;
+
+      positions.push(
+        pos.x + rx*TUBE_R,
+        pos.y + ry*TUBE_R,
+        pos.z + rz*TUBE_R
+      );
+      // Normal points inward (toward center of tube)
+      normals2.push(-rx,-ry,-rz);
+      uvs2.push(j/arcSegs, i/N);
+    }
   }
-  const top=new THREE.Mesh(new THREE.BoxGeometry(TW+2,0.3,0.3),am);
-  top.position.set(x,y+5,z); addMesh(top);
-  for(let i=0;i<9;i++){
+
+  for(let i=0;i<N;i++){
+    for(let j=0;j<arcSegs;j++){
+      const a=(arcSegs+1)*i+j;
+      const b=a+1;
+      const c=a+(arcSegs+1);
+      const d=c+1;
+      indices.push(a,c,b, b,c,d);
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+  geo.setAttribute('normal',new THREE.Float32BufferAttribute(normals2,3));
+  geo.setAttribute('uv',new THREE.Float32BufferAttribute(uvs2,2));
+  geo.setIndex(indices);
+
+  const mat = new THREE.MeshStandardMaterial({
+    color:0x0e1535,
+    roughness:0.15,
+    metalness:0.9,
+    emissive:0x060b22,
+    emissiveIntensity:1,
+    side:THREE.FrontSide,
+  });
+  const tube = new THREE.Mesh(geo,mat);
+  tube.receiveShadow=true;
+  tAdd(tube);
+
+  // ── Glowing edge strips ────────────────
+  // Left and right lip of the half-pipe
+  for(const side of [-1,1]){
+    const edgePts=[];
+    for(let i=0;i<=N;i++){
+      const pos=splinePts[i];
+      const norm=frames.normals[i];
+      const binorm=frames.binormals[i];
+      const a=side*OPEN_ANGLE;
+      const rx=-norm.x*Math.cos(a)+binorm.x*Math.sin(a);
+      const ry=-norm.y*Math.cos(a)+binorm.y*Math.sin(a);
+      const rz=-norm.z*Math.cos(a)+binorm.z*Math.sin(a);
+      edgePts.push(
+        pos.x+rx*TUBE_R,
+        pos.y+ry*TUBE_R,
+        pos.z+rz*TUBE_R
+      );
+    }
+    const eGeo=new THREE.BufferGeometry();
+    eGeo.setAttribute('position',new THREE.Float32BufferAttribute(edgePts,3));
+    const eLine=new THREE.Line(eGeo,new THREE.LineBasicMaterial({
+      color:side>0?0x00f0ff:0xff00cc,
+      linewidth:2
+    }));
+    tAdd(eLine);
+  }
+
+  // ── Support struts ─────────────────────
+  // Pillars holding the track up, every ~20 samples
+  for(let i=10;i<splinePts.length;i+=30){
+    const p=splinePts[i];
+    const groundY=-5;
+    if(p.y<groundY+2) continue;
+    const h=p.y-groundY;
+    const pillar=new THREE.Mesh(
+      new THREE.CylinderGeometry(0.08,0.12,h,6),
+      new THREE.MeshStandardMaterial({color:0x0a0a22,metalness:0.8,roughness:0.4,emissive:0x000416})
+    );
+    pillar.position.set(p.x,groundY+h/2,p.z);
+    tAdd(pillar);
+  }
+
+  // ── Start platform ─────────────────────
+  const sp=splinePts[0];
+  const sMat=new THREE.MeshStandardMaterial({color:0x112244,metalness:0.8,emissive:0x001133,emissiveIntensity:0.5});
+  const platform=new THREE.Mesh(new THREE.BoxGeometry(6,0.3,8),sMat);
+  platform.position.set(sp.x,sp.y-TUBE_R-0.15,sp.z+2);
+  tAdd(platform);
+  // Start gate
+  const gMat=new THREE.MeshBasicMaterial({color:0x00f0ff});
+  for(const sx of [-2.5,2.5]){
+    const post=new THREE.Mesh(new THREE.BoxGeometry(0.15,4,0.15),gMat);
+    post.position.set(sp.x+sx,sp.y-TUBE_R+2,sp.z+3);
+    tAdd(post);
+  }
+  const bar=new THREE.Mesh(new THREE.BoxGeometry(5.5,0.15,0.15),gMat);
+  bar.position.set(sp.x,sp.y-TUBE_R+4,sp.z+3);
+  tAdd(bar);
+
+  // ── Finish line ────────────────────────
+  const fp=splinePts[FINISH_IDX];
+  const fMat=new THREE.MeshBasicMaterial({color:0xffff00});
+  for(const fx of [-2.5,2.5]){
+    const fp2=new THREE.Mesh(new THREE.BoxGeometry(0.15,5,0.15),fMat);
+    fp2.position.set(fp.x+fx,fp.y+2,fp.z);
+    tAdd(fp2);
+  }
+  const fbar=new THREE.Mesh(new THREE.BoxGeometry(5.5,0.15,0.15),fMat);
+  fbar.position.set(fp.x,fp.y+4.5,fp.z);
+  tAdd(fbar);
+  // Checkered squares
+  for(let i=0;i<8;i++){
     const sq=new THREE.Mesh(new THREE.BoxGeometry(0.55,0.55,0.1),
-      new THREE.MeshBasicMaterial({color:i%2===0?0xffffff:0x111111}));
-    sq.position.set(x-2.2+i*0.55,y+5.3,z); addMesh(sq);
-  }
-  makeGlow(x,y+0.04,z-2, TW+2,0.08,8, 0xffff00);
-  // Path nodes at finish
-  for(let dz=2;dz>=-6;dz-=2)
-    pathNodes.push({pos:new THREE.Vector3(x,y,z+dz), dir:new THREE.Vector3(0,0,-1), floorY:y, halfW:TW_HALF+0.8});
-}
-
-// ── COURSE GENERATOR ─────────────────────────────────
-function parseDur(str){
-  if(!str||!str.trim()) return null;
-  const s=str.trim().toLowerCase();
-  const m=s.match(/^(\d+(?:\.\d+)?)\s*(m|min|s|sec)?$/);
-  if(!m) return null;
-  const n=parseFloat(m[1]),u=m[2]||'m';
-  return u.startsWith('s')?n:n*60;
-}
-
-function buildCourse(durSecs){
-  clearCourse();
-  let complexity=3;
-  if(durSecs!==null){
-    if(durSecs<=60) complexity=1;
-    else if(durSecs<=120) complexity=2;
-    else if(durSecs<=300) complexity=3;
-    else if(durSecs<=420) complexity=4;
-    else complexity=5;
+      new THREE.MeshBasicMaterial({color:i%2===0?0xffffff:0x222222}));
+    sq.position.set(fp.x-1.93+i*0.55,fp.y+4.6,fp.z-0.1);
+    tAdd(sq);
   }
 
-  // Simple straight track - NO curves, NO obstacles
-  // Just get the physics working first
-  const totalLen = 80 + complexity * 30;
-  const x = 0, y = 0;
-
-  // Start pad
-  makeBox(x, y-0.2, 6-4, TW+2, 0.4, 10, 0x111128, 0x001122);
-  makeGlow(x+TW_HALF+1, y+0.3, 6-4, 0.12, 0.6, 10, 0x00f0ff);
-  makeGlow(x-TW_HALF-1, y+0.3, 6-4, 0.12, 0.6, 10, 0xff00cc);
-  makeGlow(x-TW_HALF-0.5, y+1.5, 7, 0.18, 3.2, 0.18, 0x00f0ff);
-  makeGlow(x+TW_HALF+0.5, y+1.5, 7, 0.18, 3.2, 0.18, 0x00f0ff);
-  makeGlow(x, y+3.1, 7, TW+1.2, 0.18, 0.18, 0x00f0ff);
-  addPathSegment(new THREE.Vector3(x,y,8), new THREE.Vector3(x,y,2), y);
-  START_POS.set(x, y+BALL_R+0.5, 4);
-
-  // Main straight track
-  buildStraight(x, y, 2, -(totalLen), 0x00f0ff, 0xff00cc);
-
-  // Finish line
-  buildFinish(x, y, -(totalLen));
-
-  // Grid
-  const grid=new THREE.GridHelper(400,80,0x00f0ff08,0x00f0ff05);
-  grid.position.set(0, y-1, -(totalLen/2)); addMesh(grid);
-
-  console.log('Course built: complexity='+complexity+', len='+totalLen);
+  console.log('Track: '+splinePts.length+' pts, start='+JSON.stringify({x:START_POS.x.toFixed(1),y:START_POS.y.toFixed(1),z:START_POS.z.toFixed(1)}));
 }
 
-// ── ZORBS ─────────────────────────────────────────────
-const zorbs=[];
-let phase='lobby';
+// ── FIND NEAREST POINT ON SPLINE ──────────
+// Returns the index of the nearest sample
+function nearestIdx(pos, hintIdx){
+  // Search forward-biased window around hint
+  const lo = Math.max(0, hintIdx-8);
+  const hi = Math.min(splinePts.length-1, hintIdx+40);
+  let best=hintIdx, bestD=Infinity;
+  for(let i=lo;i<=hi;i++){
+    const d=splinePts[i].distanceToSquared(pos);
+    if(d<bestD){bestD=d;best=i;}
+  }
+  return best;
+}
 
-function createZorb(name,isSub,col){
-  const mat=new THREE.MeshStandardMaterial({color:col,roughness:0.07,metalness:0.92,emissive:col,emissiveIntensity:isSub?0.42:0.18});
-  const mesh=new THREE.Mesh(new THREE.SphereGeometry(BALL_R,24,24),mat);
+// ── ZORBS ─────────────────────────────────
+const zorbs = [];
+let phase = 'lobby';
+
+function makeZorb(name,isSub,col){
+  // Ball mesh
+  const geo = new THREE.SphereGeometry(BALL_R,20,20);
+  const mat = new THREE.MeshStandardMaterial({
+    color:col, roughness:0.05, metalness:0.9,
+    emissive:col, emissiveIntensity:isSub?0.5:0.2
+  });
+  const mesh = new THREE.Mesh(geo,mat);
   mesh.castShadow=true;
   // Glow shell
-  mesh.add(new THREE.Mesh(new THREE.SphereGeometry(BALL_R*1.1,12,12),
-    new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:0.09,side:THREE.BackSide})));
-  // Flat ring (horizontal)
-  const ring=new THREE.Mesh(new THREE.TorusGeometry(BALL_R*1.38,0.052,6,28),
-    new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:0.55}));
-  // rotation.x=0 = ring lies in XZ plane = horizontal = Saturn style
+  mesh.add(new THREE.Mesh(
+    new THREE.SphereGeometry(BALL_R*1.15,12,12),
+    new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:0.1,side:THREE.BackSide})
+  ));
+  // Flat ring (Saturn style)
+  const ring=new THREE.Mesh(
+    new THREE.TorusGeometry(BALL_R*1.4,0.05,6,24),
+    new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:0.6})
+  );
+  ring.rotation.x=Math.PI/2;
   mesh.add(ring);
-  mesh.add(new THREE.PointLight(col,isSub?1.6:0.9,8));
+  // Point light on ball
+  const pl=new THREE.PointLight(col,isSub?1.8:1.0,7);
+  mesh.add(pl);
   scene.add(mesh);
 
   // Trail
   const tGeo=new THREE.BufferGeometry();
-  tGeo.setAttribute('position',new THREE.Float32BufferAttribute(new Float32Array(38*3),3));
-  const tLine=new THREE.Line(tGeo,new THREE.LineBasicMaterial({color:col,transparent:true,opacity:0.4}));
-  scene.add(tLine);
+  tGeo.setAttribute('position',new THREE.Float32BufferAttribute(new Float32Array(36*3),3));
+  const trail=new THREE.Line(tGeo,new THREE.LineBasicMaterial({color:col,transparent:true,opacity:0.5}));
+  scene.add(trail);
 
-  // Streaks
-  const streaks=[];
-  for(let i=0;i<8;i++){
-    const sg2=new THREE.BufferGeometry();
-    sg2.setAttribute('position',new THREE.Float32BufferAttribute(new Float32Array(6),3));
-    scene.add(new THREE.Line(sg2,new THREE.LineBasicMaterial({color:col,transparent:true,opacity:0})));
-    streaks.push(scene.children[scene.children.length-1]);
-  }
-
-  // Spawn exactly on start pad
-  const sx=START_POS.x+(Math.random()-0.5)*(TW-1.5);
-  const sz=START_POS.z+(Math.random()-0.5)*2;
+  // Spawn inside the tube at the start
+  const jitter=(Math.random()-.5)*0.6;
+  const pos=START_POS.clone();
+  pos.x+=jitter; pos.y-=jitter*0.3;
 
   return {
-    name,isSub,color:col,mesh,ring,tLine,streaks,
-    trailHistory:[],
-    pos:new THREE.Vector3(sx, START_POS.y, sz),
+    name,isSub,color:col,mesh,ring,trail,
+    pos:pos.clone(),
     vel:new THREE.Vector3(0,0,0),
+    trailHist:[],
+    splineIdx:3,
     boost:0,
-    onTrack:false,
-    finished:false,finishTime:0,rank:0,
+    finished:false,rank:0,finishTime:0,
     knockFlash:0,
-    ringBob:Math.random()*Math.PI*2,
-    // Path following
-    pathT:0,   // progress along path (index into pathNodes)
-    offTrack:false
+    ringT:Math.random()*Math.PI*2
   };
 }
 
 function removeZorb(z){
-  scene.remove(z.mesh); scene.remove(z.tLine); z.streaks.forEach(s=>scene.remove(s));
+  scene.remove(z.mesh);
+  scene.remove(z.trail);
 }
 
-// ── PHYSICS ───────────────────────────────────────────
-function stepPhysics(z,dt){
+// ── PHYSICS ───────────────────────────────
+// Simple and reliable:
+// 1. Apply gravity
+// 2. Find nearest point on spline (tube center)
+// 3. If ball is outside tube radius, push it back in
+// 4. That's it - the tube shape guides the ball naturally
+
+const TUBE_INNER = 1.8;  // matches tube geometry
+const GRAVITY_VEC = new THREE.Vector3(0,-18,0);
+
+function stepZorb(z, dt){
   if(z.finished) return;
 
-  // ── Gravity
-  z.vel.y+=GRAV*dt;
+  // Gravity
+  z.vel.addScaledVector(GRAVITY_VEC, dt);
 
-  // ── Boost
+  // Boost along spline tangent
   if(z.boost>0){
-    // Boost in the direction of nearest path node's forward direction
-    const {node}=nearestNode(z.pos);
-    if(node){
-      z.vel.x+=node.dir.x*z.boost*14*dt;
-      z.vel.z+=node.dir.z*z.boost*14*dt;
-    }
-    z.vel.x+=(Math.random()-0.5)*0.3*dt;
-    z.boost=Math.max(0,z.boost-dt*0.9);
+    const tan=splineTans[z.splineIdx];
+    z.vel.addScaledVector(tan, z.boost*14*dt);
+    z.boost=Math.max(0,z.boost-dt);
   }
 
-  // ── Clamp speed
-  const hSpd=Math.sqrt(z.vel.x*z.vel.x+z.vel.z*z.vel.z);
-  if(hSpd>20){ const s=20/hSpd; z.vel.x*=s; z.vel.z*=s; }
-  if(Math.abs(z.vel.y)>25) z.vel.y=Math.sign(z.vel.y)*25;
+  // Clamp speed
+  const spd=z.vel.length();
+  if(spd>30) z.vel.multiplyScalar(30/spd);
 
-  // ── Integrate position
-  z.pos.x+=z.vel.x*dt;
-  z.pos.y+=z.vel.y*dt;
-  z.pos.z+=z.vel.z*dt;
+  // Integrate
+  z.pos.addScaledVector(z.vel,dt);
 
-  // ── Find nearest path node
-  const {node,dist}=nearestNode(z.pos);
+  // Find nearest spline point
+  const idx=nearestIdx(z.pos, z.splineIdx);
+  z.splineIdx=idx;
+  const center=splinePts[idx];
+  const tan=splineTans[idx];
 
-  // ── Funnel physics (overrides path)
-  for(const f of funnels){
-    if(z.pos.y>f.yBot-1&&z.pos.y<f.yTop+2){
-      const dx=z.pos.x-f.cx, dz=z.pos.z-f.cz;
-      const d=Math.sqrt(dx*dx+dz*dz);
-      const t=Math.max(0,Math.min(1,(f.yTop-z.pos.y)/(f.yTop-f.yBot)));
-      const rAtY=f.rTop+(f.rBot-f.rTop)*t;
-      if(d<rAtY+3){
-        const nx=d>0.01?dx/d:1, nz=d>0.01?dz/d:0;
-        // Spin force
-        z.vel.x+=(-nz)*(3+t*2.5)*dt;
-        z.vel.z+=(nx)*(3+t*2.5)*dt;
-        // Wall constraint
-        if(d>rAtY-BALL_R-0.05){
-          z.pos.x=f.cx+nx*(rAtY-BALL_R-0.05);
-          z.pos.z=f.cz+nz*(rAtY-BALL_R-0.05);
-          const dot=z.vel.x*nx+z.vel.z*nz;
-          if(dot>0){z.vel.x-=dot*nx*(1+BOUNCE);z.vel.z-=dot*nz*(1+BOUNCE);}
-        }
-        // Floor at funnel bottom
-        if(z.pos.y<=f.yBot+BALL_R){
-          z.pos.y=f.yBot+BALL_R;
-          if(z.vel.y<0) z.vel.y=-z.vel.y*BOUNCE;
-          z.onTrack=true;
-          // Push forward on exit
-          if(hSpd<1){ z.vel.x+=node?node.dir.x*2:0; z.vel.z+=node?node.dir.z*2:-2; }
-        }
-      }
+  // Vector from tube center to ball
+  const toBall=new THREE.Vector3().subVectors(z.pos,center);
+  // Remove component along tangent (we only care about cross-section)
+  const tanComp=toBall.dot(tan);
+  const radial=toBall.clone().addScaledVector(tan,-tanComp);
+  const radDist=radial.length();
+
+  // Constrain ball inside tube
+  const maxR=TUBE_INNER-BALL_R;
+  if(radDist>maxR){
+    // Push ball back inside
+    const push=radial.clone().normalize().multiplyScalar(maxR);
+    z.pos.copy(center.clone().addScaledVector(tan,tanComp).add(push));
+
+    // Reflect velocity off tube wall
+    const wallNorm=radial.clone().normalize().negate(); // points inward
+    const vDotN=z.vel.dot(wallNorm.clone().negate()); // velocity going outward
+    if(vDotN>0){
+      z.vel.addScaledVector(wallNorm.clone().negate(), -vDotN*1.25); // bounce
     }
+    // Dampen
+    z.vel.multiplyScalar(0.85);
   }
 
-  if(node){
-    const floorY=node.floorY+BALL_R;
-    const hw=node.halfW-BALL_R-0.05;
-
-    // ── Floor collision
-    if(z.pos.y<=floorY){
-      z.pos.y=floorY;
-      if(z.vel.y<0) z.vel.y=-z.vel.y*BOUNCE;
-      z.onTrack=true;
-      // Apply friction on ground
-      z.vel.x*=Math.pow(FRIC,dt*60);
-      z.vel.z*=Math.pow(FRIC,dt*60);
-    } else {
-      z.onTrack=false;
-    }
-
-    // ── Wall constraint using path node's local frame
-    // Project position onto path node's local XZ
-    const toPos=new THREE.Vector3().subVectors(z.pos,node.pos);
-    // Track right vector (perpendicular to forward dir in XZ)
-    const right=new THREE.Vector3(-node.dir.z,0,node.dir.x).normalize();
-    const lateral=toPos.dot(right);
-
-    if(Math.abs(lateral)>hw){
-      // Push back inside walls
-      const push=Math.sign(lateral)*(Math.abs(lateral)-hw);
-      z.pos.x-=right.x*push;
-      z.pos.z-=right.z*push;
-      // Reflect lateral velocity component
-      const vLat=z.vel.x*right.x+z.vel.z*right.z;
-      if(Math.sign(vLat)===Math.sign(lateral)){
-        z.vel.x-=vLat*right.x*(1+BOUNCE);
-        z.vel.z-=vLat*right.z*(1+BOUNCE);
-      }
-    }
-
-    // ── Always-forward push when racing
-    if(phase==='racing'){
-      const fwdSpeed=z.vel.x*node.dir.x+z.vel.z*node.dir.z;
-      if(fwdSpeed<MIN_FWD){
-        const deficit=MIN_FWD-fwdSpeed;
-        z.vel.x+=node.dir.x*deficit*3*dt;
-        z.vel.z+=node.dir.z*deficit*3*dt;
-      }
-    }
-
-    // ── Safety net: if ball falls way below track
-    if(z.pos.y<node.floorY-12){
-      // Teleport back onto track floor
-      z.pos.x=node.pos.x+(Math.random()-0.5)*1;
-      z.pos.y=node.floorY+BALL_R;
-      z.pos.z=node.pos.z;
-      z.vel.set(node.dir.x*MIN_FWD,0,node.dir.z*MIN_FWD);
-      showKO('FELL OFF: '+z.name,0xff4444);
-    }
+  // Safety: if ball somehow escapes far from spline, respawn
+  if(radDist>TUBE_INNER*3 || z.pos.y < center.y-15){
+    const ri=Math.max(3,z.splineIdx-5);
+    z.pos.copy(splinePts[ri]).y+=BALL_R;
+    z.vel.copy(splineTans[ri]).multiplyScalar(2);
+    z.splineIdx=ri;
+    showKO('FELL: '+z.name,0xff4444);
   }
 
-  // ── Boost pads
-
-  // ── Bumpers
-
-  // ── Finish
-  if(!z.finished){
-    const toFinish=new THREE.Vector3().subVectors(FINISH_POS,z.pos);
-    toFinish.y=0;
-    if(toFinish.length()<3){
-      z.finished=true; z.finishTime=performance.now();
-      const rank=zorbs.filter(r=>r.finished).length; z.rank=rank;
-      if(rank===1){showBanner('WINNER: '+z.name,4500);setTimeout(resetRace,5500);}
-      showKO('FINISH #'+rank+': '+z.name,0xffff00);
-    }
+  // Slight forward nudge so balls don't stall
+  if(phase==='racing'){
+    const fwdSpd=z.vel.dot(tan);
+    if(fwdSpd<0.8) z.vel.addScaledVector(tan,(0.8-fwdSpd)*1.5*dt);
   }
 
-  // ── Mesh update
+  // Finish
+  if(!z.finished && idx>=FINISH_IDX-10){
+    z.finished=true; z.finishTime=performance.now();
+    const rank=zorbs.filter(r=>r.finished).length; z.rank=rank;
+    if(rank===1){showBanner('WINNER: '+z.name,4500);setTimeout(resetRace,5500);}
+    showKO('FINISH #'+rank+': '+z.name,0xffff00);
+  }
+
+  // Update mesh
   z.mesh.position.copy(z.pos);
-  const spd2d=Math.sqrt(z.vel.x*z.vel.x+z.vel.z*z.vel.z);
-  z.mesh.rotation.x-=z.vel.z/BALL_R*dt;
-  z.mesh.rotation.z+=z.vel.x/BALL_R*dt;
+  // Orient ring horizontal
+  z.ringT+=dt*2;
+  z.ring.rotation.x=Math.PI/2+Math.sin(z.ringT)*0.12;
   z.knockFlash=Math.max(0,z.knockFlash-dt);
-  z.mesh.material.emissiveIntensity=z.knockFlash>0?1.2:z.isSub?0.38:0.18;
-  // Ring bob
-  z.ringBob+=dt*2;
-  z.ring.rotation.x=Math.sin(z.ringBob)*0.12;
+  z.mesh.material.emissiveIntensity=z.knockFlash>0?1.5:z.isSub?0.45:0.2;
 }
 
-function ballCollide(){
+function collideBalls(){
   for(let i=0;i<zorbs.length;i++){
     for(let j=i+1;j<zorbs.length;j++){
       const a=zorbs[i],b=zorbs[j];
-      if(a.finished||b.finished) continue;
+      if(a.finished||b.finished)continue;
       const d=new THREE.Vector3().subVectors(a.pos,b.pos);
-      const dist=d.length(),minD=BALL_R*2+0.02;
+      const dist=d.length();
+      const minD=BALL_R*2+0.02;
       if(dist<minD&&dist>0.001){
         d.normalize();
         const rv=new THREE.Vector3().subVectors(a.vel,b.vel);
         const dot=rv.dot(d);
         if(dot<0){
-          // Very soft - just separate, minimal impulse
-          const imp=d.clone().multiplyScalar(dot*0.15);
-          a.vel.sub(imp); b.vel.add(imp);
+          const imp=d.clone().multiplyScalar(dot*0.2);
+          a.vel.sub(imp);b.vel.add(imp);
         }
         const ov=(minD-dist)*0.5+0.01;
-        a.pos.addScaledVector(d,ov); b.pos.addScaledVector(d,-ov);
+        a.pos.addScaledVector(d,ov);
+        b.pos.addScaledVector(d,-ov);
       }
     }
   }
 }
 
-  hammers.forEach(h=>{
-    h.phase+=h.speed*dt;
-    h.grp.rotation.z=Math.sin(h.phase)*1.1;
-    const swing=Math.sin(h.phase);
-    const tipX=h.x+swing*2.1;
-    const tipY=h.pivY-Math.cos(h.phase)*2.1;
-    zorbs.forEach(z=>{
-      if(z.finished) return;
-      const dx=z.pos.x-tipX,dy=z.pos.y-tipY,dz=z.pos.z-h.hz;
-      if(Math.sqrt(dx*dx+dy*dy+dz*dz)<BALL_R+0.9){
-        // Gentle sideways nudge only
-        z.vel.x+=(dx>0?1:-1)*2.0;
-        z.vel.y+=1.2;
-        // Keep moving forward - just slow slightly
-        const {node}=nearestNode(z.pos);
-        if(node){
-          const fwdV=z.vel.x*node.dir.x+z.vel.z*node.dir.z;
-          if(fwdV>0){z.vel.x-=node.dir.x*fwdV*0.3;z.vel.z-=node.dir.z*fwdV*0.3;}
-        }
-        z.knockFlash=0.3;
-        showKO('SMASHED: '+z.name,0xff4400);
-      }
-    });
-  });
-}
-
-// ── VISUALS ───────────────────────────────────────────
-function updateVisuals(z,frame){
-  if(z.finished) return;
-  const spd=Math.sqrt(z.vel.x*z.vel.x+z.vel.z*z.vel.z),ns=Math.min(spd/18,1);
-  z.trailHistory.push(z.pos.clone());
-  if(z.trailHistory.length>36) z.trailHistory.shift();
-  if(z.trailHistory.length>1){
-    const arr=new Float32Array(z.trailHistory.length*3);
-    z.trailHistory.forEach((p,i)=>{arr[i*3]=p.x;arr[i*3+1]=p.y;arr[i*3+2]=p.z;});
-    z.tLine.geometry.setAttribute('position',new THREE.Float32BufferAttribute(arr,3));
-    z.tLine.material.opacity=0.15+ns*0.5;
+function updateVisuals(z){
+  z.trailHist.push(z.pos.clone());
+  if(z.trailHist.length>30)z.trailHist.shift();
+  if(z.trailHist.length>1){
+    const arr=new Float32Array(z.trailHist.length*3);
+    z.trailHist.forEach((p,i)=>{arr[i*3]=p.x;arr[i*3+1]=p.y;arr[i*3+2]=p.z;});
+    z.trail.geometry.setAttribute('position',new THREE.Float32BufferAttribute(arr,3));
+    const spd=z.vel.length();
+    z.trail.material.opacity=Math.min(0.7,spd/15);
   }
-  z.streaks.forEach((s,i)=>{
-    const a=(i/z.streaks.length)*Math.PI*2;
-    const ox=Math.cos(a)*BALL_R*1.3,oy=Math.sin(a)*BALL_R*1.3;
-    const len=ns*2.2,vn=z.vel.length()>0.1?z.vel.clone().normalize():new THREE.Vector3(0,0,-1);
-    const pa=s.geometry.attributes.position.array;
-    pa[0]=z.pos.x+ox;pa[1]=z.pos.y+oy;pa[2]=z.pos.z;
-    pa[3]=z.pos.x+ox-vn.x*len;pa[4]=z.pos.y+oy-vn.y*len;pa[5]=z.pos.z-vn.z*len;
-    s.geometry.attributes.position.needsUpdate=true;
-    s.material.opacity=ns*0.5;
-  });
 }
 
-// ── CAMERA ────────────────────────────────────────────
-let camMode='follow',camPos=new THREE.Vector3(0,8,12),camLook=new THREE.Vector3(0,0,0);
+// ── CAMERA ────────────────────────────────
+let camMode='follow';
+let camPos=new THREE.Vector3(0,10,20);
+let camLook=new THREE.Vector3(0,0,0);
 let autoTimer=0,autoIdx=0;
-const autoModes=['follow','wide','top'];
+const autoModes=['follow','chase','wide'];
 
 function setCam(m){
   camMode=m;
   document.querySelectorAll('.cb').forEach(b=>b.classList.remove('active'));
-  const el=document.getElementById('btn-'+m); if(el)el.classList.add('active');
+  const el=document.getElementById('btn-'+m);if(el)el.classList.add('active');
 }
 
-function updateCamera(dt){
-  const sm=Math.min(dt*5,0.15);
-  const leader=zorbs.filter(z=>!z.finished).sort((a,b)=>a.pos.distanceTo(FINISH_POS)-b.pos.distanceTo(FINISH_POS))[0]||zorbs[0];
+function updateCam(dt){
+  const sm=Math.min(dt*4,0.12);
+  const leader=zorbs.filter(z=>!z.finished).sort((a,b)=>b.splineIdx-a.splineIdx)[0]||zorbs[0];
   if(!leader)return;
   const lp=leader.pos;
   let mode=camMode;
-  if(mode==='auto'){autoTimer+=dt;if(autoTimer>7){autoTimer=0;autoIdx=(autoIdx+1)%autoModes.length;}mode=autoModes[autoIdx];}
+  if(mode==='auto'){autoTimer+=dt;if(autoTimer>8){autoTimer=0;autoIdx=(autoIdx+1)%autoModes.length;}mode=autoModes[autoIdx];}
+
+  const lidx=leader.splineIdx;
+  const ltan=splineTans[Math.max(0,lidx)];
+
   if(mode==='follow'){
-    const spd=Math.sqrt(leader.vel.x*leader.vel.x+leader.vel.z*leader.vel.z);
-    const {node}=nearestNode(lp);
-    const back=node?node.dir.clone().negate():new THREE.Vector3(0,0,1);
-    const cp=lp.clone().add(back.multiplyScalar(4+spd*0.1)).add(new THREE.Vector3(0,3,0));
-    camPos.lerp(cp,sm*2); camLook.lerp(lp,sm*3);
+    // Behind and slightly above
+    const back=ltan.clone().negate().multiplyScalar(5);
+    const cp=lp.clone().add(back).add(new THREE.Vector3(0,3.5,0));
+    camPos.lerp(cp,sm*2);
+    camLook.lerp(lp.clone().addScaledVector(ltan,3),sm*3);
+  } else if(mode==='chase'){
+    // Very close, low
+    const back=ltan.clone().negate().multiplyScalar(3);
+    const cp=lp.clone().add(back).add(new THREE.Vector3(0,1.5,0));
+    camPos.lerp(cp,sm*2.5);
+    camLook.lerp(lp.clone().addScaledVector(ltan,4),sm*4);
   } else if(mode==='wide'){
-    const avg=new THREE.Vector3(); zorbs.forEach(z=>avg.add(z.pos)); if(zorbs.length>0)avg.divideScalar(zorbs.length);
-    camPos.lerp(new THREE.Vector3(avg.x+10,avg.y+28,avg.z+25),sm*0.4); camLook.lerp(avg,sm);
-  } else if(mode==='top'){
-    camPos.lerp(new THREE.Vector3(lp.x,lp.y+26,lp.z+5),sm); camLook.lerp(lp,sm*2);
+    const avg=new THREE.Vector3();
+    zorbs.forEach(z=>avg.add(z.pos));
+    if(zorbs.length)avg.divideScalar(zorbs.length);
+    camPos.lerp(avg.clone().add(new THREE.Vector3(15,25,20)),sm*0.4);
+    camLook.lerp(avg,sm);
   }
-  camera.position.copy(camPos); camera.lookAt(camLook);
+  camera.position.copy(camPos);
+  camera.lookAt(camLook);
 }
 
-// ── MINIMAP ───────────────────────────────────────────
+// ── MINIMAP ───────────────────────────────
 const mmc=document.getElementById('mmc'),mmctx=mmc.getContext('2d');
-function drawMinimap(){
-  mmctx.clearRect(0,0,110,110); mmctx.fillStyle='rgba(0,0,0,0.5)'; mmctx.fillRect(0,0,110,110);
-  if(!zorbs.length||!pathNodes.length) return;
-  // Draw path
-  const allX=pathNodes.map(n=>n.pos.x),allZ=pathNodes.map(n=>n.pos.z);
-  const minX=Math.min(...allX),maxX=Math.max(...allX);
-  const minZ=Math.min(...allZ),maxZ=Math.max(...allZ);
-  const spanX=maxX-minX||1,spanZ=maxZ-minZ||1;
-  const sc=Math.min(90/spanX,90/spanZ);
-  const ox=55-(minX+maxX)/2*sc, oz=55-(minZ+maxZ)/2*sc;
-  mmctx.strokeStyle='rgba(0,240,255,0.25)';mmctx.lineWidth=1.5;mmctx.beginPath();
-  pathNodes.forEach((n,i)=>{
-    const mx=ox+n.pos.x*sc,my=oz+n.pos.z*sc;
+function drawMM(){
+  mmctx.clearRect(0,0,110,110);
+  mmctx.fillStyle='rgba(0,0,0,0.6)';mmctx.fillRect(0,0,110,110);
+  if(!splinePts.length)return;
+  const xs=splinePts.map(p=>p.x),zs=splinePts.map(p=>p.z);
+  const minX=Math.min(...xs),maxX=Math.max(...xs);
+  const minZ=Math.min(...zs),maxZ=Math.max(...zs);
+  const sc=Math.min(90/(maxX-minX||1),90/(maxZ-minZ||1));
+  const ox=55-(minX+maxX)/2*sc,oz=55-(minZ+maxZ)/2*sc;
+  // Track path
+  mmctx.strokeStyle='rgba(0,240,255,0.35)';mmctx.lineWidth=2;mmctx.beginPath();
+  splinePts.forEach((p,i)=>{
+    const mx=ox+p.x*sc,my=oz+p.z*sc;
     i===0?mmctx.moveTo(mx,my):mmctx.lineTo(mx,my);
   });
   mmctx.stroke();
-  // Finish
-  const fx=ox+FINISH_POS.x*sc,fz=oz+FINISH_POS.z*sc;
-  mmctx.strokeStyle='rgba(255,255,0,0.7)';mmctx.lineWidth=2;
-  mmctx.beginPath();mmctx.moveTo(fx-5,fz);mmctx.lineTo(fx+5,fz);mmctx.stroke();
+  // Finish dot
+  const fp=splinePts[FINISH_IDX];
+  mmctx.fillStyle='#ffff00';
+  mmctx.fillRect(ox+fp.x*sc-3,oz+fp.z*sc-3,6,6);
   // Zorbs
   zorbs.forEach(z=>{
-    const mx=ox+z.pos.x*sc,my=oz+z.pos.z*sc;
-    const hex='#'+z.color.toString(16).padStart(6,'0');
-    mmctx.fillStyle=hex;mmctx.shadowColor=hex;mmctx.shadowBlur=5;
-    mmctx.beginPath();mmctx.arc(Math.max(5,Math.min(105,mx)),Math.max(5,Math.min(105,my)),3.5,0,Math.PI*2);
-    mmctx.fill();mmctx.shadowBlur=0;
+    const mx=Math.max(5,Math.min(105,ox+z.pos.x*sc));
+    const my=Math.max(5,Math.min(105,oz+z.pos.z*sc));
+    const col='#'+z.color.toString(16).padStart(6,'0');
+    mmctx.fillStyle=col;mmctx.shadowColor=col;mmctx.shadowBlur=6;
+    mmctx.beginPath();mmctx.arc(mx,my,4,0,Math.PI*2);mmctx.fill();
+    mmctx.shadowBlur=0;
   });
 }
 
-// ── LEADERBOARD ───────────────────────────────────────
+// ── LEADERBOARD ───────────────────────────
 function updateLB(){
-  const sorted=[...zorbs].sort((a,b)=>a.pos.distanceTo(FINISH_POS)-b.pos.distanceTo(FINISH_POS));
+  const sorted=[...zorbs].sort((a,b)=>b.splineIdx-a.splineIdx);
   const rows=document.getElementById('lbr');rows.innerHTML='';
   sorted.slice(0,7).forEach((z,i)=>{
+    const pct=Math.round(z.splineIdx/FINISH_IDX*100);
     const d=document.createElement('div');d.className='lr';
-    const dist=Math.round(z.pos.distanceTo(FINISH_POS));
-    d.innerHTML='<span class="lp '+(i===0?'g':'')+'">'+( i+1)+'</span><span class="ln '+(z.isSub?'sub':'')+'" title="'+z.name+'">'+z.name+'</span><span class="ld">'+(z.finished?'FIN':dist+'m')+'</span>';
+    d.innerHTML='<span class="lp '+(i===0?'g':'')+'">'+( i+1)+'</span>'
+      +'<span class="ln '+(z.isSub?'sub':'')+'">'+z.name+'</span>'
+      +'<span class="ld">'+(z.finished?'FIN':pct+'%')+'</span>';
     rows.appendChild(d);
   });
 }
 
-// ── CHAT/UI ───────────────────────────────────────────
+// ── CHAT / UI ─────────────────────────────
 const chatLog=document.getElementById('cl');
 function addChat(name,cmd,isSub){
   const d=document.createElement('div');d.className='cm';
@@ -768,7 +707,7 @@ function showKO(msg,color){
   const feed=document.getElementById('kfeed');
   const el=document.createElement('div');el.className='kf';
   el.style.color='#'+color.toString(16).padStart(6,'0');el.textContent=msg;
-  feed.appendChild(el); setTimeout(()=>{if(el.parentNode)feed.removeChild(el);},2600);
+  feed.appendChild(el);setTimeout(()=>{if(el.parentNode)feed.removeChild(el);},2600);
   while(feed.children.length>4)feed.removeChild(feed.firstChild);
 }
 function showBanner(txt,dur){
@@ -778,12 +717,19 @@ function showBanner(txt,dur){
 function hidePanel(){document.getElementById('sp').style.display='none';document.getElementById('btn-show').style.display='block';}
 function showPanel(){document.getElementById('sp').style.display='flex';document.getElementById('btn-show').style.display='none';}
 
-// ── RACE STATE ────────────────────────────────────────
-let raceDurSecs=null,raceStartTime=null;
+// ── RACE STATE ────────────────────────────
+let raceDur=null,raceStart=null;
+
+function parseDur(s){
+  if(!s||!s.trim())return null;
+  const m=s.trim().toLowerCase().match(/^(\d+(?:\.\d+)?)\s*(m|s)?$/);
+  if(!m)return null;
+  return m[2]==='s'?parseFloat(m[1]):parseFloat(m[1])*60;
+}
 
 function updateTimer(){
-  if(phase!=='racing'||raceDurSecs===null||raceStartTime===null)return;
-  const left=Math.max(0,raceDurSecs-(performance.now()-raceStartTime)/1000);
+  if(phase!=='racing'||!raceDur||!raceStart)return;
+  const left=Math.max(0,raceDur-(performance.now()-raceStart)/1000);
   const el=document.getElementById('timer-display');
   el.textContent=Math.floor(left/60)+':'+(Math.floor(left%60)<10?'0':'')+Math.floor(left%60);
   if(left<30)el.classList.add('urgent');
@@ -792,53 +738,61 @@ function updateTimer(){
 
 function handleCmd(name,cmd,isSub){
   addChat(name,cmd,isSub);
-  const raw=cmd.trim().toLowerCase();
-  if(raw==='!play'){
+  const c=cmd.trim().toLowerCase();
+  if(c==='!play'){
     if(zorbs.find(z=>z.name===name)||phase!=='lobby')return;
-    const c=ZCOLORS[zorbs.length%ZCOLORS.length];
-    zorbs.push(createZorb(name,isSub,c));
+    const col=ZCOLORS[zorbs.length%ZCOLORS.length];
+    zorbs.push(makeZorb(name,isSub,col));
     document.getElementById('cnt').textContent=zorbs.length+' racers';
   }
-  if(raw==='!boost'){
+  if(c==='!boost'){
     const z=zorbs.find(z=>z.name===name);
-    if(z&&phase==='racing')z.boost=isSub?2.8:1.4;
+    if(z&&phase==='racing')z.boost=isSub?2.5:1.2;
   }
 }
 
 function streamerStart(){
   if(phase!=='lobby')return;
-  raceDurSecs=parseDur(document.getElementById('dur').value);
-  buildCourse(raceDurSecs);
-  // Respawn all zorbs on new track
+  raceDur=parseDur(document.getElementById('dur').value);
+  let complexity=3;
+  if(raceDur!==null){
+    if(raceDur<=60)complexity=1;
+    else if(raceDur<=120)complexity=2;
+    else if(raceDur<=300)complexity=3;
+    else if(raceDur<=420)complexity=4;
+    else complexity=5;
+  }
+  buildTrack(complexity);
+  // Respawn zorbs at track start
   zorbs.forEach(z=>{
-    z.pos.set(START_POS.x+(Math.random()-0.5)*(TW-1.5), START_POS.y, START_POS.z+(Math.random()-0.5)*2);
-    z.vel.set(0,0,0); z.trailHistory=[];
+    const jitter=(Math.random()-.5)*0.6;
+    z.pos.copy(START_POS);z.pos.x+=jitter;
+    z.vel.set(0,0,0);z.trailHist=[];z.splineIdx=3;
   });
-  if(raceDurSecs!==null){
+  if(raceDur){
     document.getElementById('tpill').style.display='flex';
-    const el=document.getElementById('timer-display');el.textContent='--:--';el.classList.remove('urgent');
+    document.getElementById('timer-display').textContent='--:--';
+    document.getElementById('timer-display').classList.remove('urgent');
   } else document.getElementById('tpill').style.display='none';
   document.getElementById('btn-go').disabled=true;
-  phase='countdown'; document.getElementById('stxt').textContent='STARTING';
+  phase='countdown';document.getElementById('stxt').textContent='STARTING';
   showBanner('3',900);
   setTimeout(()=>showBanner('2',900),1000);
   setTimeout(()=>showBanner('1',900),2000);
   setTimeout(()=>{
-    showBanner('GO!',800); phase='racing';
+    showBanner('GO!',800);phase='racing';
     document.getElementById('stxt').textContent='RACING';
-    raceStartTime=performance.now();
+    raceStart=performance.now();
     zorbs.forEach(z=>{
-      // Give initial push in path direction
-      const {node}=nearestNode(z.pos);
-      const dir=node?node.dir:new THREE.Vector3(0,0,-1);
-      z.vel.set(dir.x*(1.5+Math.random()*0.5),0,dir.z*(1.5+Math.random()*0.5));
+      const tan=splineTans[z.splineIdx];
+      z.vel.copy(tan.clone().multiplyScalar(2+Math.random()*0.5));
     });
   },3000);
 }
 
 function resetRace(){
-  zorbs.forEach(z=>removeZorb(z)); zorbs.length=0;
-  phase='lobby'; raceStartTime=null; raceDurSecs=null;
+  zorbs.forEach(z=>removeZorb(z));zorbs.length=0;
+  phase='lobby';raceStart=null;raceDur=null;
   document.getElementById('cnt').textContent='0 racers';
   document.getElementById('stxt').textContent='LOBBY';
   document.getElementById('tpill').style.display='none';
@@ -848,7 +802,7 @@ function resetRace(){
   setTimeout(startMock,2500);
 }
 
-// ── MOCK CHAT ─────────────────────────────────────────
+// ── MOCK CHAT ─────────────────────────────
 const MOCK=[
   {name:'StreamKing',sub:true},{name:'NeonRacer',sub:false},
   {name:'CyberZorb',sub:true},{name:'VoidRunner',sub:false},
@@ -859,17 +813,17 @@ let mockI=0;
 function startMock(){mockI=0;setTimeout(nextMock,1200);}
 function nextMock(){
   if(mockI>=MOCK.length)return;
-  handleCmd(MOCK[mockI].name,'!play',MOCK[mockI].sub); mockI++;
+  handleCmd(MOCK[mockI].name,'!play',MOCK[mockI].sub);mockI++;
   if(mockI<MOCK.length)setTimeout(nextMock,700+Math.random()*900);
   else setTimeout(()=>{document.getElementById('dur').value='';streamerStart();},2000);
 }
 setInterval(()=>{
   if(phase==='racing'&&zorbs.length>0)
-    handleCmd(zorbs[Math.floor(Math.random()*zorbs.length)].name,'!boost',Math.random()>0.5);
-},4500);
+    handleCmd(zorbs[Math.floor(Math.random()*zorbs.length)].name,'!boost',Math.random()>.5);
+},5000);
 
 document.addEventListener('keydown',e=>{
-  const ms=['follow','wide','top','auto'];
+  const ms=['follow','chase','wide','auto'];
   if(e.key==='ArrowLeft'){const i=ms.indexOf(camMode);setCam(ms[(i-1+4)%4]);}
   if(e.key==='ArrowRight'){const i=ms.indexOf(camMode);setCam(ms[(i+1)%4]);}
   if(e.key===' '){if(zorbs.length>0)zorbs[0].boost=1.8;e.preventDefault();}
@@ -881,8 +835,8 @@ document.getElementById('cg').onclick=()=>{
 };
 document.getElementById('ci').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('cg').click();});
 
-// ── MAIN LOOP ─────────────────────────────────────────
-buildCourse(null);
+// ── MAIN LOOP ─────────────────────────────
+buildTrack(3);
 startMock();
 
 let lastT=0,frame=0;
@@ -892,13 +846,16 @@ function loop(ts){
   if(phase==='racing'){
     updateTimer();
     const SUB=3;
-    for(let s=0;s<SUB;s++){zorbs.forEach(z=>stepPhysics(z,dt/SUB));ballCollide();}
+    for(let s=0;s<SUB;s++){
+      zorbs.forEach(z=>stepZorb(z,dt/SUB));
+      collideBalls();
+    }
   }
-  zorbs.forEach(z=>updateVisuals(z,frame));
-  updateCamera(dt);
-  pCyan.intensity=1.2+Math.sin(frame*0.033)*0.38;
-  pCyan.position.set(Math.sin(frame*0.011)*30,8,FINISH_POS.z*0.5);
-  if(frame%18===0){updateLB();drawMinimap();}
+  zorbs.forEach(updateVisuals);
+  updateCam(dt);
+  glow.intensity=1.5+Math.sin(frame*0.04)*0.5;
+  glow.position.set(Math.sin(frame*0.01)*30,10,Math.cos(frame*0.01)*30);
+  if(frame%18===0){updateLB();drawMM();}
   renderer.render(scene,camera);
 }
 requestAnimationFrame(t=>{lastT=t;loop(t);});
