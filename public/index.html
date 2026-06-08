@@ -150,13 +150,13 @@ const TW       = 5.6;
 const TW_HALF  = TW/2;
 const GRAV     = -52;
 const BOUNCE   = 0.28;
-const FRIC     = 0.994;
+const FRIC     = 0.88; // per-second rolling friction
 // Target ball speed (units/sec). ~12-16 units/sec feels great visually.
 // Course unit ≈ roughly 1 meter. At 14 u/s, 1000u track ≈ 71s ≈ 2min.
 const BASE_SPEED = 14;
-const MIN_FWD  = BASE_SPEED * 0.7;  // minimum forward velocity
+const MIN_FWD  = BASE_SPEED * 0.75;  // minimum forward velocity
 const MAX_SPD  = 42;                 // cap for normal; boost can briefly exceed
-const FORWARD_ACCEL = 18;           // push force toward MIN_FWD
+const FORWARD_ACCEL = 28; // stronger push           // push force toward MIN_FWD
 // Generate 1000 colors by cycling hues
 const ZCOLORS = Array.from({length:1000},(_,i)=>{
   const h=(i*137.508)%360; // golden angle distribution
@@ -813,7 +813,9 @@ function stepPhysics(z,dt){
       z.pos.y=floorY;
       if(z.vel.y<0) z.vel.y*=-BOUNCE;
       z.onGround=true;
-      z.vel.x*=FRIC; z.vel.z*=FRIC;
+      // Frame-rate independent friction
+      const fric=Math.pow(FRIC,dt*60);
+      z.vel.x*=fric; z.vel.z*=fric;
     } else {
       z.onGround=false;
     }
