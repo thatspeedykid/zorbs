@@ -275,46 +275,51 @@ function _buildRibbon(pts, eL, eR){
 // ── SEGMENT BUILDERS ──────────────────────────────────
 
 function segStraight(cur, length, eL=0x00f0ff, eR=0xff00cc, withBoost=false){
-  const steps=Math.max(3,Math.ceil(length/3));
-  const pts=[];
+  const end=cur.pos.clone().addScaledVector(cur.dir,length); end.y=cur.pos.y;
+  // One single box for the whole straight - no fence posts
+  _buildRibbon([
+    {pos:cur.pos.clone(), dir:cur.dir.clone(), y:cur.pos.y},
+    {pos:end.clone(),     dir:cur.dir.clone(), y:cur.pos.y}
+  ], eL, eR);
+  // Path nodes every 3 units for physics
+  const steps=Math.max(2,Math.ceil(length/3));
+  const right=perpRight(cur.dir);
   for(let i=0;i<=steps;i++){
-    const t=i/steps;
-    const pos=cur.pos.clone().addScaledVector(cur.dir,length*t); pos.y=cur.pos.y;
-    pts.push({pos,dir:cur.dir.clone(),y:cur.pos.y});
-    const right=perpRight(cur.dir);
-    pathNodes.push({pos:pos.clone(),dir:cur.dir.clone(),right,floorY:cur.pos.y,halfW:TW_HALF});
+    const pos=cur.pos.clone().addScaledVector(cur.dir,length*(i/steps)); pos.y=cur.pos.y;
+    pathNodes.push({pos,dir:cur.dir.clone(),right:right.clone(),floorY:cur.pos.y,halfW:TW_HALF});
   }
-  _buildRibbon(pts,eL,eR);
   courseLength+=length;
   if(withBoost){
     const bp=cur.pos.clone().addScaledVector(cur.dir,length*0.55);
     buildBoostPad(bp,cur.dir,cur.pos.y);
   }
-  const end=cur.pos.clone().addScaledVector(cur.dir,length); end.y=cur.pos.y;
   return makeCursor(end.x,cur.pos.y,end.z,cur.dir.x,cur.dir.z);
 }
 
 function segRamp(cur, length, dropY, eL=0x00f0ff, eR=0xff00cc){
   const ey=cur.pos.y-dropY;
-  const steps=Math.max(6,Math.ceil(length/2));
-  const pts=[];
+  const end=cur.pos.clone().addScaledVector(cur.dir,length); end.y=ey;
+  // One pitched box for the whole ramp
+  _buildRibbon([
+    {pos:cur.pos.clone(), dir:cur.dir.clone(), y:cur.pos.y},
+    {pos:end.clone(),     dir:cur.dir.clone(), y:ey}
+  ], eL, eR);
+  // Path nodes for physics
+  const steps=Math.max(4,Math.ceil(length/2.5));
+  const right=perpRight(cur.dir);
   for(let i=0;i<=steps;i++){
     const t=i/steps;
     const pos=cur.pos.clone().addScaledVector(cur.dir,length*t);
     pos.y=cur.pos.y+(ey-cur.pos.y)*t;
-    pts.push({pos,dir:cur.dir.clone(),y:pos.y});
-    const right=perpRight(cur.dir);
-    pathNodes.push({pos:pos.clone(),dir:cur.dir.clone(),right,floorY:pos.y,halfW:TW_HALF});
+    pathNodes.push({pos:pos.clone(),dir:cur.dir.clone(),right:right.clone(),floorY:pos.y,halfW:TW_HALF});
   }
-  _buildRibbon(pts,eL,eR);
   courseLength+=length;
-  const end=cur.pos.clone().addScaledVector(cur.dir,length); end.y=ey;
   return makeCursor(end.x,ey,end.z,cur.dir.x,cur.dir.z);
 }
 
 function segCurve(cur, angleDelta, radius, eL=0x00f0ff, eR=0xff00cc){
   const absA=Math.abs(angleDelta), arcLen=radius*absA;
-  const steps=Math.max(10,Math.ceil(arcLen/2));
+  const steps=Math.max(4,Math.ceil(arcLen/8)); // fewer steps = longer arc boxes = no fence posts
   const ts=Math.sign(angleDelta);
   const right=perpRight(cur.dir);
   const centre=cur.pos.clone().addScaledVector(right,ts*radius);
