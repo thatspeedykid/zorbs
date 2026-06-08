@@ -371,86 +371,33 @@ function buildCourse(durSecs){
     else if(durSecs<=420) complexity=4;
     else complexity=5;
   }
-  // No timer = decent medium-long course
-  const numSections = complexity+2; // 3-7 sections
 
-  let x=0, y=0, z=6; // cursor
+  // Simple straight track - NO curves, NO obstacles
+  // Just get the physics working first
+  const totalLen = 80 + complexity * 30;
+  const x = 0, y = 0;
 
-  // ── START PAD
-  makeBox(x,y-0.2,z-4, TW+2,0.4,10, 0x111128,0x001122);
-  makeGlow(x+TW_HALF+1,y+0.3,z-4, 0.12,0.6,10, 0x00f0ff);
-  makeGlow(x-TW_HALF-1,y+0.3,z-4, 0.12,0.6,10, 0xff00cc);
-  makeGlow(x-TW_HALF-0.5,y+1.5,z+1, 0.18,3.2,0.18, 0x00f0ff);
-  makeGlow(x+TW_HALF+0.5,y+1.5,z+1, 0.18,3.2,0.18, 0x00f0ff);
-  makeGlow(x,y+3.1,z+1, TW+1.2,0.18,0.18, 0x00f0ff);
-  for(let dz=2;dz>=-8;dz-=2)
-    pathNodes.push({pos:new THREE.Vector3(x,y,z+dz), dir:new THREE.Vector3(0,0,-1), floorY:y, halfW:TW_HALF+0.8});
-  START_POS.set(x, y+BALL_R+0.5, z-2);
-  z-=8;
+  // Start pad
+  makeBox(x, y-0.2, 6-4, TW+2, 0.4, 10, 0x111128, 0x001122);
+  makeGlow(x+TW_HALF+1, y+0.3, 6-4, 0.12, 0.6, 10, 0x00f0ff);
+  makeGlow(x-TW_HALF-1, y+0.3, 6-4, 0.12, 0.6, 10, 0xff00cc);
+  makeGlow(x-TW_HALF-0.5, y+1.5, 7, 0.18, 3.2, 0.18, 0x00f0ff);
+  makeGlow(x+TW_HALF+0.5, y+1.5, 7, 0.18, 3.2, 0.18, 0x00f0ff);
+  makeGlow(x, y+3.1, 7, TW+1.2, 0.18, 0.18, 0x00f0ff);
+  addPathSegment(new THREE.Vector3(x,y,8), new THREE.Vector3(x,y,2), y);
+  START_POS.set(x, y+BALL_R+0.5, 4);
 
-  // ── SECTIONS
-  const sectionTypes=['hammers','curve_right','bumpers','ramp_funnel','hammers','curve_left','bumpers'];
-  const edgePalette=[[0x00f0ff,0xff00cc],[0xffff00,0xff8800],[0x00ff88,0x00aaff],[0xaa44ff,0xff4488]];
+  // Main straight track
+  buildStraight(x, y, 2, -(totalLen), 0x00f0ff, 0xff00cc);
 
-  for(let s=0;s<numSections;s++){
-    const type=sectionTypes[s%sectionTypes.length];
-    const [eL,eR]=edgePalette[s%edgePalette.length];
+  // Finish line
+  buildFinish(x, y, -(totalLen));
 
-    if(type==='hammers'){
-      const z2=z-28;
-      buildStraight(x,y,z,z2,eL,eR);
-      buildHammers(x,y,z,z2,2+Math.floor(complexity*0.7));
-      buildBoostPad(x,y,z-10);
-      z=z2;
+  // Grid
+  const grid=new THREE.GridHelper(400,80,0x00f0ff08,0x00f0ff05);
+  grid.position.set(0, y-1, -(totalLen/2)); addMesh(grid);
 
-    } else if(type==='bumpers'){
-      const z2=z-26;
-      buildStraight(x,y,z,z2,eL,eR);
-      buildBumpers(x,y,z,z2,2+Math.floor(complexity*0.5));
-      buildBoostPad(x,y,z-8);
-      z=z2;
-
-    } else if(type==='curve_right'){
-      // Short straight then 90-degree right curve
-      const z2=z-8; buildStraight(x,y,z,z2,eL,eR); z=z2;
-      const radius=18;
-      // Right turn: arc from 0 to +PI/2
-      buildCurve(x+radius,y,z, radius, Math.PI,Math.PI/2, eL,eR);
-      x+=radius; z-=radius;
-
-    } else if(type==='curve_left'){
-      const z2=z-8; buildStraight(x,y,z,z2,eL,eR); z=z2;
-      const radius=18;
-      buildCurve(x-radius,y,z, radius, 0,Math.PI/2, eL,eR);
-      x-=radius; z-=radius;
-
-    } else if(type==='ramp_funnel'){
-      // Short lead-in, ramp down, funnel, exit and continue
-      const z2=z-8; buildStraight(x,y,z,z2,eL,eR); z=z2;
-      const y2=y-6;
-      buildRamp(x,y,z, y2,z-10); z-=10; y=y2;
-      const exitY=buildFunnel(x,y,z-6, 5.5,1.0,10); z-=20; y=exitY;
-      // Continue after funnel
-      const z3=z-16; buildStraight(x,y,z,z3,eL,eR);
-      buildBoostPad(x,y,z-5);
-      z=z3;
-    }
-  }
-
-  // ── FINAL SPRINT
-  const zFinal=z-22;
-  buildStraight(x,y,z,zFinal, 0x00ff88,0x00ff88);
-  buildBoostPad(x,y,z-8);
-  z=zFinal;
-
-  // ── FINISH
-  buildFinish(x,y,z+2);
-
-  // Background grid
-  const grid=new THREE.GridHelper(500,100,0x00f0ff08,0x00f0ff05);
-  grid.position.set(0,y-12,z/2); addMesh(grid);
-
-  console.log('Course built: complexity='+complexity+', nodes='+pathNodes.length+', finish='+FINISH_POS.z.toFixed(0));
+  console.log('Course built: complexity='+complexity+', len='+totalLen);
 }
 
 // ── ZORBS ─────────────────────────────────────────────
@@ -544,7 +491,6 @@ function stepPhysics(z,dt){
   const {node,dist}=nearestNode(z.pos);
 
   // ── Funnel physics (overrides path)
-  let inFunnel=false;
   for(const f of funnels){
     if(z.pos.y>f.yBot-1&&z.pos.y<f.yTop+2){
       const dx=z.pos.x-f.cx, dz=z.pos.z-f.cz;
@@ -552,7 +498,6 @@ function stepPhysics(z,dt){
       const t=Math.max(0,Math.min(1,(f.yTop-z.pos.y)/(f.yTop-f.yBot)));
       const rAtY=f.rTop+(f.rBot-f.rTop)*t;
       if(d<rAtY+3){
-        inFunnel=true;
         const nx=d>0.01?dx/d:1, nz=d>0.01?dz/d:0;
         // Spin force
         z.vel.x+=(-nz)*(3+t*2.5)*dt;
@@ -576,7 +521,7 @@ function stepPhysics(z,dt){
     }
   }
 
-  if(!inFunnel && node){
+  if(node){
     const floorY=node.floorY+BALL_R;
     const hw=node.halfW-BALL_R-0.05;
 
@@ -634,30 +579,8 @@ function stepPhysics(z,dt){
   }
 
   // ── Boost pads
-  for(const bp of boostPads){
-    if(z.pos.z>=bp.z1&&z.pos.z<=bp.z2&&z.pos.x>=bp.x1&&z.pos.x<=bp.x2&&z.pos.y<bp.y+1){
-      if(Math.sqrt(z.vel.x*z.vel.x+z.vel.z*z.vel.z)<6){
-        // Boost in forward path direction
-        const {node}=nearestNode(z.pos);
-        if(node){z.vel.x+=node.dir.x*5;z.vel.z+=node.dir.z*5;}
-        showKO('BOOST: '+z.name,0x00ff88);
-      }
-    }
-  }
 
   // ── Bumpers
-  for(const b of bumperObjs){
-    const dx=z.pos.x-b.x,dz=z.pos.z-b.z;
-    const d=Math.sqrt(dx*dx+dz*dz);
-    if(d<b.r+BALL_R&&d>0.001&&Math.abs(z.pos.y-b.y)<1.1){
-      const nx=dx/d,nz=dz/d;
-      const dot=z.vel.x*nx+z.vel.z*nz;
-      if(dot<0){z.vel.x-=dot*nx*1.3;z.vel.z-=dot*nz*1.3;}
-      z.vel.y=Math.max(z.vel.y,0.6);
-      z.vel.x+=nx*1.2; z.vel.z+=nz*0.8;
-      z.pos.x+=nx*(b.r+BALL_R-d+0.02); z.pos.z+=nz*(b.r+BALL_R-d+0.02);
-    }
-  }
 
   // ── Finish
   if(!z.finished){
@@ -706,7 +629,6 @@ function ballCollide(){
   }
 }
 
-function updateHammers(dt){
   hammers.forEach(h=>{
     h.phase+=h.speed*dt;
     h.grp.rotation.z=Math.sin(h.phase)*1.1;
@@ -971,7 +893,6 @@ function loop(ts){
     updateTimer();
     const SUB=3;
     for(let s=0;s<SUB;s++){zorbs.forEach(z=>stepPhysics(z,dt/SUB));ballCollide();}
-    // updateHammers disabled
   }
   zorbs.forEach(z=>updateVisuals(z,frame));
   updateCamera(dt);
