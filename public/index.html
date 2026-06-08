@@ -163,7 +163,7 @@ scene.add(new THREE.AmbientLight(0x223355,4));
 const sun=new THREE.DirectionalLight(0xaabbff,2.5);
 sun.position.set(40,80,20); sun.castShadow=true;
 sun.shadow.mapSize.set(2048,2048);
-['left','right','top','bottom'].forEach((k,i)=>sun.shadow.camera[k]=[−120,120,120,−120][i]);
+sun.shadow.camera.left=-120;sun.shadow.camera.right=120;sun.shadow.camera.top=120;sun.shadow.camera.bottom=-120;
 sun.shadow.camera.far=400;
 scene.add(sun);
 const fill=new THREE.DirectionalLight(0xff00cc,0.55);
@@ -188,7 +188,7 @@ const ZCOLORS=[0x00f0ff,0xff00cc,0xaaff00,0xff8800,0xff4488,0xaa44ff,0x00ffaa,0x
 
 // ── Course data ─────────────────────────────────────────────────
 let courseMeshes=[], hammers=[], blades=[], bumperObjs=[], funnels=[], boostPads=[];
-let trackZones=[];   // {z1,z2, floorY, hw}  — sorted start→finish
+let trackZones=[];   // {z1,z2, floorY, hw} - sorted start to finish
 let FINISH_Z=-999, FINISH_Y=0;
 let START_POS = new THREE.Vector3(0, 1.5, 2); // set when course built
 
@@ -605,7 +605,7 @@ function stepPhysics(z,dt){
   for(const bp of boostPads){
     if(z.pos.z>=bp.z1&&z.pos.z<=bp.z2&&z.pos.x>=bp.x1&&z.pos.x<=bp.x2&&z.onGround&&z.vel.z>-4){
       z.vel.z=-4.5-Math.random()*2;
-      showKO('⚡ '+z.name+' BOOST!',0x00ff88);
+      showKO('BOOST: '+z.name,0x00ff88);
     }
   }
 
@@ -620,7 +620,7 @@ function stepPhysics(z,dt){
       z.vel.x+=nx*5.5;z.vel.z+=nz*5.5;z.vel.y=Math.max(z.vel.y,2.2);
       const ov=(b.r+BALL_R-dist)+0.02;
       z.pos.x+=nx*ov;z.pos.z+=nz*ov;
-      showKO('🔵 '+z.name+' bounced!',0x0088ff);
+      showKO('BOUNCE: '+z.name,0x0088ff);
     }
   }
 
@@ -628,8 +628,8 @@ function stepPhysics(z,dt){
   if(!z.finished&&z.pos.z<=FINISH_Z+0.5&&z.pos.z>=FINISH_Z-3){
     z.finished=true;z.finishTime=performance.now();
     const rank=zorbs.filter(r=>r.finished).length;z.rank=rank;
-    if(rank===1){showBanner('🏆 '+z.name+' WINS!',4500);setTimeout(resetRace,5500);}
-    showKO('🏁 '+z.name+' finishes #'+rank+'!',0xffff00);
+    if(rank===1){showBanner('WINNER: '+z.name,4500);setTimeout(resetRace,5500);}
+    showKO('FINISH #'+rank+': '+z.name,0xffff00);
   }
 
   z.mesh.position.copy(z.pos);
@@ -670,7 +670,7 @@ function updateObstacles(dt){
       if(Math.sqrt(dx*dx+dy*dy+dz*dz)<BALL_R+0.92){
         z.vel.x+=(dx>0?1:-1)*13; z.vel.y+=Math.abs(dy)*8+4; z.vel.z+=(Math.random()-.5)*4;
         z.knockFlash=0.35;
-        showKO('💥 '+z.name+' SMASHED!',0xff4400);
+        showKO('SMASHED: '+z.name,0xff4400);
       }
     });
   });
@@ -682,7 +682,7 @@ function updateObstacles(dt){
       const dist=Math.sqrt(dx*dx+dz*dz);
       if(dist<b.r+BALL_R&&Math.abs(z.pos.y-b.y)<0.75){
         z.vel.x+=-Math.sin(b.phase)*10; z.vel.z+=Math.cos(b.phase)*10; z.vel.y+=4.5;
-        showKO('🌀 '+z.name+' SLICED!',0xaa00ff);
+        showKO('SLICED: '+z.name,0xaa00ff);
       }
     });
   });
@@ -771,10 +771,10 @@ function updateTimer(){
   if(raceTimeLeft<30) el.classList.add('urgent');
   if(raceTimeLeft<=0){
     // Time up — if anyone finished, great; otherwise end anyway
-    showBanner('⏱ TIME UP!',3000);
+    showBanner('TIME UP!',3000);
     const sorted=[...zorbs].sort((a,b)=>a.pos.z-b.pos.z);
     if(sorted.length>0&&!sorted[0].finished){
-      showKO('🏁 '+sorted[0].name+' leads at time!',0xffff00);
+      showKO('TIME: '+sorted[0].name+' leads!',0xffff00);
     }
     setTimeout(resetRace,3500);
   }
@@ -897,7 +897,7 @@ function streamerStartRace(){
   setTimeout(()=>showBanner('2',900),1000);
   setTimeout(()=>showBanner('1',900),2000);
   setTimeout(()=>{
-    showBanner('GO! 🚀',800);
+    showBanner('GO!',800);
     phase='racing';
     document.getElementById('stxt').textContent='RACING';
     raceStartTime=performance.now();
@@ -913,7 +913,7 @@ function resetRace(){
   document.getElementById('timer-pill').style.display='none';
   document.getElementById('btn-start-race').disabled=false;
   document.getElementById('duration-input').value='';
-  showBanner('NEW RACE — TYPE !play',2500);
+  showBanner('NEW RACE - TYPE !play',2500);
   setTimeout(startMock,2200);
 }
 
