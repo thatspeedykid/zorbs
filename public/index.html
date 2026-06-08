@@ -1272,6 +1272,57 @@ document.getElementById('ci').addEventListener('keydown',e=>{if(e.key==='Enter')
 buildCourse(null); // default lobby preview course
 startMock();
 
+function updateBlades(dt){
+  blades.forEach(b=>{
+    b.phase+=b.speed*dt;
+    b.mesh.rotation.y=b.phase;
+    if(b.ring) b.ring.rotation.y=b.phase;
+    zorbs.forEach(z=>{
+      if(z.finished) return;
+      const dx=z.pos.x-b.pos.x, dz=z.pos.z-b.pos.z;
+      if(Math.sqrt(dx*dx+dz*dz)<TW_HALF*0.85 && Math.abs(z.pos.y-b.pos.y)<0.8){
+        const spinVel=b.speed>0?1:-1;
+        z.vel.x+=b.right.x*spinVel*10; z.vel.z+=b.right.z*spinVel*10;
+        z.vel.y+=1.5; z.knockFlash=0.3;
+        showKO('🌀 SPUN: '+z.name,0x4488ff);
+      }
+    });
+  });
+}
+function updateWindZones(){
+  windZones.forEach(w=>{
+    zorbs.forEach(z=>{
+      if(z.finished) return;
+      const toS=new THREE.Vector3().subVectors(z.pos,w.start);
+      const along=toS.dot(w.dir);
+      if(along>0&&along<w.start.distanceTo(w.end)){
+        z.vel.x+=w.right.x*w.windDir*w.force*0.016;
+        z.vel.z+=w.right.z*w.windDir*w.force*0.016;
+      }
+    });
+  });
+}
+function updateTrapDoors(dt){
+  trapDoors.forEach(t=>{
+    t.timer-=dt;
+    if(t.timer<=0){
+      t.open=!t.open;
+      t.timer=t.open?(1.2+Math.random()*1.5):(2+Math.random()*3);
+      if(t.mesh) t.mesh.visible=!t.open;
+      if(t.warn) t.warn.material.color.setHex(t.open?0xff0000:0xff8800);
+    }
+    if(t.open){
+      zorbs.forEach(z=>{
+        if(z.finished) return;
+        const dx=z.pos.x-t.pos.x, dz=z.pos.z-t.pos.z;
+        if(Math.sqrt(dx*dx+dz*dz)<TW_HALF*0.85&&Math.abs(z.pos.y-t.floorY)<0.8){
+          z.vel.y-=8; z.knockFlash=0.4;
+          showKO('FELL: '+z.name,0xff8800);
+        }
+      });
+    }
+  });
+}
 let lastT=0;
 function loop(ts){
   requestAnimationFrame(loop);
