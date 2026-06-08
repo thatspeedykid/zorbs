@@ -6,7 +6,7 @@ const KICK_SECRET = 'c4daf86f9492d0ac466af921c8846e5ed00b6bea0dc4fcda78607db5c0f
 const REDIRECT_URI = 'https://playzorbs.xyz/auth/kick/callback';
 
 // Admin kick usernames - add yours here
-const ADMIN_USERNAMES = ['thatspeedykid'];
+const ADMIN_USERNAMES = ['marsscumbags'];
 
 export default async function handler(req, res) {
   const { code, state, error } = req.query;
