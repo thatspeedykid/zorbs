@@ -218,137 +218,128 @@ function makeCursor(x,y,z,dx=0,dz=-1){
 }
 function perpRight(dir){ return new THREE.Vector3(dir.z,0,-dir.x); }
 
-// ── TRACK MATERIAL ────────────────────────────────────
-const _trackMat = new THREE.MeshStandardMaterial({color:0x111128,roughness:0.22,metalness:0.78,emissive:0x001122,emissiveIntensity:0.25});
-const _wallMat  = new THREE.MeshStandardMaterial({color:0x0a1020,roughness:0.3,metalness:0.7});
+const _floorMat = new THREE.MeshStandardMaterial({color:0x111128,roughness:0.22,metalness:0.78,emissive:0x001122,emissiveIntensity:0.25,side:THREE.DoubleSide});
+const _wallMat  = new THREE.MeshStandardMaterial({color:0x0a1020,roughness:0.3,metalness:0.7,side:THREE.DoubleSide});
 
-// Place one rotated box plank + walls + glow edges, add path nodes
-function _plank(cx,cy,cz, ry, len, eL, eR){
-  // Floor plank
-  const fm=new THREE.Mesh(new THREE.BoxGeometry(TW,0.4,len),_trackMat);
-  fm.position.set(cx,cy-0.2,cz); fm.rotation.y=ry;
-  fm.castShadow=fm.receiveShadow=true; addMesh(fm);
-  // Walls
-  const rx=Math.cos(ry), rz=Math.sin(ry); // local right
-  for(const s of [-1,1]){
-    const wx=cx+rx*s*(TW_HALF+0.15), wz=cz+rz*s*(TW_HALF+0.15);
-    const wm=new THREE.Mesh(new THREE.BoxGeometry(0.3,1.5,len+0.1),_wallMat);
-    wm.position.set(wx,cy+0.55,wz); wm.rotation.y=ry;
-    wm.castShadow=wm.receiveShadow=true; addMesh(wm);
-    // Glow strip on top of wall
-    const gm=new THREE.Mesh(new THREE.BoxGeometry(0.12,0.12,len+0.1),
-      new THREE.MeshBasicMaterial({color:s>0?eL:eR}));
-    gm.position.set(wx,cy+1.32,wz); gm.rotation.y=ry; addMesh(gm);
+// Build a continuous ribbon track from an array of spine points
+// pts = [{pos:V3, dir:V3, y:number}]
+// Each point defines the centerline. We extrude left/right/up to make floor+walls.
+function _buildRibbon(pts, eL, eR){
+  if(pts.length<2) return;
+  const N=pts.length;
+  // Vertex arrays: floor (top surface), left wall, right wall
+  const fv=[],lv=[],rv=[],lgv=[],rgv=[];
+  for(let i=0;i<N;i++){
+    const {pos,dir,y}=pts[i];
+    const right=perpRight(dir);
+    const fy=y;
+    // Floor: left edge, right edge at floor level
+    fv.push(
+      pos.x-right.x*TW_HALF, fy,   pos.z-right.z*TW_HALF,
+      pos.x+right.x*TW_HALF, fy,   pos.z+right.z*TW_HALF
+    );
+    // Left wall: bottom and top
+    lv.push(
+      pos.x-right.x*(TW_HALF+0.28), fy,       pos.z-right.z*(TW_HALF+0.28),
+      pos.x-right.x*(TW_HALF+0.28), fy+1.4,   pos.z-right.z*(TW_HALF+0.28)
+    );
+    // Right wall
+    rv.push(
+      pos.x+right.x*(TW_HALF+0.28), fy,       pos.z+right.z*(TW_HALF+0.28),
+      pos.x+right.x*(TW_HALF+0.28), fy+1.4,   pos.z+right.z*(TW_HALF+0.28)
+    );
+    // Glow lines at top of walls
+    lgv.push(pos.x-right.x*(TW_HALF+0.28), fy+1.42, pos.z-right.z*(TW_HALF+0.28));
+    rgv.push(pos.x+right.x*(TW_HALF+0.28), fy+1.42, pos.z+right.z*(TW_HALF+0.28));
   }
-}
-
-// Add path nodes along a segment direction
-function _addNodes(from, to, floorY){
-  const dir=new THREE.Vector3().subVectors(to,from); dir.y=0; dir.normalize();
-  const right=perpRight(dir);
-  const dist=Math.sqrt((to.x-from.x)**2+(to.z-from.z)**2);
-  const steps=Math.max(2,Math.ceil(dist/2));
-  for(let i=0;i<=steps;i++){
-    const t=i/steps;
-    const pos=new THREE.Vector3(from.x+(to.x-from.x)*t, floorY, from.z+(to.z-from.z)*t);
-    pathNodes.push({pos,dir:dir.clone(),right:right.clone(),floorY,halfW:TW_HALF});
+  // Build quad strip indices
+  function qidx(n){
+    const idx=[];
+    for(let i=0;i<n-1;i++){
+      const a=i*2,b=i*2+1,c=i*2+2,d=i*2+3;
+      idx.push(a,b,c,b,d,c);
+    }
+    return idx;
   }
+  function makeMesh(verts,idx,mat){
+    const g=new THREE.BufferGeometry();
+    g.setAttribute('position',new THREE.Float32BufferAttribute(verts,3));
+    g.setIndex(idx); g.computeVertexNormals();
+    const m=new THREE.Mesh(g,mat); m.receiveShadow=true; return addMesh(m);
+  }
+  makeMesh(fv, qidx(N), _floorMat);
+  makeMesh(lv, qidx(N), _wallMat);
+  makeMesh(rv, qidx(N), _wallMat);
+  // Glow lines
+  const lg=new THREE.BufferGeometry(); lg.setAttribute('position',new THREE.Float32BufferAttribute(lgv,3));
+  addMesh(new THREE.Line(lg,new THREE.LineBasicMaterial({color:eL,linewidth:2})));
+  const rg=new THREE.BufferGeometry(); rg.setAttribute('position',new THREE.Float32BufferAttribute(rgv,3));
+  addMesh(new THREE.Line(rg,new THREE.LineBasicMaterial({color:eR,linewidth:2})));
 }
 
 // ── SEGMENT BUILDERS ──────────────────────────────────
 
 function segStraight(cur, length, eL=0x00f0ff, eR=0xff00cc, withBoost=false){
-  const end=cur.pos.clone().addScaledVector(cur.dir,length); end.y=cur.pos.y;
-  const ry=Math.atan2(cur.dir.x,-cur.dir.z);
-  const mx=(cur.pos.x+end.x)/2, mz=(cur.pos.z+end.z)/2;
-  _plank(mx,cur.pos.y,mz,ry,length+0.1,eL,eR);
-  _addNodes(cur.pos,end,cur.pos.y);
+  const steps=Math.max(3,Math.ceil(length/3));
+  const pts=[];
+  for(let i=0;i<=steps;i++){
+    const t=i/steps;
+    const pos=cur.pos.clone().addScaledVector(cur.dir,length*t); pos.y=cur.pos.y;
+    pts.push({pos,dir:cur.dir.clone(),y:cur.pos.y});
+    const right=perpRight(cur.dir);
+    pathNodes.push({pos:pos.clone(),dir:cur.dir.clone(),right,floorY:cur.pos.y,halfW:TW_HALF});
+  }
+  _buildRibbon(pts,eL,eR);
   courseLength+=length;
   if(withBoost){
     const bp=cur.pos.clone().addScaledVector(cur.dir,length*0.55);
     buildBoostPad(bp,cur.dir,cur.pos.y);
   }
+  const end=cur.pos.clone().addScaledVector(cur.dir,length); end.y=cur.pos.y;
   return makeCursor(end.x,cur.pos.y,end.z,cur.dir.x,cur.dir.z);
 }
 
 function segRamp(cur, length, dropY, eL=0x00f0ff, eR=0xff00cc){
   const ey=cur.pos.y-dropY;
-  const end=cur.pos.clone().addScaledVector(cur.dir,length); end.y=ey;
-  // Build ramp as multiple short planks following slope
-  const steps=Math.max(4,Math.ceil(length/4));
-  for(let i=0;i<steps;i++){
-    const t0=i/steps, t1=(i+1)/steps, tm=(t0+t1)/2;
-    const sx=cur.pos.x+cur.dir.x*length*t0, sz=cur.pos.z+cur.dir.z*length*t0;
-    const ex=cur.pos.x+cur.dir.x*length*t1, ez=cur.pos.z+cur.dir.z*length*t1;
-    const sy=cur.pos.y+(ey-cur.pos.y)*t0, ey2=cur.pos.y+(ey-cur.pos.y)*t1;
-    const mx=(sx+ex)/2, mz=(sz+ez)/2, my=(sy+ey2)/2;
-    // Slight pitch tilt on ramp planks
-    const pitchA=Math.atan2(dropY,length);
-    const ry=Math.atan2(cur.dir.x,-cur.dir.z);
-    const segLen=Math.sqrt((ex-sx)**2+(ey2-sy)**2+(ez-sz)**2)+0.2;
-    const fm=new THREE.Mesh(new THREE.BoxGeometry(TW,0.4,segLen),_trackMat);
-    fm.position.set(mx,my-0.2,mz); fm.rotation.set(pitchA,ry,0,'YXZ');
-    fm.castShadow=fm.receiveShadow=true; addMesh(fm);
-    const rx=Math.cos(ry), rz=Math.sin(ry);
-    for(const s of [-1,1]){
-      const wx=mx+rx*s*(TW_HALF+0.15), wz=mz+rz*s*(TW_HALF+0.15);
-      const wm=new THREE.Mesh(new THREE.BoxGeometry(0.3,1.6,segLen),_wallMat);
-      wm.position.set(wx,my+0.55,wz); wm.rotation.set(pitchA,ry,0,'YXZ');
-      wm.castShadow=wm.receiveShadow=true; addMesh(wm);
-      const gm=new THREE.Mesh(new THREE.BoxGeometry(0.12,0.12,segLen),
-        new THREE.MeshBasicMaterial({color:s>0?eL:eR}));
-      gm.position.set(wx,my+1.35,wz); gm.rotation.set(pitchA,ry,0,'YXZ'); addMesh(gm);
-    }
-    // Path nodes along ramp
-    const fy0=sy, fy1=ey2;
-    const stps=Math.max(2,Math.ceil(segLen/2));
-    const dir=cur.dir.clone(); const right=perpRight(dir);
-    for(let j=0;j<=stps;j++){
-      const jt=j/stps;
-      const pos=new THREE.Vector3(sx+(ex-sx)*jt, sy+(ey2-sy)*jt, sz+(ez-sz)*jt);
-      pathNodes.push({pos,dir:dir.clone(),right:right.clone(),floorY:pos.y,halfW:TW_HALF});
-    }
+  const steps=Math.max(6,Math.ceil(length/2));
+  const pts=[];
+  for(let i=0;i<=steps;i++){
+    const t=i/steps;
+    const pos=cur.pos.clone().addScaledVector(cur.dir,length*t);
+    pos.y=cur.pos.y+(ey-cur.pos.y)*t;
+    pts.push({pos,dir:cur.dir.clone(),y:pos.y});
+    const right=perpRight(cur.dir);
+    pathNodes.push({pos:pos.clone(),dir:cur.dir.clone(),right,floorY:pos.y,halfW:TW_HALF});
   }
+  _buildRibbon(pts,eL,eR);
   courseLength+=length;
+  const end=cur.pos.clone().addScaledVector(cur.dir,length); end.y=ey;
   return makeCursor(end.x,ey,end.z,cur.dir.x,cur.dir.z);
 }
 
 function segCurve(cur, angleDelta, radius, eL=0x00f0ff, eR=0xff00cc){
   const absA=Math.abs(angleDelta), arcLen=radius*absA;
-  const steps=Math.max(6,Math.ceil(arcLen/3));
+  const steps=Math.max(10,Math.ceil(arcLen/2));
   const ts=Math.sign(angleDelta);
   const right=perpRight(cur.dir);
   const centre=cur.pos.clone().addScaledVector(right,ts*radius);
   const initR=cur.pos.clone().sub(centre);
-  let prevPt=null, prevDir=null;
+  const pts=[];
   for(let i=0;i<=steps;i++){
     const sw=angleDelta*(i/steps);
     const cs=Math.cos(sw),sn=Math.sin(sw);
     const rx=initR.x*cs-initR.z*sn, rz=initR.x*sn+initR.z*cs;
-    const p=new THREE.Vector3(centre.x+rx,cur.pos.y,centre.z+rz);
+    const pos=new THREE.Vector3(centre.x+rx,cur.pos.y,centre.z+rz);
     const tx=(-sn*initR.x-cs*initR.z)*ts, tz=(cs*initR.x-sn*initR.z)*ts;
     const tl=Math.sqrt(tx*tx+tz*tz);
-    const segDir=new THREE.Vector3(tx/tl,0,tz/tl);
-    // Build plank between prev and current point
-    if(prevPt){
-      const mx=(prevPt.x+p.x)/2, mz=(prevPt.z+p.z)/2;
-      const ry=Math.atan2(segDir.x,-segDir.z);
-      const segLen=prevPt.distanceTo(p)+0.15;
-      _plank(mx,cur.pos.y,mz,ry,segLen,eL,eR);
-      // Path nodes
-      const sr=perpRight(segDir);
-      pathNodes.push({pos:p.clone(),dir:segDir.clone(),right:sr.clone(),floorY:cur.pos.y,halfW:TW_HALF});
-    }
-    prevPt=p; prevDir=segDir;
+    const dir=new THREE.Vector3(tx/tl,0,tz/tl);
+    pts.push({pos,dir,y:cur.pos.y});
+    pathNodes.push({pos:pos.clone(),dir:dir.clone(),right:perpRight(dir),floorY:cur.pos.y,halfW:TW_HALF});
   }
+  _buildRibbon(pts,eL,eR);
   courseLength+=arcLen;
-  // Return cursor at end of arc
-  const sw=angleDelta,cs=Math.cos(sw),sn=Math.sin(sw);
-  const erx=initR.x*cs-initR.z*sn, erz=initR.x*sn+initR.z*cs;
-  const ep=new THREE.Vector3(centre.x+erx,cur.pos.y,centre.z+erz);
-  const etx=(-sn*initR.x-cs*initR.z)*ts, etz=(cs*initR.x-sn*initR.z)*ts;
-  const etl=Math.sqrt(etx*etx+etz*etz);
-  return makeCursor(ep.x,cur.pos.y,ep.z,etx/etl,etz/etl);
+  const last=pts[pts.length-1];
+  return makeCursor(last.pos.x,cur.pos.y,last.pos.z,last.dir.x,last.dir.z);
 }
 
 // ── BOOST PAD ─────────────────────────────────────────
