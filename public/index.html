@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ZORBS — Stream Racer</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{width:100%;height:100%;background:#000;overflow:hidden;}
+#app{width:100%;height:100vh;position:relative;}
+#c{display:block;width:100%;height:100%;}
+#ui{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;font-family:'Courier New',monospace;}
+
+/* ── top bar ── */
+#topbar{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:linear-gradient(180deg,rgba(0,0,0,0.92)0%,transparent 100%);}
+#logo{font-size:22px;font-weight:900;letter-spacing:8px;color:#00f0ff;text-shadow:0 0 18px #00f0ff;}
+#logo span{color:#ff00cc;text-shadow:0 0 18px #ff00cc;}
+#cam-controls{display:flex;gap:5px;pointer-events:auto;}
+.cb{background:rgba(0,240,255,0.07);border:1px solid rgba(0,240,255,0.28);color:#00f0ff;padding:4px 11px;border-radius:4px;font-size:10px;cursor:pointer;letter-spacing:2px;font-family:'Courier New',monospace;transition:all .15s;}
+.cb:hover,.cb.active{background:rgba(0,240,255,0.2);border-color:#00f0ff;}
+
+/* ── side pills ── */
+#race-info{position:absolute;top:50px;left:12px;display:flex;flex-direction:column;gap:5px;}
+.pill{background:rgba(0,0,0,0.75);border:1px solid rgba(255,255,255,0.09);border-radius:20px;padding:4px 12px;font-size:10px;color:#fff;display:flex;align-items:center;gap:6px;letter-spacing:1px;}
+.dot{width:5px;height:5px;border-radius:50%;}
+.dg{background:#00ff88;box-shadow:0 0 6px #00ff88;animation:blink 1.5s infinite;}
+.dp{background:#ff00cc;box-shadow:0 0 5px #ff00cc;}
+@keyframes blink{0%,100%{opacity:1;}50%{opacity:.3;}}
+
+/* ── timer ── */
+#timer-display{font-size:13px;color:#fff;letter-spacing:2px;font-weight:700;}
+#timer-display.urgent{color:#ff4444;text-shadow:0 0 8px #ff4444;}
+
+/* ── leaderboard ── */
+#lb{position:absolute;top:50px;right:12px;background:rgba(0,0,0,0.8);border:1px solid rgba(0,240,255,0.14);border-radius:10px;padding:10px 14px;min-width:172px;}
+#lb h3{font-size:9px;letter-spacing:3px;color:rgba(0,240,255,0.38);margin-bottom:8px;}
+.lr{display:flex;align-items:center;gap:6px;margin-bottom:5px;font-size:11px;}
+.lp{color:rgba(255,255,255,.22);width:14px;font-size:10px;}.lp.g{color:#ffd700;}
+.ln{flex:1;color:#ddd;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:88px;}
+.ln.sub{color:#ff00cc;}
+.ld{font-size:9px;color:rgba(255,255,255,.28);}
+
+/* ── streamer controls ── */
+#streamer-panel{position:absolute;top:50px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.82);border:1px solid rgba(0,240,255,0.18);border-radius:10px;padding:12px 16px;pointer-events:auto;display:flex;flex-direction:column;gap:8px;min-width:260px;}
+#streamer-panel h3{font-size:9px;letter-spacing:3px;color:rgba(0,240,255,0.4);text-align:center;}
+#sp-row{display:flex;gap:6px;align-items:center;}
+#sp-label{font-size:10px;color:rgba(255,255,255,0.5);letter-spacing:1px;white-space:nowrap;}
+#duration-input{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:4px;padding:4px 8px;color:#fff;font-size:11px;font-family:'Courier New',monospace;width:70px;outline:none;text-align:center;}
+#duration-input:focus{border-color:rgba(0,240,255,0.4);}
+#sp-hint{font-size:9px;color:rgba(255,255,255,0.25);letter-spacing:1px;}
+#btn-start-race{background:rgba(0,240,255,0.12);border:1px solid rgba(0,240,255,0.35);color:#00f0ff;border-radius:5px;padding:6px 14px;font-size:11px;letter-spacing:2px;cursor:pointer;font-family:'Courier New',monospace;transition:all .15s;flex:1;}
+#btn-start-race:hover{background:rgba(0,240,255,0.25);}
+#btn-start-race:disabled{opacity:0.3;cursor:not-allowed;}
+#btn-hide-panel{font-size:9px;color:rgba(255,255,255,0.25);cursor:pointer;text-align:center;letter-spacing:1px;pointer-events:auto;}
+#btn-hide-panel:hover{color:rgba(255,255,255,0.5);}
+#btn-show-panel{position:absolute;top:50px;left:50%;transform:translateX(-50%);font-size:9px;color:rgba(0,240,255,0.4);cursor:pointer;letter-spacing:2px;pointer-events:auto;background:rgba(0,0,0,0.6);border:1px solid rgba(0,240,255,0.15);border-radius:4px;padding:3px 10px;display:none;}
+
+/* ── chat ── */
+#chat{position:absolute;bottom:12px;left:12px;width:192px;background:rgba(0,0,0,0.78);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:9px;pointer-events:auto;}
+#ct{font-size:9px;letter-spacing:2px;color:rgba(255,255,255,.22);margin-bottom:5px;}
+#cl{height:90px;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;gap:2px;}
+.cm{font-size:10px;line-height:1.4;animation:fi .25s ease;}
+.cm .u{font-weight:700;}.cm .u.s{color:#ff00cc;}.cm .u.r{color:#00f0ff;}
+.cm .c{color:rgba(255,255,255,.38);}
+@keyframes fi{from{opacity:0;transform:translateY(3px);}to{opacity:1;}}
+#cr{display:flex;gap:4px;margin-top:5px;}
+#ci{flex:1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.11);border-radius:4px;padding:3px 6px;color:#fff;font-size:10px;font-family:'Courier New',monospace;outline:none;}
+#ci:focus{border-color:rgba(0,240,255,0.38);}
+#cg{background:rgba(0,240,255,0.1);border:1px solid rgba(0,240,255,0.28);color:#00f0ff;border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer;}
+
+/* ── minimap ── */
+#mm{position:absolute;bottom:12px;right:12px;width:110px;height:110px;border-radius:50%;overflow:hidden;border:1px solid rgba(0,240,255,0.18);background:rgba(0,0,0,0.7);}
+#mmc{width:110px;height:110px;}
+
+/* ── banner / ko feed ── */
+#banner{position:absolute;top:45%;left:50%;transform:translate(-50%,-50%);font-size:34px;font-weight:900;letter-spacing:6px;color:#fff;text-shadow:0 0 30px #00f0ff,0 0 60px #00f0ff33;opacity:0;pointer-events:none;transition:opacity .3s;text-align:center;white-space:nowrap;}
+#kfeed{position:absolute;top:56px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:3px;pointer-events:none;}
+.kf{font-size:11px;letter-spacing:1px;text-shadow:0 0 8px currentColor;animation:kfa 2.5s forwards;}
+@keyframes kfa{0%{opacity:1;transform:translateY(0);}100%{opacity:0;transform:translateY(-16px);}}
+#hint{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);font-size:9px;letter-spacing:1px;color:rgba(255,255,255,.16);pointer-events:none;white-space:nowrap;}
+</style>
+</head>
+<body>
+<div id="app">
+<canvas id="c"></canvas>
+<div id="ui">
+  <div id="topbar">
+    <div id="logo">ZO<span>R</span>BS</div>
+    <div id="cam-controls">
+      <button class="cb active" id="btn-follow" onclick="setCam('follow')">FOLLOW</button>
+      <button class="cb" id="btn-wide" onclick="setCam('wide')">WIDE</button>
+      <button class="cb" id="btn-top" onclick="setCam('top')">TOP</button>
+      <button class="cb" id="btn-auto" onclick="setCam('auto')">AUTO</button>
+    </div>
+  </div>
+
+  <div id="race-info">
+    <div class="pill"><div class="dot dg"></div><span>LIVE</span></div>
+    <div class="pill"><div class="dot dp"></div><span id="cnt">0 racers</span></div>
+    <div class="pill" id="phase-pill"><span id="stxt">LOBBY</span></div>
+    <div class="pill" id="timer-pill" style="display:none"><span id="timer-display">--:--</span></div>
+  </div>
+
+  <!-- Streamer Control Panel -->
+  <div id="streamer-panel">
+    <h3>⚙ STREAMER CONTROLS</h3>
+    <div id="sp-row">
+      <span id="sp-label">RACE TIMER</span>
+      <input id="duration-input" type="text" placeholder="e.g. 3m" maxlength="4"/>
+      <span id="sp-hint">optional</span>
+    </div>
+    <button id="btn-start-race" onclick="streamerStartRace()">START RACE ▶</button>
+    <div id="btn-hide-panel" onclick="hidePanel()">hide panel</div>
+  </div>
+  <div id="btn-show-panel" onclick="showPanel()">⚙ CONTROLS</div>
+
+  <div id="lb"><h3>LEADERBOARD</h3><div id="lbr"></div></div>
+
+  <div id="chat">
+    <div id="ct">LIVE CHAT</div>
+    <div id="cl"></div>
+    <div id="cr">
+      <input id="ci" placeholder="!play or !boost" maxlength="20"/>
+      <button id="cg">→</button>
+    </div>
+  </div>
+
+  <div id="mm"><canvas id="mmc" width="110" height="110"></canvas></div>
+  <div id="banner"></div>
+  <div id="kfeed"></div>
+  <div id="hint">[ ← → ] CAM &nbsp;|&nbsp; [ SPACE ] BOOST &nbsp;|&nbsp; [ F ] FOLLOW</div>
+</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ═══════════════════════════════════════════════════════════════
+//  ZORBS v0.2 — stable physics, start-on-track, timed races
+// ═══════════════════════════════════════════════════════════════
+
+// ── Renderer ────────────────────────────────────────────────────
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.25;
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x010115, 0.013);
+scene.background = new THREE.Color(0x010115);
+const camera = new THREE.PerspectiveCamera(65,1,0.1,600);
+
+function onResize(){
+  const w=canvas.parentElement.offsetWidth, h=canvas.parentElement.offsetHeight||window.innerHeight;
+  renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix();
+}
+onResize(); window.addEventListener('resize',onResize);
+
+// ── Lighting ────────────────────────────────────────────────────
+scene.add(new THREE.AmbientLight(0x223355,4));
+const sun=new THREE.DirectionalLight(0xaabbff,2.5);
+sun.position.set(40,80,20); sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048);
+['left','right','top','bottom'].forEach((k,i)=>sun.shadow.camera[k]=[−120,120,120,−120][i]);
+sun.shadow.camera.far=400;
+scene.add(sun);
+const fill=new THREE.DirectionalLight(0xff00cc,0.55);
+fill.position.set(-40,20,-40); scene.add(fill);
+const pulseCyan=new THREE.PointLight(0x00f0ff,1.4,120); scene.add(pulseCyan);
+
+// Stars
+const sv=[];
+for(let i=0;i<2500;i++) sv.push((Math.random()-.5)*500,(Math.random()-.5)*500,(Math.random()-.5)*500);
+const sg=new THREE.BufferGeometry();
+sg.setAttribute('position',new THREE.Float32BufferAttribute(sv,3));
+scene.add(new THREE.Points(sg,new THREE.PointsMaterial({color:0xffffff,size:0.35,transparent:true,opacity:0.6})));
+
+// ── Constants ───────────────────────────────────────────────────
+const GRAV   = -20;
+const BOUNCE = 0.36;
+const FRIC   = 0.987;
+const BALL_R = 0.52;
+const TW     = 5.4;   // track full width
+
+const ZCOLORS=[0x00f0ff,0xff00cc,0xaaff00,0xff8800,0xff4488,0xaa44ff,0x00ffaa,0xffff00,0x44aaff,0xff6644];
+
+// ── Course data ─────────────────────────────────────────────────
+let courseMeshes=[], hammers=[], blades=[], bumperObjs=[], funnels=[], boostPads=[];
+let trackZones=[];   // {z1,z2, floorY, hw}  — sorted start→finish
+let FINISH_Z=-999, FINISH_Y=0;
+let START_POS = new THREE.Vector3(0, 1.5, 2); // set when course built
+
+// ── Mesh helpers ────────────────────────────────────────────────
+function add(m){ scene.add(m); courseMeshes.push(m); return m; }
+
+function plank(px,py,pz, rx,ry,rz, sx,sy,sz, col=0x141428, emit=0x000818){
+  const m=new THREE.Mesh(new THREE.BoxGeometry(sx,sy,sz),
+    new THREE.MeshStandardMaterial({color:col,roughness:0.22,metalness:0.78,emissive:emit,emissiveIntensity:0.18}));
+  m.position.set(px,py,pz); m.rotation.set(rx,ry,rz);
+  m.castShadow=m.receiveShadow=true; return add(m);
+}
+
+function glow(px,py,pz, sx,sy,sz, col){
+  const m=new THREE.Mesh(new THREE.BoxGeometry(sx,sy,sz),new THREE.MeshBasicMaterial({color:col}));
+  m.position.set(px,py,pz); return add(m);
+}
+
+function tube(px,py,pz, rTop,rBot,h, col=0x0a0a1e){
+  const m=new THREE.Mesh(new THREE.CylinderGeometry(rTop,rBot,h,32,1,true),
+    new THREE.MeshStandardMaterial({color:col,roughness:0.2,metalness:0.85,side:THREE.DoubleSide,emissive:0x000833,emissiveIntensity:0.28}));
+  m.position.set(px,py,pz); return add(m);
+}
+
+function ring(px,py,pz, r, col){
+  const m=new THREE.Mesh(new THREE.TorusGeometry(r,0.09,8,36),new THREE.MeshBasicMaterial({color:col}));
+  m.position.set(px,py,pz); m.rotation.x=Math.PI/2; return add(m);
+}
+
+function zone(z1,z2,floorY,hw){ trackZones.push({z1,z2,floorY,hw}); }
+
+// ── Parse duration string → seconds (null = unlimited) ──────────
+function parseDuration(str){
+  if(!str||!str.trim()) return null;
+  const s=str.trim().toLowerCase();
+  const match=s.match(/^(\d+(?:\.\d+)?)\s*(m|min|s|sec)?$/);
+  if(!match) return null;
+  const n=parseFloat(match[1]);
+  const unit=match[2]||'m';
+  return unit.startsWith('s') ? n : n*60;
+}
+
+// ── Course generator ─────────────────────────────────────────────
+// raceDuration: seconds or null
+// Longer duration = more sections = more obstacles
+function buildCourse(raceDurationSecs){
+  courseMeshes.forEach(m=>scene.remove(m));
+  courseMeshes=[]; hammers=[]; blades=[]; bumperObjs=[]; funnels=[]; boostPads=[]; trackZones=[];
+
+  // Scale complexity 1-5 based on duration (null=medium=3)
+  let complexity=3;
+  if(raceDurationSecs!==null){
+    if(raceDurationSecs<=60)  complexity=1;
+    else if(raceDurationSecs<=120) complexity=2;
+    else if(raceDurationSecs<=240) complexity=3;
+    else if(raceDurationSecs<=360) complexity=4;
+    else complexity=5;
+  }
+
+  // How many middle sections to generate
+  const midSections = complexity; // 1-5
+
+  let curZ=6;   // start of course in Z (positive = behind camera start)
+  let curY=0;   // current floor Y
+
+  // ── Section builder functions ────────────────────────────────
+
+  function buildStartPad(z1,y){
+    plank(0,y-.2,z1-4, 0,0,0, TW+2,0.4,10, 0x111128,0x001122);
+    // Wide rails
+    glow( TW/2+1, y+0.3, z1-4, 0.12,0.6,10, 0x00f0ff);
+    glow(-TW/2-1, y+0.3, z1-4, 0.12,0.6,10, 0xff00cc);
+    // Start gate arches
+    const archY=y+3;
+    glow(-TW/2-0.5,archY-1.5,z1+1, 0.18,3.2,0.18, 0x00f0ff);
+    glow( TW/2+0.5,archY-1.5,z1+1, 0.18,3.2,0.18, 0x00f0ff);
+    glow(0,archY,z1+1, TW+1.2,0.18,0.18, 0x00f0ff);
+    zone(z1+2,z1-8, y, TW/2+0.8);
+    START_POS.set(0, y+BALL_R+0.3, z1-2);
+  }
+
+  function buildFlatSection(z1,z2,y, label, edgeColorL=0x00f0ff, edgeColorR=0xff00cc){
+    const len=Math.abs(z2-z1), mz=(z1+z2)/2;
+    plank(0,y-.2,mz, 0,0,0, TW,0.4,len, 0x111128,0x001122);
+    plank( TW/2+.15,y+.55,mz, 0,0,0, 0.28,1.4,len, 0x0a1020);
+    plank(-TW/2-.15,y+.55,mz, 0,0,0, 0.28,1.4,len, 0x0a1020);
+    glow( TW/2+.15,y+1.3,mz, 0.1,0.1,len, edgeColorL);
+    glow(-TW/2-.15,y+1.3,mz, 0.1,0.1,len, edgeColorR);
+    zone(z1,z2,y,TW/2);
+  }
+
+  function buildRampDown(z1,targetY,length){
+    const drop=Math.abs(targetY-curY), mz=z1-length/2, my=(curY+targetY)/2;
+    const angle=Math.atan2(drop,length);
+    plank(0,my,mz, -angle,0,0, TW,0.35,length+0.5, 0x111128,0x001122);
+    plank( TW/2+.15,my,mz, -angle,0,0, 0.28,1.3,length+0.5, 0x0a1020);
+    plank(-TW/2-.15,my,mz, -angle,0,0, 0.28,1.3,length+0.5, 0x0a1020);
+    return z1-length;
+  }
+
+  function addHammers(z1,z2,y,count){
+    const spacing=Math.abs(z2-z1)/(count+1);
+    for(let i=0;i<count;i++){
+      const hz=z1-spacing*(i+1);
+      const pivY=y+4;
+      const grp=new THREE.Group();
+      const handle=new THREE.Mesh(new THREE.CylinderGeometry(0.13,0.13,4,8),
+        new THREE.MeshStandardMaterial({color:0x334455,roughness:0.4,metalness:0.7}));
+      grp.add(handle);
+      const head=new THREE.Mesh(new THREE.BoxGeometry(3.4,0.75,0.85),
+        new THREE.MeshStandardMaterial({color:0x223344,roughness:0.15,metalness:0.95,emissive:0xff2200,emissiveIntensity:0.28}));
+      head.position.y=-2.15; grp.add(head);
+      const gs=new THREE.Mesh(new THREE.BoxGeometry(3.5,0.12,0.9),new THREE.MeshBasicMaterial({color:0xff4400}));
+      gs.position.y=-2.52; grp.add(gs);
+      grp.position.set(0,pivY,hz); grp.castShadow=true;
+      scene.add(grp); courseMeshes.push(grp);
+      hammers.push({grp,pivY,hz,phase:i*(Math.PI*2/count),speed:(0.85+Math.random()*0.55)*(i%2===0?1:-1),floorY:y});
+    }
+  }
+
+  function addBoostPad(z,y){
+    plank(0,y+0.01,z, 0,0,0, TW-1.2,0.06,2.5, 0x00ff88,0x00ff44);
+    boostPads.push({z1:z-1.25,z2:z+1.25,x1:-TW/2+0.6,x2:TW/2-0.6,y});
+    // Arrow indicators
+    for(let j=0;j<3;j++){
+      glow(0,y+0.04,z-0.6+j*0.6, TW-2,0.05,0.22, 0x00ff88);
+    }
+  }
+
+  function addFunnel(cx,cz,yTop,h,rTop,rBot,type){
+    const yBot=yTop-h;
+    tube(cx,(yTop+yBot)/2,cz,rTop,rBot,h);
+    const rings=5;
+    for(let i=0;i<rings;i++){
+      const t=i/(rings-1);
+      ring(cx,yTop-h*t,cz, rBot+(rTop-rBot)*(1-t)*0.92, i%2===0?0x00f0ff:0xff00cc);
+    }
+    funnels.push({cx,cz,yTop,yBot,rTop,rBot,type});
+    zone(cz+rTop+1,cz-rTop-1, yBot, rBot);
+  }
+
+  function addBlades(cx,cz,yTop,count){
+    for(let i=0;i<count;i++){
+      const by=yTop-1.5-i*2.2;
+      const blade=new THREE.Mesh(new THREE.BoxGeometry(4.2,0.18,0.45),
+        new THREE.MeshStandardMaterial({color:0x334466,roughness:0.1,metalness:0.96,emissive:0x0044bb,emissiveIntensity:0.4}));
+      const grp=new THREE.Group(); grp.add(blade);
+      grp.position.set(cx,by,cz);
+      scene.add(grp); courseMeshes.push(grp);
+      blades.push({grp,y:by,cx,cz,r:1.9,phase:i*(Math.PI*2/count),speed:1.0+i*0.28});
+    }
+  }
+
+  function addPinballBumpers(z1,z2,y,count){
+    const positions=[[-1.5,-1.8],[1.5,-1.2],[-1.2,-2.5],[1.8,-2.0],[0,-1.5]];
+    for(let i=0;i<Math.min(count,positions.length);i++){
+      const [ox,oz]=positions[i];
+      const bz=z1+oz*(Math.abs(z2-z1)/3);
+      const bx=ox;
+      const cyl=new THREE.Mesh(new THREE.CylinderGeometry(0.65,0.65,1.4,12),
+        new THREE.MeshStandardMaterial({color:0x223355,roughness:0.2,metalness:0.9,emissive:0x003399,emissiveIntensity:0.55}));
+      cyl.position.set(bx,y+0.7,bz); cyl.castShadow=true; add(cyl);
+      ring(bx,y+1.15,bz, 0.78, 0x0066ff);
+      bumperObjs.push({x:bx,y:y+0.7,z:bz,r:0.72});
+    }
+  }
+
+  function addSideBumpers(z1,z2,y,count){
+    const spacing=Math.abs(z2-z1)/(count+1);
+    for(let i=0;i<count;i++){
+      const hz=z1-spacing*(i+1);
+      const side=i%2===0?1:-1;
+      const bx=side*(TW/2-1.3);
+      plank(bx,y+0.5,hz, 0,0,0, 1.8,1.1,1.0, 0x112244,0x002255);
+      glow(bx,y+1.1,hz, 1.85,0.12,1.05, 0x00aaff);
+      bumperObjs.push({x:bx,y:y+0.5,z:hz,r:0.95,wall:true});
+    }
+  }
+
+  function buildFinish(z,y){
+    FINISH_Z=z; FINISH_Y=y;
+    plank(0,y-.2,z-2, 0,0,0, TW+2,0.4,8, 0x111133,0x001133);
+    // Arch
+    const am=new THREE.MeshBasicMaterial({color:0xffff00});
+    [TW/2+0.5,-TW/2-0.5].forEach(ax=>{
+      const post=new THREE.Mesh(new THREE.BoxGeometry(0.3,5,0.3),am);
+      post.position.set(ax,y+2.5,z); add(post);
+    });
+    const top=new THREE.Mesh(new THREE.BoxGeometry(TW+2,0.3,0.3),am);
+    top.position.set(0,y+5,z); add(top);
+    // Checkered
+    for(let i=0;i<9;i++){
+      const sq=new THREE.Mesh(new THREE.BoxGeometry(0.55,0.55,0.1),
+        new THREE.MeshBasicMaterial({color:i%2===0?0xffffff:0x111111}));
+      sq.position.set(-2.2+i*0.55,y+5.3,z); add(sq);
+    }
+    glow(0,y+0.04,z-2, TW+2,0.08,8, 0xffff00);
+  }
+
+  // ── Assemble course ──────────────────────────────────────────
+
+  // START PAD
+  buildStartPad(curZ, curY);
+  curZ -= 8;
+
+  // ── MIDDLE SECTIONS (scaled by complexity) ───────────────────
+  const sectionTypes=['hammer','funnel','bumper','sidebump','funnel2'];
+
+  for(let s=0;s<midSections;s++){
+    const type=sectionTypes[s%sectionTypes.length];
+    const sLen=28+s*4; // sections get a bit longer
+    const z1=curZ, z2=curZ-sLen;
+    const edgeColors=[[0x00f0ff,0xff00cc],[0xffff00,0xff8800],[0x00ff88,0x00aaff],[0xaa44ff,0xff4488],[0xff00cc,0x00f0ff]][s%5];
+
+    if(type==='hammer'){
+      buildFlatSection(z1,z2,curY,'HAMMER ZONE',...edgeColors);
+      addHammers(z1,z2,curY, 2+complexity);
+      addBoostPad(z1-8,curY);
+      addSideBumpers(z1,z2,curY,2);
+
+    } else if(type==='funnel'){
+      // Ramp down then funnel
+      const newY=curY-8;
+      const rampZ=buildRampDown(z1,newY,8);
+      curY=newY; curZ=rampZ;
+      // Funnel
+      const fc=rampZ-8;
+      addFunnel(0,fc,curY,12,6.5,1.0,'tornado');
+      addBoostPad(fc+4,curY);
+      curZ=fc-14; // exit below funnel
+      zone(fc+2,curZ,curY,1.0);
+
+    } else if(type==='bumper'){
+      buildFlatSection(z1,z2,curY,'BUMPER ZONE',...edgeColors);
+      addPinballBumpers(z1,z2,curY, 2+complexity);
+      addBoostPad(z1-6,curY);
+
+    } else if(type==='sidebump'){
+      buildFlatSection(z1,z2,curY,'GAUNTLET',...edgeColors);
+      addSideBumpers(z1,z2,curY, 3+complexity);
+      addHammers(z1,z2,curY, 1+Math.floor(complexity/2));
+
+    } else if(type==='funnel2'){
+      // Second funnel (smaller, with blades)
+      const newY=curY-6;
+      const rampZ=buildRampDown(z1,newY,6);
+      curY=newY; curZ=rampZ;
+      const fc=rampZ-7;
+      addFunnel(0,fc,curY,10,5.0,0.9,'spiral');
+      addBlades(0,fc,curY, 2+Math.floor(complexity/2));
+      curZ=fc-12;
+      zone(fc+2,curZ,curY,0.9);
+    }
+
+    curZ=z2;
+  }
+
+  // ── FINAL SPRINT ─────────────────────────────────────────────
+  const finalZ1=curZ, finalZ2=curZ-22;
+  buildFlatSection(finalZ1,finalZ2,curY,'FINAL SPRINT',0x00ff88,0x00ff88);
+  addBoostPad(finalZ1-5,curY);
+
+  // ── FINISH ───────────────────────────────────────────────────
+  buildFinish(finalZ2+2, curY);
+
+  // Ground grid decoration
+  const grid=new THREE.GridHelper(400,80,0x00f0ff08,0x00f0ff05);
+  grid.position.set(0,curY-8,(6+finalZ2)/2); add(grid);
+
+  console.log(`Course built: complexity ${complexity}, finish at Z=${FINISH_Z.toFixed(0)}, startY=${START_POS.y.toFixed(2)}`);
+}
+
+// ── Zone lookup ─────────────────────────────────────────────────
+function getZone(z){
+  for(const tz of trackZones){
+    const lo=Math.min(tz.z1,tz.z2), hi=Math.max(tz.z1,tz.z2);
+    if(z>=lo&&z<=hi) return tz;
+  }
+  return null;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  BALL PHYSICS
+// ═══════════════════════════════════════════════════════════════
+const zorbs=[];
+
+function createZorb(name,isSub,colorHex){
+  const geo=new THREE.SphereGeometry(BALL_R,24,24);
+  const mat=new THREE.MeshStandardMaterial({
+    color:colorHex,roughness:0.07,metalness:0.92,
+    emissive:colorHex,emissiveIntensity:isSub?0.42:0.18
+  });
+  const mesh=new THREE.Mesh(geo,mat);
+  mesh.castShadow=true;
+
+  // Glow shell
+  mesh.add(new THREE.Mesh(
+    new THREE.SphereGeometry(BALL_R*1.1,12,12),
+    new THREE.MeshBasicMaterial({color:colorHex,transparent:true,opacity:0.09,side:THREE.BackSide})
+  ));
+
+  // Orbit ring
+  const orbRing=new THREE.Mesh(
+    new THREE.TorusGeometry(BALL_R*1.38,0.052,6,28),
+    new THREE.MeshBasicMaterial({color:colorHex,transparent:true,opacity:0.5})
+  );
+  orbRing.rotation.x=Math.PI/2;
+  mesh.add(orbRing);
+  mesh.add(new THREE.PointLight(colorHex,isSub?1.6:0.9,8));
+
+  scene.add(mesh);
+
+  // Trail
+  const TLEN=38;
+  const trailGeo=new THREE.BufferGeometry();
+  trailGeo.setAttribute('position',new THREE.Float32BufferAttribute(new Float32Array(TLEN*3),3));
+  const trailLine=new THREE.Line(trailGeo,new THREE.LineBasicMaterial({color:colorHex,transparent:true,opacity:0.4}));
+  scene.add(trailLine);
+
+  // Speed streaks
+  const streaks=[];
+  for(let i=0;i<8;i++){
+    const sg=new THREE.BufferGeometry();
+    sg.setAttribute('position',new THREE.Float32BufferAttribute(new Float32Array(6),3));
+    const sl=new THREE.Line(sg,new THREE.LineBasicMaterial({color:colorHex,transparent:true,opacity:0}));
+    scene.add(sl); streaks.push(sl);
+  }
+
+  // Spawn ON the track start pad, spread across width
+  const spawnX=(Math.random()-.5)*(TW-1.2);
+  const spawnZ=START_POS.z+(Math.random()-.5)*3;
+  const spawnY=START_POS.y;
+
+  return {
+    name,isSub,color:colorHex,
+    mesh,orbRing,trailLine,streaks,
+    trailHistory:[],
+    pos:new THREE.Vector3(spawnX,spawnY,spawnZ),
+    vel:new THREE.Vector3((Math.random()-.5)*0.3,0,-(Math.random()*0.3+0.05)),
+    boost:0,
+    onGround:false,
+    inFunnel:false,
+    finished:false,
+    finishTime:0,
+    rank:0,
+    knockFlash:0
+  };
+}
+
+function removeZorb(z){
+  scene.remove(z.mesh);
+  scene.remove(z.trailLine);
+  z.streaks.forEach(s=>scene.remove(s));
+}
+
+function stepPhysics(z,dt){
+  if(z.finished) return;
+
+  z.vel.y+=GRAV*dt;
+  if(z.boost>0){ z.vel.z-=z.boost*14*dt; z.vel.x+=(Math.random()-.5)*1.2*dt; z.boost=Math.max(0,z.boost-dt*0.85); }
+  if(z.onGround){ z.vel.x*=Math.pow(FRIC,dt*60); z.vel.z*=Math.pow(FRIC,dt*60); }
+
+  const spd=z.vel.length();
+  if(spd>32) z.vel.multiplyScalar(32/spd);
+
+  z.pos.x+=z.vel.x*dt;
+  z.pos.y+=z.vel.y*dt;
+  z.pos.z+=z.vel.z*dt;
+  z.onGround=false; z.inFunnel=false;
+
+  // Funnel
+  for(const f of funnels){
+    if(z.pos.y>f.yBot-1&&z.pos.y<f.yTop+2){
+      const dx=z.pos.x-f.cx, dz=z.pos.z-f.cz;
+      const dist=Math.sqrt(dx*dx+dz*dz);
+      const t=Math.max(0,Math.min(1,(f.yTop-z.pos.y)/(f.yTop-f.yBot)));
+      const rAtY=f.rTop+(f.rBot-f.rTop)*t;
+      if(dist<rAtY+2){
+        z.inFunnel=true;
+        const nx=dist>0.01?dx/dist:1, nz=dist>0.01?dz/dist:0;
+        z.vel.x+=(-nz)*(3.5+t*2.5)*dt;
+        z.vel.z+=(nx)*(3.5+t*2.5)*dt;
+        const wr=rAtY-BALL_R-0.05;
+        if(dist>wr){
+          z.pos.x=f.cx+nx*wr; z.pos.z=f.cz+nz*wr;
+          const dot=z.vel.x*nx+z.vel.z*nz;
+          if(dot>0){z.vel.x-=dot*nx*(1+BOUNCE);z.vel.z-=dot*nz*(1+BOUNCE);}
+        }
+        if(z.pos.y<f.yBot+BALL_R){
+          z.pos.y=f.yBot+BALL_R;
+          if(z.vel.y<0) z.vel.y=-z.vel.y*BOUNCE;
+          z.onGround=true;
+        }
+      }
+    }
+  }
+
+  if(!z.inFunnel){
+    const tz=getZone(z.pos.z);
+    if(tz){
+      const fy=tz.floorY+BALL_R;
+      if(z.pos.y<fy){ z.pos.y=fy; if(z.vel.y<0) z.vel.y=-z.vel.y*BOUNCE; z.onGround=true; }
+      const hw=tz.hw-BALL_R;
+      if(z.pos.x>hw){z.pos.x=hw; z.vel.x=-Math.abs(z.vel.x)*BOUNCE;}
+      if(z.pos.x<-hw){z.pos.x=-hw; z.vel.x=Math.abs(z.vel.x)*BOUNCE;}
+    } else {
+      // Safety net
+      const safeY=FINISH_Y-8;
+      if(z.pos.y<safeY){z.pos.y=safeY+BALL_R;z.vel.y=Math.abs(z.vel.y)*0.2;z.vel.x*=0.5;z.vel.z*=0.5;z.onGround=true;}
+    }
+  }
+
+  // Boost pads
+  for(const bp of boostPads){
+    if(z.pos.z>=bp.z1&&z.pos.z<=bp.z2&&z.pos.x>=bp.x1&&z.pos.x<=bp.x2&&z.onGround&&z.vel.z>-4){
+      z.vel.z=-4.5-Math.random()*2;
+      showKO('⚡ '+z.name+' BOOST!',0x00ff88);
+    }
+  }
+
+  // Bumpers
+  for(const b of bumperObjs){
+    const dx=z.pos.x-b.x, dz=z.pos.z-b.z;
+    const dist=Math.sqrt(dx*dx+dz*dz);
+    if(dist<b.r+BALL_R&&Math.abs(z.pos.y-b.y)<1.1){
+      const nx=dist>0.01?dx/dist:1, nz=dist>0.01?dz/dist:0;
+      const dot=z.vel.x*nx+z.vel.z*nz;
+      if(dot<0){z.vel.x-=dot*nx*2.2;z.vel.z-=dot*nz*2.2;}
+      z.vel.x+=nx*5.5;z.vel.z+=nz*5.5;z.vel.y=Math.max(z.vel.y,2.2);
+      const ov=(b.r+BALL_R-dist)+0.02;
+      z.pos.x+=nx*ov;z.pos.z+=nz*ov;
+      showKO('🔵 '+z.name+' bounced!',0x0088ff);
+    }
+  }
+
+  // Finish
+  if(!z.finished&&z.pos.z<=FINISH_Z+0.5&&z.pos.z>=FINISH_Z-3){
+    z.finished=true;z.finishTime=performance.now();
+    const rank=zorbs.filter(r=>r.finished).length;z.rank=rank;
+    if(rank===1){showBanner('🏆 '+z.name+' WINS!',4500);setTimeout(resetRace,5500);}
+    showKO('🏁 '+z.name+' finishes #'+rank+'!',0xffff00);
+  }
+
+  z.mesh.position.copy(z.pos);
+  z.mesh.rotation.x-=z.vel.z/BALL_R*dt;
+  z.mesh.rotation.z+=z.vel.x/BALL_R*dt;
+  z.knockFlash=Math.max(0,z.knockFlash-dt);
+  z.mesh.material.emissiveIntensity=z.knockFlash>0?1.6+Math.sin(performance.now()*0.04)*0.4:(z.isSub?0.38:0.18);
+}
+
+function ballCollide(){
+  for(let i=0;i<zorbs.length;i++){
+    for(let j=i+1;j<zorbs.length;j++){
+      const a=zorbs[i],b=zorbs[j];
+      if(a.finished||b.finished) continue;
+      const d=new THREE.Vector3().subVectors(a.pos,b.pos);
+      const dist=d.length(),minD=BALL_R*2+0.02;
+      if(dist<minD&&dist>0.001){
+        d.normalize();
+        const rv=new THREE.Vector3().subVectors(a.vel,b.vel);
+        const dot=rv.dot(d);
+        if(dot<0){const imp=d.clone().multiplyScalar(dot*(1+BOUNCE)*0.5);a.vel.sub(imp);b.vel.add(imp);}
+        const ov=(minD-dist)*0.5+0.01;
+        a.pos.addScaledVector(d,ov);b.pos.addScaledVector(d,-ov);
+      }
+    }
+  }
+}
+
+function updateObstacles(dt){
+  hammers.forEach(h=>{
+    h.phase+=h.speed*dt;
+    h.grp.rotation.z=Math.sin(h.phase)*1.15;
+    const swing=Math.sin(h.phase)*1.15;
+    const tipX=Math.sin(swing)*2.2, tipY=h.pivY-Math.cos(swing)*2.2;
+    zorbs.forEach(z=>{
+      if(z.finished) return;
+      const dx=z.pos.x-tipX,dy=z.pos.y-tipY,dz=z.pos.z-h.hz;
+      if(Math.sqrt(dx*dx+dy*dy+dz*dz)<BALL_R+0.92){
+        z.vel.x+=(dx>0?1:-1)*13; z.vel.y+=Math.abs(dy)*8+4; z.vel.z+=(Math.random()-.5)*4;
+        z.knockFlash=0.35;
+        showKO('💥 '+z.name+' SMASHED!',0xff4400);
+      }
+    });
+  });
+  blades.forEach(b=>{
+    b.phase+=b.speed*dt; b.grp.rotation.y=b.phase;
+    zorbs.forEach(z=>{
+      if(z.finished) return;
+      const dx=z.pos.x-b.cx,dz=z.pos.z-b.cz;
+      const dist=Math.sqrt(dx*dx+dz*dz);
+      if(dist<b.r+BALL_R&&Math.abs(z.pos.y-b.y)<0.75){
+        z.vel.x+=-Math.sin(b.phase)*10; z.vel.z+=Math.cos(b.phase)*10; z.vel.y+=4.5;
+        showKO('🌀 '+z.name+' SLICED!',0xaa00ff);
+      }
+    });
+  });
+}
+
+function updateVisuals(z,frame){
+  if(z.finished) return;
+  const spd=z.vel.length(), ns=Math.min(spd/22,1);
+  // Trail
+  z.trailHistory.push(z.pos.clone());
+  if(z.trailHistory.length>36) z.trailHistory.shift();
+  if(z.trailHistory.length>1){
+    const arr=new Float32Array(z.trailHistory.length*3);
+    z.trailHistory.forEach((p,i)=>{arr[i*3]=p.x;arr[i*3+1]=p.y;arr[i*3+2]=p.z;});
+    z.trailLine.geometry.setAttribute('position',new THREE.Float32BufferAttribute(arr,3));
+    z.trailLine.material.opacity=0.15+ns*0.5;
+  }
+  // Streaks
+  z.streaks.forEach((s,i)=>{
+    const a=(i/z.streaks.length)*Math.PI*2;
+    const ox=Math.cos(a)*BALL_R*1.3, oy=Math.sin(a)*BALL_R*1.3;
+    const len=ns*2.6, vn=z.vel.clone().normalize();
+    const pa=s.geometry.attributes.position.array;
+    pa[0]=z.pos.x+ox;pa[1]=z.pos.y+oy;pa[2]=z.pos.z;
+    pa[3]=z.pos.x+ox-vn.x*len;pa[4]=z.pos.y+oy-vn.y*len;pa[5]=z.pos.z-vn.z*len;
+    s.geometry.attributes.position.needsUpdate=true;
+    s.material.opacity=ns*0.5;
+  });
+  z.orbRing.rotation.y+=0.06*(1+spd*0.04);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  CAMERA
+// ═══════════════════════════════════════════════════════════════
+let camMode='follow',camPos=new THREE.Vector3(0,8,12),camLook=new THREE.Vector3(0,0,0);
+let autoTimer=0,autoIdx=0;
+const autoModes=['follow','wide','top'];
+
+function setCam(m){
+  camMode=m;
+  document.querySelectorAll('.cb').forEach(b=>b.classList.remove('active'));
+  const el=document.getElementById('btn-'+m);
+  if(el)el.classList.add('active');
+}
+
+function updateCamera(dt){
+  const sm=Math.min(dt*5,0.15);
+  const leader=zorbs.filter(z=>!z.finished).sort((a,b)=>a.pos.z-b.pos.z)[0]||zorbs[0];
+  if(!leader)return;
+  const lp=leader.pos;
+  let mode=camMode;
+  if(mode==='auto'){autoTimer+=dt;if(autoTimer>7){autoTimer=0;autoIdx=(autoIdx+1)%autoModes.length;}mode=autoModes[autoIdx];}
+  if(mode==='follow'){
+    const spd=leader.vel.length();
+    const vn=leader.vel.clone().normalize();
+    if(vn.length()<0.01)vn.set(0,0,-1);
+    const behind=lp.clone().sub(vn.clone().multiplyScalar(3.5+spd*0.1)).add(new THREE.Vector3(0,2.8+spd*0.06,0));
+    camPos.lerp(behind,sm*2); camLook.lerp(lp.clone().add(leader.vel.clone().multiplyScalar(0.4)),sm*3);
+  } else if(mode==='wide'){
+    const avg=new THREE.Vector3(); zorbs.forEach(z=>avg.add(z.pos)); if(zorbs.length>0)avg.divideScalar(zorbs.length);
+    camPos.lerp(new THREE.Vector3(avg.x+10,avg.y+28,avg.z+28),sm*0.45);
+    camLook.lerp(avg,sm);
+  } else if(mode==='top'){
+    camPos.lerp(new THREE.Vector3(lp.x,lp.y+26,lp.z+4),sm);
+    camLook.lerp(lp,sm*2);
+  }
+  camera.position.copy(camPos); camera.lookAt(camLook);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  TIMER SYSTEM
+// ═══════════════════════════════════════════════════════════════
+let raceDurationSecs=null;  // null = no limit
+let raceStartTime=null;
+let raceTimeLeft=null;
+
+function updateTimer(){
+  if(phase!=='racing'||raceDurationSecs===null||raceStartTime===null) return;
+  const elapsed=(performance.now()-raceStartTime)/1000;
+  raceTimeLeft=Math.max(0,raceDurationSecs-elapsed);
+  const mins=Math.floor(raceTimeLeft/60);
+  const secs=Math.floor(raceTimeLeft%60);
+  const display=mins+':'+(secs<10?'0':'')+secs;
+  const el=document.getElementById('timer-display');
+  el.textContent=display;
+  if(raceTimeLeft<30) el.classList.add('urgent');
+  if(raceTimeLeft<=0){
+    // Time up — if anyone finished, great; otherwise end anyway
+    showBanner('⏱ TIME UP!',3000);
+    const sorted=[...zorbs].sort((a,b)=>a.pos.z-b.pos.z);
+    if(sorted.length>0&&!sorted[0].finished){
+      showKO('🏁 '+sorted[0].name+' leads at time!',0xffff00);
+    }
+    setTimeout(resetRace,3500);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  MINIMAP
+// ═══════════════════════════════════════════════════════════════
+const mmc=document.getElementById('mmc'),mmctx=mmc.getContext('2d');
+function drawMinimap(){
+  mmctx.clearRect(0,0,110,110);
+  mmctx.fillStyle='rgba(0,0,0,0.5)';mmctx.fillRect(0,0,110,110);
+  if(!zorbs.length)return;
+  const mapMinZ=FINISH_Z-5,mapMaxZ=START_POS.z+3;
+  const span=mapMaxZ-mapMinZ,scZ=90/span,scX=85/TW;
+  const ox=55,oz=10;
+  mmctx.strokeStyle='rgba(0,240,255,0.18)';mmctx.lineWidth=1.5;
+  mmctx.strokeRect(ox-TW/2*scX,oz,TW*scX,span*scZ);
+  const fz=oz+(FINISH_Z-mapMaxZ)*(-scZ);
+  mmctx.strokeStyle='rgba(255,255,0,0.65)';mmctx.lineWidth=2;
+  mmctx.beginPath();mmctx.moveTo(ox-TW/2*scX,fz);mmctx.lineTo(ox+TW/2*scX,fz);mmctx.stroke();
+  zorbs.forEach(z=>{
+    const mx=ox+z.pos.x*scX;
+    const mz=oz+(z.pos.z-mapMaxZ)*(-scZ);
+    const hex='#'+z.color.toString(16).padStart(6,'0');
+    mmctx.fillStyle=hex;mmctx.shadowColor=hex;mmctx.shadowBlur=5;
+    mmctx.beginPath();mmctx.arc(Math.max(15,Math.min(95,mx)),Math.max(5,Math.min(105,mz)),3.5,0,Math.PI*2);mmctx.fill();
+    mmctx.shadowBlur=0;
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  LEADERBOARD
+// ═══════════════════════════════════════════════════════════════
+function updateLB(){
+  const sorted=[...zorbs].sort((a,b)=>a.pos.z-b.pos.z);
+  const rows=document.getElementById('lbr');rows.innerHTML='';
+  sorted.slice(0,7).forEach((z,i)=>{
+    const d=document.createElement('div');d.className='lr';
+    const dist=Math.round(Math.abs(z.pos.z-START_POS.z));
+    d.innerHTML=`<span class="lp ${i===0?'g':''}">${i+1}</span><span class="ln ${z.isSub?'sub':''}">${z.name}</span><span class="ld">${z.finished?'FIN':dist+'m'}</span>`;
+    rows.appendChild(d);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  CHAT / UI HELPERS
+// ═══════════════════════════════════════════════════════════════
+const chatLog=document.getElementById('cl');
+function addChat(name,cmd,isSub){
+  const d=document.createElement('div');d.className='cm';
+  d.innerHTML=`<span class="u ${isSub?'s':'r'}">${name}</span> <span class="c">${cmd}</span>`;
+  chatLog.appendChild(d);
+  while(chatLog.children.length>9)chatLog.removeChild(chatLog.firstChild);
+}
+function showKO(msg,color){
+  const feed=document.getElementById('kfeed');
+  const el=document.createElement('div');el.className='kf';
+  el.style.color='#'+color.toString(16).padStart(6,'0');el.textContent=msg;
+  feed.appendChild(el);
+  setTimeout(()=>{if(el.parentNode)feed.removeChild(el);},2600);
+  while(feed.children.length>4)feed.removeChild(feed.firstChild);
+}
+function showBanner(txt,dur){
+  const el=document.getElementById('banner');el.textContent=txt;el.style.opacity='1';
+  setTimeout(()=>el.style.opacity='0',dur);
+}
+function hidePanel(){
+  document.getElementById('streamer-panel').style.display='none';
+  document.getElementById('btn-show-panel').style.display='block';
+}
+function showPanel(){
+  document.getElementById('streamer-panel').style.display='flex';
+  document.getElementById('btn-show-panel').style.display='none';
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  RACE STATE
+// ═══════════════════════════════════════════════════════════════
+let phase='lobby';
+
+function handleCmd(name,cmd,isSub){
+  addChat(name,cmd,isSub);
+  const raw=cmd.trim().toLowerCase();
+  if(raw==='!play'){
+    if(zorbs.find(z=>z.name===name)||phase!=='lobby')return;
+    const c=ZCOLORS[zorbs.length%ZCOLORS.length];
+    zorbs.push(createZorb(name,isSub,c));
+    document.getElementById('cnt').textContent=zorbs.length+' racers';
+  }
+  if(raw==='!boost'){
+    const z=zorbs.find(z=>z.name===name);
+    if(z&&phase==='racing')z.boost=isSub?2.8:1.4;
+  }
+}
+
+function streamerStartRace(){
+  if(phase!=='lobby')return;
+  const dStr=document.getElementById('duration-input').value;
+  raceDurationSecs=parseDuration(dStr);
+  // Build course based on duration
+  buildCourse(raceDurationSecs);
+  // Re-spawn any already-joined zorbs onto the new track
+  zorbs.forEach((z,i)=>{
+    z.pos.set((Math.random()-.5)*(TW-1.2), START_POS.y, START_POS.z+(Math.random()-.5)*3);
+    z.vel.set(0,0,0);
+    z.trailHistory=[];
+  });
+  // Show timer pill
+  if(raceDurationSecs!==null){
+    document.getElementById('timer-pill').style.display='flex';
+    const el=document.getElementById('timer-display');el.textContent='--:--';el.classList.remove('urgent');
+  } else {
+    document.getElementById('timer-pill').style.display='none';
+  }
+  document.getElementById('btn-start-race').disabled=true;
+  phase='countdown';
+  document.getElementById('stxt').textContent='STARTING';
+  showBanner('3',900);
+  setTimeout(()=>showBanner('2',900),1000);
+  setTimeout(()=>showBanner('1',900),2000);
+  setTimeout(()=>{
+    showBanner('GO! 🚀',800);
+    phase='racing';
+    document.getElementById('stxt').textContent='RACING';
+    raceStartTime=performance.now();
+    zorbs.forEach(z=>{z.vel.z=-(1.2+Math.random()*0.5);});
+  },3000);
+}
+
+function resetRace(){
+  zorbs.forEach(z=>removeZorb(z));zorbs.length=0;
+  phase='lobby';raceStartTime=null;raceTimeLeft=null;raceDurationSecs=null;
+  document.getElementById('cnt').textContent='0 racers';
+  document.getElementById('stxt').textContent='LOBBY';
+  document.getElementById('timer-pill').style.display='none';
+  document.getElementById('btn-start-race').disabled=false;
+  document.getElementById('duration-input').value='';
+  showBanner('NEW RACE — TYPE !play',2500);
+  setTimeout(startMock,2200);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  MOCK CHAT (demo mode)
+// ═══════════════════════════════════════════════════════════════
+const MOCK=[
+  {name:'StreamKing',sub:true},{name:'NeonRacer',sub:false},
+  {name:'CyberZorb',sub:true},{name:'VoidRunner',sub:false},
+  {name:'NightFox',sub:false},{name:'GlitchQueen',sub:true},
+  {name:'DataSurge',sub:false},{name:'PixelBolt',sub:true},
+];
+let mockI=0;
+function startMock(){mockI=0;setTimeout(nextMock,1200);}
+function nextMock(){
+  if(mockI>=MOCK.length)return;
+  const u=MOCK[mockI++];handleCmd(u.name,'!play',u.sub);
+  if(mockI<MOCK.length)setTimeout(nextMock,650+Math.random()*900);
+  else setTimeout(()=>{
+    // Auto start with 2 min timer for demo
+    document.getElementById('duration-input').value='2m';
+    streamerStartRace();
+  },2000);
+}
+setInterval(()=>{
+  if(phase==='racing'&&zorbs.length>0){
+    const z=zorbs[Math.floor(Math.random()*zorbs.length)];
+    handleCmd(z.name,'!boost',z.isSub);
+  }
+},3800);
+
+// Keyboard
+document.addEventListener('keydown',e=>{
+  const ms=['follow','wide','top','auto'];
+  if(e.key==='ArrowLeft'){const i=ms.indexOf(camMode);setCam(ms[(i-1+4)%4]);}
+  if(e.key==='ArrowRight'){const i=ms.indexOf(camMode);setCam(ms[(i+1)%4]);}
+  if(e.key===' '){if(zorbs.length>0)zorbs[0].boost=1.8;e.preventDefault();}
+  if(e.key==='f'||e.key==='F')setCam('follow');
+});
+document.getElementById('cg').onclick=()=>{
+  const v=document.getElementById('ci').value.trim();if(!v)return;
+  handleCmd('You',v,false);document.getElementById('ci').value='';
+};
+document.getElementById('ci').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('cg').click();});
+
+// ═══════════════════════════════════════════════════════════════
+//  MAIN LOOP
+// ═══════════════════════════════════════════════════════════════
+
+// Build default course on load
+buildCourse(null);
+startMock();
+
+let lastT=0,frame=0;
+function loop(ts){
+  requestAnimationFrame(loop);
+  const dt=Math.min((ts-lastT)/1000,0.05);lastT=ts;frame++;
+
+  if(phase==='racing'){
+    updateTimer();
+    const SUB=3;
+    for(let s=0;s<SUB;s++){zorbs.forEach(z=>stepPhysics(z,dt/SUB));ballCollide();}
+    updateObstacles(dt);
+  }
+
+  zorbs.forEach(z=>updateVisuals(z,frame));
+  updateCamera(dt);
+
+  pulseCyan.intensity=1.2+Math.sin(frame*0.033)*0.38;
+  pulseCyan.position.set(Math.sin(frame*0.011)*30,8,FINISH_Z*0.5+Math.cos(frame*0.011)*20);
+
+  if(frame%18===0){updateLB();drawMinimap();}
+  renderer.render(scene,camera);
+}
+requestAnimationFrame(t=>{lastT=t;loop(t);});
+</script>
+</body>
+</html>
