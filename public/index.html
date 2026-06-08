@@ -235,14 +235,18 @@ function _buildTube(splinePts, eL, eR){
 
   for(let i=0;i<splinePts.length;i++){
     const p = splinePts[i];
-    // Tangent: direction to next point (or from prev)
+    // Tangent using central difference for stability (no flipping)
     let tx, tz;
-    if(i < splinePts.length-1){
-      tx = splinePts[i+1].x - p.x;
-      tz = splinePts[i+1].z - p.z;
-    } else {
+    if(i === 0){
+      tx = splinePts[1].x - p.x;
+      tz = splinePts[1].z - p.z;
+    } else if(i === splinePts.length-1){
       tx = p.x - splinePts[i-1].x;
       tz = p.z - splinePts[i-1].z;
+    } else {
+      // Central difference = most stable
+      tx = splinePts[i+1].x - splinePts[i-1].x;
+      tz = splinePts[i+1].z - splinePts[i-1].z;
     }
     const tl = Math.sqrt(tx*tx+tz*tz)||1;
     // Right vector = perpendicular to tangent in XZ
@@ -331,7 +335,7 @@ function segRamp(cur, length, dropY, eL=0x00f0ff, eR=0xff00cc){
 
 function segCurve(cur, angleDelta, radius, eL=0x00f0ff, eR=0xff00cc){
   const absA = Math.abs(angleDelta), arcLen = radius*absA;
-  const steps = Math.max(6, Math.ceil(arcLen/4));
+  const steps = Math.max(20, Math.ceil(arcLen/1.5)); // dense points = stable right vector
   const ts = Math.sign(angleDelta);
   const right = perpRight(cur.dir);
   const centre = cur.pos.clone().addScaledVector(right, ts*radius);
