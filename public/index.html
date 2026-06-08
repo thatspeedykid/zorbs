@@ -63,7 +63,7 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;}
 <canvas id="speedline" style="position:absolute;top:0;left:0;pointer-events:none;"></canvas>
 <div id="ui">
   <div id="topbar">
-    <div id="logo">ZORBS <span>on</span> Stream</div>
+    <div id="logo">ZORBS <span>on</span> Stream <a href="/dashboard.html" style="font-size:8px;letter-spacing:1px;color:rgba(255,255,255,0.25);text-decoration:none;margin-left:10px;vertical-align:middle;">DASHBOARD ↗</a></div>
     <div id="cams">
       <button class="cb active" id="btn-follow" onclick="setCam('follow')">FOLLOW</button>
       <button class="cb" id="btn-wide" onclick="setCam('wide')">WIDE</button>
@@ -1410,8 +1410,55 @@ document.getElementById('cg').onclick=()=>{
 document.getElementById('ci').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('cg').click();});
 
 // ── MAIN LOOP ─────────────────────────────────────────
-buildCourse(null); // default lobby preview course
-startMock();
+// ── MODE DETECTION ────────────────────────────────────
+const _urlParams = new URLSearchParams(window.location.search);
+const _isStreamer = _urlParams.has('streamer');
+const _autoPlay   = !_isStreamer; // everyone else = auto play mode
+
+if(_isStreamer){
+  // Streamer mode - show controls panel
+  document.getElementById('sctl').style.display = 'block';
+  window.ZORBS_BOTS_ENABLED = false; // no bots when streamer is running
+} else {
+  // Auto-play mode - show join panel
+  document.getElementById('join-panel').style.display = 'block';
+  window.ZORBS_BOTS_ENABLED = false; // no bots in auto-play either
+  // Auto-start: start when 2+ players join, or after 30s with 1+ player
+  let _autoStartPending = false;
+  setInterval(()=>{
+    if(phase==='lobby' && zorbs.length >= 1 && !_autoStartPending){
+      const delay = zorbs.length >= 5 ? 5000 : zorbs.length >= 2 ? 10000 : 30000;
+      _autoStartPending = true;
+      setTimeout(()=>{ if(phase==='lobby' && zorbs.length>=1) streamerStart(); _autoStartPending=false; }, delay);
+    }
+  }, 3000);
+}
+
+buildCourse(null);
+if(window.ZORBS_BOTS_ENABLED) startMock();
+
+function joinWithKick(){
+  // In prod: redirect to Kick OAuth
+  const name = prompt('Your Kick username:');
+  if(name && name.trim()){
+    document.getElementById('join-panel').style.display='none';
+    handleCmd(name.trim(), '!play', false);
+    showBanner('Welcome, '+name+'!', 1500);
+  }
+}
+
+function joinWithNick(){
+  const name = document.getElementById('join-name').value.trim();
+  if(!name){ document.getElementById('join-name').style.borderColor='#ff4060'; return; }
+  document.getElementById('join-panel').style.display='none';
+  handleCmd(name, '!play', false);
+  showBanner('Welcome, '+name+'!', 1500);
+}
+
+// Enter key on nickname input
+document.getElementById('join-name').addEventListener('keydown', e=>{
+  if(e.key==='Enter') joinWithNick();
+});
 
 function updateBlades(dt){
   blades.forEach(b=>{
