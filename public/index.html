@@ -235,22 +235,16 @@ function _buildTube(splinePts, eL, eR){
 
   for(let i=0;i<splinePts.length;i++){
     const p = splinePts[i];
-    // Tangent using central difference for stability (no flipping)
+    // Tangent - central difference for interior, forward/back for edges
     let tx, tz;
-    if(i === 0){
-      tx = splinePts[1].x - p.x;
-      tz = splinePts[1].z - p.z;
-    } else if(i === splinePts.length-1){
-      tx = p.x - splinePts[i-1].x;
-      tz = p.z - splinePts[i-1].z;
-    } else {
-      // Central difference = most stable
-      tx = splinePts[i+1].x - splinePts[i-1].x;
-      tz = splinePts[i+1].z - splinePts[i-1].z;
-    }
-    const tl = Math.sqrt(tx*tx+tz*tz)||1;
-    // Right vector = perpendicular to tangent in XZ
-    const rx = -tz/tl, rz = tx/tl;
+    if(i === 0){ tx=splinePts[1].x-p.x; tz=splinePts[1].z-p.z; }
+    else if(i===splinePts.length-1){ tx=p.x-splinePts[i-1].x; tz=p.z-splinePts[i-1].z; }
+    else { tx=splinePts[i+1].x-splinePts[i-1].x; tz=splinePts[i+1].z-splinePts[i-1].z; }
+    const tl=Math.sqrt(tx*tx+tz*tz)||1;
+    const tnx=tx/tl, tnz=tz/tl;
+    // Right = cross(tangent, worldUp) = tangent x (0,1,0)
+    // cross((tx,0,tz),(0,1,0)) = (0*0-tz*1, tz*0-tx*0, tx*1-0*0) = (-tz, 0, tx)
+    const rx=-tnz, rz=tnx;
     const y = p.y;
 
     // Floor: left edge and right edge at floor level
@@ -335,7 +329,7 @@ function segRamp(cur, length, dropY, eL=0x00f0ff, eR=0xff00cc){
 
 function segCurve(cur, angleDelta, radius, eL=0x00f0ff, eR=0xff00cc){
   const absA = Math.abs(angleDelta), arcLen = radius*absA;
-  const steps = Math.max(20, Math.ceil(arcLen/1.5)); // dense points = stable right vector
+  const steps = Math.max(24, Math.ceil(arcLen/1.2));
   const ts = Math.sign(angleDelta);
   const right = perpRight(cur.dir);
   const centre = cur.pos.clone().addScaledVector(right, ts*radius);
@@ -509,10 +503,9 @@ function buildCourse(durSecs){
 
   // Segment type pool — weighted toward variety
   const segPool = [
-    'straight','straight','ramp','straight','straight','ramp','straight',
-    'straight','ramp','straight','bumper_gauntlet','hammer_zone'
+    'straight','straight','ramp','corkscrew','straight','ramp',
+    'straight','corkscrew','straight','bumper_gauntlet','hammer_zone'
   ];
-  // Curves removed until geometry is fixed - straights + ramps only
   // Shuffle pool
   function shuffle(a){for(let i=a.length-1;i>0;i--){const j=rnd(0,i);[a[i],a[j]]=[a[j],a[i]];} return a;}
   let pool = shuffle([...segPool]);
