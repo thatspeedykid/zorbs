@@ -221,43 +221,53 @@ function perpRight(dir){ return new THREE.Vector3(dir.z,0,-dir.x); }
 const _floorMat = new THREE.MeshStandardMaterial({color:0x111128,roughness:0.2,metalness:0.8,emissive:0x000d22,emissiveIntensity:0.3,side:THREE.DoubleSide});
 const _wallMat  = new THREE.MeshStandardMaterial({color:0x0a1020,roughness:0.3,metalness:0.7,side:THREE.DoubleSide});
 
-// Build track using Three.js proper geometry
-// pts = [{pos, dir, y}] centerline points
-// Creates: flat floor box + two wall boxes per segment using BoxGeometry
-// Simple, reliable, no custom vertex math
+// Build track ribbon from centerline points
+// Each segment = floor box + 2 wall boxes, all properly rotated
 function _buildRibbon(pts, eL, eR){
   if(pts.length<2) return;
-  // Build one straight segment between each consecutive pair of points
   for(let i=0;i<pts.length-1;i++){
     const a=pts[i], b=pts[i+1];
-    const dx=b.pos.x-a.pos.x, dy=b.pos.y-a.pos.y, dz=b.pos.z-a.pos.z;
-    const segLen=Math.sqrt(dx*dx+dy*dy+dz*dz);
+    const dx=b.pos.x-a.pos.x, dz=b.pos.z-a.pos.z;
+    const segLen=Math.sqrt(dx*dx+dz*dz+(b.pos.y-a.pos.y)**2);
     if(segLen<0.01) continue;
-    const mx=(a.pos.x+b.pos.x)/2, my=(a.pos.y+b.pos.y)/2, mz=(a.pos.z+b.pos.z)/2;
-    // Rotation to face segment direction (XZ only for yaw)
-    const ry=Math.atan2(dx,-dz);
-    // Pitch for ramps
-    const pitch=Math.atan2(-dy,Math.sqrt(dx*dx+dz*dz));
 
-    // Floor
-    const fm=new THREE.Mesh(new THREE.BoxGeometry(TW,0.4,segLen+0.05),_floorMat);
+    const mx=(a.pos.x+b.pos.x)/2;
+    const my=(a.pos.y+b.pos.y)/2;
+    const mz=(a.pos.z+b.pos.z)/2;
+
+    // Yaw = rotation around Y to face forward direction
+    const ry=Math.atan2(dx,-dz);
+    // Pitch = tilt for ramps
+    const hDist=Math.sqrt(dx*dx+dz*dz);
+    const pitch=Math.atan2(b.pos.y-a.pos.y, hDist);
+
+    // RIGHT vector = perpendicular to forward in XZ plane
+    // forward=(dx,dz), right=(-dz, dx) normalized... but as world offsets:
+    // right.x = cos(ry+PI/2) = -sin(ry), right.z = sin(ry+PI/2) = cos(ry)  -- WRONG in prev code
+    // Correct: atan2(dx,-dz)=ry means forward=(sin(ry), -cos(ry)) in XZ
+    // So right = (cos(ry), sin(ry)) in XZ (perpendicular CCW)
+    const rx = Math.cos(ry);  // right X
+    const rz = Math.sin(ry);  // right Z
+
+    // Floor plank
+    const fm=new THREE.Mesh(new THREE.BoxGeometry(TW,0.4,segLen+0.08),_floorMat);
     fm.position.set(mx,my-0.2,mz);
     fm.rotation.order='YXZ'; fm.rotation.y=ry; fm.rotation.x=pitch;
     fm.castShadow=fm.receiveShadow=true; addMesh(fm);
 
-    // Walls - use avg Y so they sit at track level
-    const avgY=(a.y+b.y)/2;
-    const cosRy=Math.cos(ry), sinRy=Math.sin(ry);
+    // Walls - offset sideways using correct right vector
     for(const side of [-1,1]){
-      const wx=mx+cosRy*side*(TW_HALF+0.15);
-      const wz=mz+sinRy*side*(TW_HALF+0.15);
-      const wm=new THREE.Mesh(new THREE.BoxGeometry(0.3,1.5,segLen+0.05),_wallMat);
-      wm.position.set(wx,avgY+0.55,wz); wm.rotation.y=ry;
+      const wx=mx+rx*side*(TW_HALF+0.15);
+      const wz=mz+rz*side*(TW_HALF+0.15);
+      const wm=new THREE.Mesh(new THREE.BoxGeometry(0.3,1.5,segLen+0.08),_wallMat);
+      wm.position.set(wx,my+0.55,wz);
+      wm.rotation.order='YXZ'; wm.rotation.y=ry; wm.rotation.x=pitch;
       wm.castShadow=wm.receiveShadow=true; addMesh(wm);
-      // Glow cap on wall top
-      const gm=new THREE.Mesh(new THREE.BoxGeometry(0.15,0.15,segLen+0.05),
+      const gm=new THREE.Mesh(new THREE.BoxGeometry(0.15,0.15,segLen+0.08),
         new THREE.MeshBasicMaterial({color:side<0?eL:eR}));
-      gm.position.set(wx,avgY+1.35,wz); gm.rotation.y=ry; addMesh(gm);
+      gm.position.set(wx,my+1.35,wz);
+      gm.rotation.order='YXZ'; gm.rotation.y=ry; gm.rotation.x=pitch;
+      addMesh(gm);
     }
   }
 }
