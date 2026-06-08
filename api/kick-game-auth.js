@@ -1,0 +1,35 @@
+const KICK_CLIENT_ID = '01KTMSSQ3PNEAA8EYYX1T6T4CK';
+const KICK_SECRET = 'c4daf86f9492d0ac466af921c8846e5ed00b6bea0dc4fcda78607db5c0f93ad8';
+const REDIRECT_URI = 'https://playzorbs.xyz/auth/kick/game-callback';
+
+export default async function handler(req, res) {
+  const { code } = req.query;
+  if (!code) return res.status(400).json({ error: 'No code' });
+
+  try {
+    const tokenRes = await fetch('https://id.kick.com/oauth/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        client_id: KICK_CLIENT_ID,
+        client_secret: KICK_SECRET,
+        redirect_uri: REDIRECT_URI,
+        code,
+      }),
+    });
+    const token = await tokenRes.json();
+    if (!token.access_token) return res.json({ error: 'Token failed: ' + JSON.stringify(token) });
+
+    const userRes = await fetch('https://api.kick.com/public/v1/users', {
+      headers: { 'Authorization': `Bearer ${token.access_token}`, 'Client-Id': KICK_CLIENT_ID },
+    });
+    const userData = await userRes.json();
+    const user = userData.data?.[0] || userData;
+    const username = user.username || user.name || 'KickUser';
+
+    res.json({ username, isSub: false, kickId: user.user_id || '' });
+  } catch (e) {
+    res.json({ error: e.message });
+  }
+}

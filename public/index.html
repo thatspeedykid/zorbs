@@ -79,7 +79,7 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;}
     <div class="pill" id="tpill" style="display:none"><span id="timer-display">--:--</span></div>
   </div>
   <!-- JOIN PANEL -->
-  <div id="join-panel" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(5,5,20,0.97);border:1px solid rgba(0,240,255,0.2);border-radius:16px;padding:28px 32px;width:300px;display:none;z-index:200;font-family:'Courier New',monospace;text-align:center;">
+  <div id="join-panel" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(5,5,20,0.97);border:1px solid rgba(0,240,255,0.2);border-radius:16px;padding:28px 32px;width:300px;display:none;z-index:200;font-family:'Courier New',monospace;text-align:center;pointer-events:auto;">
     <div style="font-size:16px;font-weight:900;letter-spacing:4px;color:#00f0ff;text-shadow:0 0 14px #00f0ff;margin-bottom:4px;">ZORBS</div>
     <div style="font-size:9px;color:rgba(255,255,255,0.3);letter-spacing:2px;margin-bottom:20px;">UP TO 1000 PLAYERS</div>
     <button onclick="joinWithKick()" style="width:100%;padding:10px;background:#0d1f0d;border:2px solid #53fc18;color:#53fc18;border-radius:8px;font-size:10px;letter-spacing:2px;cursor:pointer;font-family:inherit;margin-bottom:10px;">
@@ -1450,10 +1450,30 @@ if(_isStreamer){
 buildCourse(null);
 if(window.ZORBS_BOTS_ENABLED) startMock();
 
+// Handle Kick OAuth return
+const _kickJoin = new URLSearchParams(window.location.search).get('kick_join');
+if(_kickJoin){
+  const _kickName = decodeURIComponent(_kickJoin);
+  window.history.replaceState({}, '', '/');
+  // Auto-join after short delay so scene is ready
+  setTimeout(()=>{
+    document.getElementById('join-panel').style.display='none';
+    _doJoin(_kickName, true);
+  }, 500);
+}
+
 function joinWithKick(){
-  // Kick OAuth - for now prompt username, later real OAuth redirect
-  const name = document.getElementById('join-name').value.trim() || prompt('Your Kick username:');
-  if(name && name.trim()) _doJoin(name.trim(), true);
+  // Real Kick OAuth - redirect to Kick login, comes back with username
+  const state = 'game_' + Math.random().toString(36).slice(2);
+  sessionStorage.setItem('kick_state', state);
+  const params = new URLSearchParams({
+    client_id: '01KTMSSQ3PNEAA8EYYX1T6T4CK',
+    redirect_uri: 'https://playzorbs.xyz/auth/kick/game-callback',
+    response_type: 'code',
+    scope: 'user:read',
+    state,
+  });
+  window.location.href = 'https://id.kick.com/oauth/authorize?' + params;
 }
 
 function joinWithNick(){

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head><title>Joining race...</title>
+<style>body{background:#05050f;color:#00f0ff;font-family:'Courier New',monospace;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-size:14px;letter-spacing:2px;flex-direction:column;gap:16px;}</style>
+</head>
+<body>
+<div>VERIFYING KICK ACCOUNT...</div>
+<div id="status" style="font-size:10px;color:rgba(255,255,255,0.3);">Please wait</div>
+<script>
+const params = new URLSearchParams(window.location.search);
+const code = params.get('code');
+if(!code){
+  document.getElementById('status').textContent = 'Error: no code received';
+} else {
+  // Call our API to exchange code for username
+  fetch('/api/kick-game-auth?code=' + encodeURIComponent(code))
+    .then(r => r.json())
+    .then(data => {
+      if(data.username){
+        // Store and return to game
+        sessionStorage.setItem('kick_game_user', JSON.stringify(data));
+        window.location.href = '/?kick_join=' + encodeURIComponent(data.username) + '&sub=' + (data.isSub?'1':'0');
+      } else {
+        document.getElementById('status').textContent = 'Error: ' + (data.error || 'unknown');
+      }
+    })
+    .catch(e => {
+      document.getElementById('status').textContent = 'Error connecting. Redirecting...';
+      setTimeout(() => window.location.href = '/', 2000);
+    });
+}
+</script>
+</body>
+</html>
