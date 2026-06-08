@@ -192,21 +192,20 @@ function addPathSegment(from, to, floorY, halfW=TW_HALF){
   }
 }
 
-// Find nearest path node - indexed search with forward bias
-const _nodeIdx = new Map();
+// Find nearest path node - windowed search with cached hint index
 function nearestNode(worldPos, hintIdx){
   const N=pathNodes.length;
-  if(!N) return {node:null,dist:Infinity};
-  // Start from hint, search backward 15 and forward 60 (bias forward)
-  const start=Math.max(0,(hintIdx||0)-15);
-  const end=Math.min(N-1,(hintIdx||0)+60);
-  let best=start, bestD=Infinity;
-  for(let i=start;i<=end;i++){
+  if(!N) return {node:null,dist:Infinity,idx:0};
+  const h=hintIdx||0;
+  // Search window: back 20, forward 80 (forward biased - balls move forward)
+  const lo=Math.max(0,h-20), hi=Math.min(N-1,h+80);
+  let best=lo, bestD=Infinity;
+  for(let i=lo;i<=hi;i++){
     const d=pathNodes[i].pos.distanceTo(worldPos);
     if(d<bestD){bestD=d;best=i;}
   }
-  // If near boundary do a wider check
-  if(bestD>8){
+  // If result seems wrong do full scan
+  if(bestD>10){
     for(let i=0;i<N;i++){
       const d=pathNodes[i].pos.distanceTo(worldPos);
       if(d<bestD){bestD=d;best=i;}
@@ -263,17 +262,16 @@ function buildCurve(cx,cy,cz,radius,startAngle,endAngle,eL=0x00f0ff,eR=0xff00cc)
       new THREE.MeshStandardMaterial({color:0x111128,roughness:0.22,metalness:0.78,emissive:0x001122,emissiveIntensity:0.18}));
     fm.position.set(px,cy-0.2,pz); fm.rotation.y=-am;
     fm.castShadow=fm.receiveShadow=true; addMesh(fm);
-    // Walls - right vector perpendicular to forward (cos(am),0,-sin(am)) is (sin(am),0,cos(am))
+    // Walls
     for(const side of [-1,1]){
-      const wx=px+Math.sin(am)*side*(TW_HALF+0.15);
-      const wz=pz+Math.cos(am)*side*(TW_HALF+0.15);
       const wm=new THREE.Mesh(new THREE.BoxGeometry(0.28,1.4,segLen+0.1),
         new THREE.MeshStandardMaterial({color:0x0a1020,roughness:0.22,metalness:0.78}));
-      wm.position.set(wx,cy+0.55,wz); wm.rotation.y=-am;
-      wm.castShadow=wm.receiveShadow=true; addMesh(wm);
+      wm.position.set(px+Math.sin(am)*side*(TW_HALF+0.15), cy+0.55, pz+Math.cos(am)*side*(TW_HALF+0.15));
+      wm.rotation.y=-am; wm.castShadow=wm.receiveShadow=true; addMesh(wm);
       const gm=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.1,segLen+0.1),
         new THREE.MeshBasicMaterial({color:side>0?eL:eR}));
-      gm.position.set(wx,cy+1.3,wz); gm.rotation.y=-am; addMesh(gm);
+      gm.position.set(px+Math.sin(am)*side*(TW_HALF+0.15), cy+1.3, pz+Math.cos(am)*side*(TW_HALF+0.15));
+      gm.rotation.y=-am; addMesh(gm);
     }
     // Path node
     const dir=new THREE.Vector3(Math.cos(am),0,-Math.sin(am)).normalize();
@@ -376,45 +374,44 @@ function parseDur(str){
 }
 
 function buildBankedCurve(x1,y1,z1, x2,y2,z2, eL, eR){
-  const steps=10;
-  let prevX=x1,prevY=y1,prevZ=z1;
+  // Banked curve: smoothly transitions from (x1,y1,z1) to (x2,y2,z2)
+  // Intermediate nodes lean into the turn
+  const steps = 6;
+  let prevX=x1, prevY=y1, prevZ=z1;
   for(let i=1;i<=steps;i++){
     const t=i/steps;
+    // Ease in-out
     const et=t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
-    const nx=x1+(x2-x1)*et, ny=y1+(y2-y1)*et, nz=z1+(z2-z1)*et;
+    const nx=x1+(x2-x1)*et;
+    const ny=y1+(y2-y1)*et;
+    const nz=z1+(z2-z1)*et;
+    // Build a short straight segment for each step
     const from=new THREE.Vector3(prevX,prevY,prevZ);
     const to=new THREE.Vector3(nx,ny,nz);
+    // Add path nodes along this mini-segment
     const dir=new THREE.Vector3().subVectors(to,from).normalize();
     const segLen=from.distanceTo(to);
-    if(segLen<0.01){prevX=nx;prevY=ny;prevZ=nz;continue;}
-    // Dense path nodes
-    const segSteps=Math.max(3,Math.ceil(segLen/1.5));
+    const segSteps=Math.max(2,Math.ceil(segLen/2));
     for(let j=0;j<=segSteps;j++){
       const sp=from.clone().lerp(to,j/segSteps);
-      pathNodes.push({pos:sp.clone(),dir:dir.clone(),floorY:sp.y,halfW:TW_HALF});
+      pathNodes.push({pos:sp, dir:dir.clone(), floorY:sp.y, halfW:TW_HALF});
     }
-    // Rotation to match segment direction
-    const ry=Math.atan2(dir.x,-dir.z);
-    const mx=(prevX+nx)/2,my=(prevY+ny)/2,mz=(prevZ+nz)/2;
-    const len=segLen+0.35; // overlap to close gaps
-    // Floor plank - rotated
-    const fm=new THREE.Mesh(new THREE.BoxGeometry(TW,0.4,len),
+    // Plank rotated to face segment direction, walls offset in local right
+    const len=segLen+0.35, mx=(prevX+nx)/2, my=(prevY+ny)/2, mz=(prevZ+nz)/2;
+    const ry=Math.atan2(dir.x,-dir.z); // yaw angle of this segment
+    const rx2=Math.cos(ry), rz2=Math.sin(ry); // local right vector
+    const fm2=new THREE.Mesh(new THREE.BoxGeometry(TW,0.4,len),
       new THREE.MeshStandardMaterial({color:0x111128,roughness:0.22,metalness:0.78,emissive:0x001122,emissiveIntensity:0.18}));
-    fm.position.set(mx,my-0.2,mz); fm.rotation.y=ry;
-    fm.castShadow=fm.receiveShadow=true; addMesh(fm);
-    // Walls offset in local right direction (perpendicular to dir in XZ)
-    const rx=Math.cos(ry), rz=Math.sin(ry); // local right vector
+    fm2.position.set(mx,my-0.2,mz); fm2.rotation.y=ry; fm2.castShadow=fm2.receiveShadow=true; addMesh(fm2);
     for(const side of [-1,1]){
-      const wx=mx+rx*side*(TW_HALF+0.15), wz=mz+rz*side*(TW_HALF+0.15);
-      const wm=new THREE.Mesh(new THREE.BoxGeometry(0.28,1.4,len),
+      const wx=mx+rx2*side*(TW_HALF+0.15), wz=mz+rz2*side*(TW_HALF+0.15);
+      const wm2=new THREE.Mesh(new THREE.BoxGeometry(0.28,1.4,len),
         new THREE.MeshStandardMaterial({color:0x0a1020,roughness:0.22,metalness:0.78}));
-      wm.position.set(wx,my+0.55,wz); wm.rotation.y=ry;
-      wm.castShadow=wm.receiveShadow=true; addMesh(wm);
-      const gm=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.1,len),
-        new THREE.MeshBasicMaterial({color:side>0?eL:eR}));
-      gm.position.set(wx,my+1.3,wz); gm.rotation.y=ry; addMesh(gm);
+      wm2.position.set(wx,my+0.55,wz); wm2.rotation.y=ry; wm2.castShadow=wm2.receiveShadow=true; addMesh(wm2);
+      const gm2=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.1,len),new THREE.MeshBasicMaterial({color:side>0?eL:eR}));
+      gm2.position.set(wx,my+1.3,wz); gm2.rotation.y=ry; addMesh(gm2);
     }
-    prevX=nx;prevY=ny;prevZ=nz;
+    prevX=nx; prevY=ny; prevZ=nz;
   }
 }
 
@@ -550,9 +547,9 @@ function createZorb(name,isSub,col){
     knockFlash:0,
     ringBob:Math.random()*Math.PI*2,
     // Path following
-    pathT:0,
+    pathT:0,   // progress along path (index into pathNodes)
     offTrack:false,
-    _ni:0  // cached nearest node index
+    _ni:0
   };
 }
 
@@ -564,80 +561,95 @@ function removeZorb(z){
 function stepPhysics(z,dt){
   if(z.finished) return;
 
-  // Gravity always - needed for ramps and drops
-  z.vel.y+=GRAV*dt;
+  // ── Gravity
+  z.vel.y+=GRAV*dt; // always - needed for ramps
 
-  // Boost along path direction
+  // ── Boost
   if(z.boost>0){
+    // Boost in the direction of nearest path node's forward direction
     const {node:bn,idx:bi}=nearestNode(z.pos,z._ni);
-    if(bn){ z.vel.x+=bn.dir.x*22*dt; z.vel.z+=bn.dir.z*22*dt; }
+    if(bn){z.vel.x+=bn.dir.x*22*dt;z.vel.z+=bn.dir.z*22*dt;}
     z.boost=Math.max(0,z.boost-dt*1.8);
   }
 
-  // Speed cap
+  // ── Clamp speed
   const hSpd=Math.sqrt(z.vel.x*z.vel.x+z.vel.z*z.vel.z);
-  if(hSpd>30){const s=30/hSpd;z.vel.x*=s;z.vel.z*=s;}
-  if(Math.abs(z.vel.y)>28) z.vel.y=Math.sign(z.vel.y)*28;
+  if(hSpd>28){ const s=28/hSpd; z.vel.x*=s; z.vel.z*=s; }
+  if(Math.abs(z.vel.y)>25) z.vel.y=Math.sign(z.vel.y)*25;
 
-  // Integrate
+  // ── Integrate position
   z.pos.x+=z.vel.x*dt;
   z.pos.y+=z.vel.y*dt;
   z.pos.z+=z.vel.z*dt;
 
-  // Find nearest node with cached index
-  const {node,dist,idx}=nearestNode(z.pos,z._ni);
-  if(idx!==undefined) z._ni=idx;
+  // ── Find nearest path node
+  const {node,dist,idx:ni}=nearestNode(z.pos,z._ni);
+  if(ni!==undefined)z._ni=ni;
 
   // ── Funnel physics (overrides path)
   if(node){
     const floorY=node.floorY+BALL_R;
     const hw=node.halfW-BALL_R-0.05;
 
-    // Floor collision - snap to surface
+    // ── Floor collision
     if(z.pos.y<=floorY){
       z.pos.y=floorY;
-      if(z.vel.y<-1) z.vel.y=-z.vel.y*0.15; // tiny bounce on hard landing
-      else z.vel.y=0;
+      if(z.vel.y<-2)z.vel.y=-z.vel.y*0.15; else z.vel.y=0;
       z.onTrack=true;
-      z.vel.x*=Math.pow(0.997,dt*60);
-      z.vel.z*=Math.pow(0.997,dt*60);
+      // Apply friction on ground
+      // No friction on ground - forward force handles speed control
     } else {
       z.onTrack=false;
     }
 
-    // Wall constraint - push out, only remove lateral velocity, keep forward
-    const right=new THREE.Vector3(-node.dir.z,0,node.dir.x).normalize();
+    // Random micro-jitter simulates imperfect track surface
+    if(z.onTrack && Math.random()<0.05){
+      z.vel.x += (Math.random()-0.5)*0.8;
+      z.vel.z += (Math.random()-0.5)*0.8;
+    }
+
+    // ── Wall constraint using path node's local frame
+    // Project position onto path node's local XZ
     const toPos=new THREE.Vector3().subVectors(z.pos,node.pos);
+    // Track right vector (perpendicular to forward dir in XZ)
+    const right=new THREE.Vector3(-node.dir.z,0,node.dir.x).normalize();
     const lateral=toPos.dot(right);
+
     if(Math.abs(lateral)>hw){
-      const excess=Math.abs(lateral)-hw;
-      z.pos.x-=right.x*Math.sign(lateral)*excess;
-      z.pos.z-=right.z*Math.sign(lateral)*excess;
-      // Only kill the outward lateral component, not forward speed
+      // Push back inside walls
+      const push=Math.sign(lateral)*(Math.abs(lateral)-hw);
+      z.pos.x-=right.x*push;
+      z.pos.z-=right.z*push;
+      // Only remove outward lateral velocity - keep forward speed
       const vLat=z.vel.x*right.x+z.vel.z*right.z;
       if(Math.sign(vLat)===Math.sign(lateral)){
-        z.vel.x-=vLat*right.x*1.05;
-        z.vel.z-=vLat*right.z*1.05;
+        z.vel.x-=vLat*right.x*1.1;
+        z.vel.z-=vLat*right.z*1.1;
       }
     }
 
-    // Forward push - constant slope force + kick if stalled
+    // Always push forward - runs every frame on track
     if(phase==='racing'){
-      const sf=z.speedMult||1;
       const fwdSpeed=z.vel.x*node.dir.x+z.vel.z*node.dir.z;
-      z.vel.x+=node.dir.x*5*sf*dt;
-      z.vel.z+=node.dir.z*5*sf*dt;
-      if(fwdSpeed<MIN_FWD){
-        z.vel.x+=node.dir.x*(MIN_FWD-fwdSpeed)*14*dt;
-        z.vel.z+=node.dir.z*(MIN_FWD-fwdSpeed)*14*dt;
+      // Constant force - speedMult makes each ball slightly different
+      const sf = z.speedMult||1;
+      z.vel.x+=node.dir.x*6*sf*dt;
+      z.vel.z+=node.dir.z*6*sf*dt;
+      // Extra kick if really slow
+      if(fwdSpeed<MIN_FWD*sf){
+        z.vel.x+=node.dir.x*(MIN_FWD*sf-fwdSpeed)*12*dt;
+        z.vel.z+=node.dir.z*(MIN_FWD*sf-fwdSpeed)*12*dt;
       }
     }
 
-    // Safety - fell through track
-    if(z.pos.y<node.floorY-15){
-      z.pos.set(node.pos.x+(Math.random()-.5)*0.5,node.floorY+BALL_R+0.5,node.pos.z);
-      z.vel.set(node.dir.x*3,0,node.dir.z*3);
-      showKO('FELL: '+z.name,0xff4444);
+    // ── Safety net: if ball falls way below track
+    if(z.pos.y<node.floorY-12){
+      // Teleport back onto track floor
+      z.pos.x=node.pos.x+(Math.random()-0.5)*1;
+      z.pos.y=node.floorY+BALL_R;
+      z.pos.z=node.pos.z;
+      z.vel.set(node.dir.x*MIN_FWD,0,node.dir.z*MIN_FWD);
+      showKO('FELL OFF: '+z.name,0xff4444);
     }
   }
 
