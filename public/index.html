@@ -195,7 +195,7 @@ function drawSpeedLines(intensity){
 // ── SCENE OBJECTS ─────────────────────────────────────
 let pathNodes  = [];
 let trackMeshes= [];
-let hammers    = [];
+let hammers=[], blades=[], windZones=[], trapDoors=[];
 let bumperObjs = [];
 let boostPads  = [];
 let funnels    = [];
@@ -410,7 +410,6 @@ function buildBumpers(cur, count){
 }
 
 // SPINNING BLADE - flat disc rotating on track, deflects balls sideways
-let blades=[];
 function buildBlade(cur){
   const pos=cur.pos.clone().addScaledVector(cur.dir,5);
   pos.y=cur.pos.y+0.15;
@@ -430,7 +429,6 @@ function buildBlade(cur){
 }
 
 // WIND TUNNEL - section pushes balls sideways (random dir per race)
-let windZones=[];
 function buildWindZone(cur, length){
   const windDir=(Math.random()<0.5?1:-1); // random left or right
   const mid=cur.pos.clone().addScaledVector(cur.dir,length/2);
@@ -469,7 +467,6 @@ function buildNarrowGate(cur){
 }
 
 // TRAP DOOR - section of floor randomly drops, balls fall through then respawn
-let trapDoors=[];
 function buildTrapDoor(cur){
   const pos=cur.pos.clone().addScaledVector(cur.dir,5);
   const angle=Math.atan2(cur.dir.x,-cur.dir.z);
@@ -617,12 +614,12 @@ function buildCourse(durSecs){
   segPool.push('straight','ramp');
   // Shuffle pool
   function shuffle(a){for(let i=a.length-1;i>0;i--){const j=rnd(0,i);[a[i],a[j]]=[a[j],a[i]];} return a;}
-  let pool = shuffle([...segPool]);
+  let pool = segPool;
   let pIdx = 0;
 
   // Keep adding sections until we hit the target course length
   let safetyCount = 0;
-  while(courseLength < targetUnits - 60 && safetyCount < 80){
+  while(pIdx < pool.length && safetyCount < 80){
     safetyCount++;
     const type = pool[pIdx % pool.length]; pIdx++;
     const [eL,eR] = edgePalettes[pIdx % edgePalettes.length];
