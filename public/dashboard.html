@@ -387,15 +387,25 @@ const ADMIN_NAMES    = ['marsscumbags']; // add more admins here
 
 let session = null;
 
-function kickLogin(){
-  const state = Math.random().toString(36).slice(2);
+async function kickLogin(){
+  // Kick OAuth 2.1 requires PKCE (code_challenge)
+  const state = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+  const verifier = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+  // SHA-256 hash of verifier = code_challenge
+  const encoded = new TextEncoder().encode(verifier);
+  const digest = await crypto.subtle.digest('SHA-256', encoded);
+  const challenge = btoa(String.fromCharCode(...new Uint8Array(digest)))
+    .replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
   sessionStorage.setItem('kick_state', state);
+  sessionStorage.setItem('kick_verifier', verifier);
   const params = new URLSearchParams({
     client_id: KICK_CLIENT_ID,
     redirect_uri: KICK_REDIRECT,
     response_type: 'code',
-    scope: 'user:read channel:read',
+    scope: 'user:read',
     state,
+    code_challenge: challenge,
+    code_challenge_method: 'S256',
   });
   window.location.href = 'https://id.kick.com/oauth/authorize?' + params;
 }

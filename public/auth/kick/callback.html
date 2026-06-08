@@ -1,14 +1,9 @@
-<!DOCTYPE html>
-<html>
-<head><title>Authenticating...</title>
-<style>body{background:#05050f;color:#00f0ff;font-family:'Courier New',monospace;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-size:14px;letter-spacing:2px;}</style>
-</head>
-<body>
-<div>CONNECTING WITH KICK...</div>
+<!DOCTYPE html><html><head><title>Authenticating...</title>
+<style>body{background:#05050f;color:#00f0ff;font-family:'Courier New',monospace;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-size:13px;letter-spacing:2px;}</style>
+</head><body><div>CONNECTING WITH KICK...</div>
 <script>
-// Forward query params to the serverless function
 const params = new URLSearchParams(window.location.search);
+const verifier = sessionStorage.getItem('kick_verifier') || '';
+if(verifier) params.set('verifier', verifier);
 window.location.href = '/api/kick-auth?' + params.toString();
-</script>
-</body>
-</html>
+</script></body></html>

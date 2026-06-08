@@ -1462,16 +1462,24 @@ if(_kickJoin){
   }, 500);
 }
 
-function joinWithKick(){
-  // Real Kick OAuth - redirect to Kick login, comes back with username
+async function joinWithKick(){
+  // Kick OAuth 2.1 with PKCE
   const state = 'game_' + Math.random().toString(36).slice(2);
+  const verifier = Array.from(crypto.getRandomValues(new Uint8Array(32)))
+    .map(b=>b.toString(16).padStart(2,'0')).join('');
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+  const challenge = btoa(String.fromCharCode(...new Uint8Array(digest)))
+    .replace(/[+]/g,'-').replace(/[/]/g,'_').replace(/=/g,'');
   sessionStorage.setItem('kick_state', state);
+  sessionStorage.setItem('kick_verifier', verifier);
   const params = new URLSearchParams({
     client_id: '01KTMSSQ3PNEAA8EYYX1T6T4CK',
     redirect_uri: 'https://playzorbs.xyz/auth/kick/game-callback',
     response_type: 'code',
     scope: 'user:read',
     state,
+    code_challenge: challenge,
+    code_challenge_method: 'S256',
   });
   window.location.href = 'https://id.kick.com/oauth/authorize?' + params;
 }
