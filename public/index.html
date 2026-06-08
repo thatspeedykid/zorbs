@@ -1451,21 +1451,43 @@ buildCourse(null);
 if(window.ZORBS_BOTS_ENABLED) startMock();
 
 function joinWithKick(){
-  // In prod: redirect to Kick OAuth
-  const name = prompt('Your Kick username:');
-  if(name && name.trim()){
-    document.getElementById('join-panel').style.display='none';
-    handleCmd(name.trim(), '!play', false);
-    showBanner('Welcome, '+name+'!', 1500);
-  }
+  // Kick OAuth - for now prompt username, later real OAuth redirect
+  const name = document.getElementById('join-name').value.trim() || prompt('Your Kick username:');
+  if(name && name.trim()) _doJoin(name.trim(), true);
 }
 
 function joinWithNick(){
   const name = document.getElementById('join-name').value.trim();
-  if(!name){ document.getElementById('join-name').style.borderColor='#ff4060'; return; }
+  if(!name){
+    document.getElementById('join-name').focus();
+    document.getElementById('join-name').style.borderColor='#ff4060';
+    document.getElementById('join-name').style.boxShadow='0 0 8px rgba(255,0,60,0.4)';
+    setTimeout(()=>{
+      document.getElementById('join-name').style.borderColor='rgba(255,255,255,0.15)';
+      document.getElementById('join-name').style.boxShadow='none';
+    },1500);
+    return;
+  }
+  _doJoin(name, false);
+}
+
+function _doJoin(name, isKick){
+  // Make sure course is ready
+  if(!pathNodes || pathNodes.length === 0) buildCourse(null);
+  // Check not already joined
+  if(zorbs.find(z=>z.name===name)){
+    showBanner('Already joined as '+name, 1200);
+    document.getElementById('join-panel').style.display='none';
+    return;
+  }
   document.getElementById('join-panel').style.display='none';
-  handleCmd(name, '!play', false);
-  showBanner('Welcome, '+name+'!', 1500);
+  handleCmd(name, '!play', isKick); // isKick = treat as sub (kick subs get perks)
+  showBanner('Welcome'+(isKick?' [KICK]':'')+': '+name, 2000);
+  // Store name for boost command
+  window._myName = name;
+  window._myIsSub = isKick;
+  // Show boost hint
+  setTimeout(()=>showKO('Type !boost in chat or press SPACE to boost!', 0x00ff88), 2500);
 }
 
 // Enter key on nickname input
