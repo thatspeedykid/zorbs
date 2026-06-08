@@ -343,7 +343,9 @@ function segCurve(cur, angleDelta, radius, eL=0x00f0ff, eR=0xff00cc){
     // Build one short straight from current pos in current direction
     const end = c2.pos.clone().addScaledVector(c2.dir, segLen);
     end.y = c2.pos.y;
-    _buildTube([c2.pos.clone(), end.clone()], eL, eR);
+    // Extend slightly past end to overlap next segment and close gaps
+    const endExt = end.clone().addScaledVector(c2.dir, 0.3);
+    _buildTube([c2.pos.clone(), endExt], eL, eR);
     const right = perpRight(c2.dir);
     pathNodes.push({pos:end.clone(), dir:c2.dir.clone(), right:right.clone(), floorY:c2.pos.y, halfW:TW_HALF});
     courseLength += segLen;
@@ -388,11 +390,22 @@ function buildBumpers(cur, count){
     const off=cur.dir.clone().multiplyScalar(spacing*(i+1));
     const side=(i%2===0?1:-1)*1.5;
     const bx=cur.pos.x+off.x+right.x*side, bz=cur.pos.z+off.z+right.z*side, by=cur.pos.y;
-    const cyl=new THREE.Mesh(new THREE.CylinderGeometry(0.65,0.65,1.4,12),new THREE.MeshStandardMaterial({color:0x223355,roughness:0.2,metalness:0.9,emissive:0x003399,emissiveIntensity:0.6}));
-    cyl.position.set(bx,by+0.7,bz); cyl.castShadow=true; addMesh(cyl);
-    const ring=new THREE.Mesh(new THREE.TorusGeometry(0.78,0.08,8,16),new THREE.MeshBasicMaterial({color:0x0066ff}));
-    ring.position.set(bx,by+1.15,bz); ring.rotation.x=Math.PI/2; addMesh(ring);
-    bumperObjs.push({x:bx,y:by+0.7,z:bz,r:0.82});
+    // Electric shock post
+    const cyl=new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.5,1.3,10),
+      new THREE.MeshStandardMaterial({color:0x001133,roughness:0.1,metalness:0.95,emissive:0x00ccff,emissiveIntensity:1.0}));
+    cyl.position.set(bx,by+0.65,bz); cyl.castShadow=true; addMesh(cyl);
+    // Cyan electric ring
+    const ring=new THREE.Mesh(new THREE.TorusGeometry(0.7,0.1,8,16),
+      new THREE.MeshBasicMaterial({color:0x00ffff}));
+    ring.position.set(bx,by+1.1,bz); ring.rotation.x=Math.PI/2; addMesh(ring);
+    // Yellow inner ring
+    const ring2=new THREE.Mesh(new THREE.TorusGeometry(0.4,0.07,8,16),
+      new THREE.MeshBasicMaterial({color:0xffff00}));
+    ring2.position.set(bx,by+0.4,bz); ring2.rotation.x=Math.PI/2; addMesh(ring2);
+    // Glow light
+    const pl=new THREE.PointLight(0x00ffff,2,5);
+    pl.position.set(bx,by+0.8,bz); addMesh(pl);
+    bumperObjs.push({x:bx,y:by+0.65,z:bz,r:0.72});
   }
 }
 
@@ -491,12 +504,24 @@ function buildCourse(durSecs){
     const p=cur.pos.clone().addScaledVector(cur.dir, spawnPadLen*t); p.y=cur.pos.y;
     pathNodes.push({pos:p.clone(),dir:cur.dir.clone(),right:perpRight(cur.dir),floorY:cur.pos.y,halfW:TW_HALF*2.5});
   }
-  // Build wide spawn pad as one box
+  // Build wide spawn pad with walls
   const padMid=cur.pos.clone().addScaledVector(cur.dir,spawnPadLen/2);
   const padRy=Math.atan2(cur.dir.x,-cur.dir.z);
   const padFm=new THREE.Mesh(new THREE.BoxGeometry(TW*2.5,0.4,spawnPadLen),_floorMat);
   padFm.position.set(padMid.x,cur.pos.y-0.2,padMid.z); padFm.rotation.y=padRy;
   padFm.castShadow=padFm.receiveShadow=true; addMesh(padFm);
+  // Spawn pad walls
+  const spr=new THREE.Vector3(Math.cos(padRy),0,Math.sin(padRy));
+  for(const side of [-1,1]){
+    const wx=padMid.x+spr.x*side*(TW*1.25+0.25);
+    const wz=padMid.z+spr.z*side*(TW*1.25+0.25);
+    const wm=new THREE.Mesh(new THREE.BoxGeometry(0.3,1.4,spawnPadLen),_wallMat);
+    wm.position.set(wx,cur.pos.y+0.5,wz); wm.rotation.y=padRy;
+    wm.castShadow=true; addMesh(wm);
+    const gm=new THREE.Mesh(new THREE.BoxGeometry(0.12,0.12,spawnPadLen),
+      new THREE.MeshBasicMaterial({color:side<0?0x00f0ff:0xff00cc}));
+    gm.position.set(wx,cur.pos.y+1.32,wz); gm.rotation.y=padRy; addMesh(gm);
+  }
   buildStartGate({pos:gatePos, dir:cur.dir});
   cur = makeCursor(gatePos.x, cur.pos.y, gatePos.z, cur.dir.x, cur.dir.z);
 
@@ -765,10 +790,16 @@ function stepPhysics(z,dt){
     const d2=Math.sqrt(dx*dx+dy*dy+dz2*dz2);
     const minD=BALL_R+b.r;
     if(d2<minD&&d2>0.001){
-      const nx=dx/d2,ny=dy/d2,nz=dz2/d2;
-      z.vel.x+=nx*7; z.vel.y+=Math.max(ny*7,2.5); z.vel.z+=nz*7;
-      z.knockFlash=0.4;
-      showKO('💥 BUMP: '+z.name,0x0066ff);
+      const nx=dx/d2, nz=dz2/d2;
+      // Push out of bumper
+      z.pos.x+=nx*(minD-d2+0.1); z.pos.z+=nz*(minD-d2+0.1);
+      // Strong random electric knockback - can knock off track
+      const power=14+Math.random()*10;
+      z.vel.x=nx*power+(Math.random()-0.5)*8;
+      z.vel.z=nz*power+(Math.random()-0.5)*8;
+      z.vel.y=3+Math.random()*4;
+      z.knockFlash=0.5;
+      showKO('⚡ ZAPPED: '+z.name,0x00ffff);
     }
   }
 
@@ -841,7 +872,7 @@ function updateHammers(dt){
       const dx=z.pos.x-tipX,dy=z.pos.y-tipY,dz2=z.pos.z-h.z;
       if(Math.sqrt(dx*dx+dy*dy+dz2*dz2)<BALL_R+0.95){
         z.vel.x+=(dx>0?1:-1)*3; z.vel.y+=2.5; z.knockFlash=0.35;
-        showKO('🔨 SMASH: '+z.name,0xff4400);
+        z.vel.x+=(dx>0?1:-1)*8; z.vel.z+=3; z.vel.y=3; z.knockFlash=0.5; showKO('🔨 SMASHED: '+z.name,0xff4400);
       }
     });
   });
