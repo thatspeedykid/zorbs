@@ -862,7 +862,7 @@ function stepPhysics(z,dt){
       z.vel.z+=(Math.random()-0.5)*0.5;
     }
 
-    // Wall constraint
+    // Wall constraint - hard boundary + soft guide force near wall
     const toPos=new THREE.Vector3().subVectors(z.pos,node.pos);
     const lateral=toPos.dot(node.right);
     if(Math.abs(lateral)>hw){
@@ -871,9 +871,14 @@ function stepPhysics(z,dt){
       z.pos.z-=node.right.z*push;
       const vLat=z.vel.x*node.right.x+z.vel.z*node.right.z;
       if(Math.sign(vLat)===Math.sign(lateral)){
-        z.vel.x-=vLat*node.right.x*(1+BOUNCE);
-        z.vel.z-=vLat*node.right.z*(1+BOUNCE);
+        z.vel.x-=vLat*node.right.x*(1+BOUNCE*0.5);
+        z.vel.z-=vLat*node.right.z*(1+BOUNCE*0.5);
       }
+    } else if(Math.abs(lateral)>hw*0.75){
+      // Soft inward nudge before hitting wall - smoother feel
+      const inward=-Math.sign(lateral)*2;
+      z.vel.x+=node.right.x*inward*dt;
+      z.vel.z+=node.right.z*inward*dt;
     }
 
     // ★ FORWARD PUSH — keeps balls fast and moving
@@ -891,22 +896,16 @@ function stepPhysics(z,dt){
       }
     }
 
-    // Disqualify if fell off track
-    if(z.pos.y < node.floorY - 12){
-      z.disqualified = true;
-      z.finished = true;
-      z.finishTime = performance.now();
-      const dqRank = zorbs.filter(r => r.finished).length;
-      z.rank = dqRank;
-      z.mesh.visible = false;
-      z.tLine.visible = false;
-      z.streaks.forEach(s => s.visible = false);
-      const dqN=zorbs.filter(r=>r.disqualified).length; document.getElementById('cnt').textContent=zorbs.length+' racers ('+dqN+' DQ)';
-      showKO('💀 DQ: ' + z.name + ' FELL!', 0xff2200);
-      // Check if all remaining zorbs are finished
-      const remaining = zorbs.filter(r => !r.finished);
-      if(remaining.length === 0 && zorbs.length > 0){
-        setTimeout(resetRace, 3000);
+    // Fell off track - respawn at last safe node (lose time not race)
+    if(z.pos.y < node.floorY - 10){
+      // Find a safe node slightly behind current position
+      const respawnIdx = Math.max(0, z.nodeIdx - 3);
+      const rn = pathNodes[respawnIdx];
+      if(rn){
+        z.pos.set(rn.pos.x, rn.floorY + BALL_R + 0.5, rn.pos.z);
+        z.vel.set(rn.dir.x * MIN_FWD, 0, rn.dir.z * MIN_FWD);
+        z.nodeIdx = respawnIdx;
+        showKO('💀 FELL: '+z.name+' (respawning)', 0xff4400);
       }
       return;
     }
