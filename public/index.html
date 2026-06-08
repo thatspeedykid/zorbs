@@ -484,7 +484,7 @@ function buildCourse(durSecs){
   // Build wide spawn pad as one box
   const padMid=cur.pos.clone().addScaledVector(cur.dir,spawnPadLen/2);
   const padRy=Math.atan2(cur.dir.x,-cur.dir.z);
-  const padFm=new THREE.Mesh(new THREE.BoxGeometry(TW*2.5,0.4,spawnPadLen),_trackMat);
+  const padFm=new THREE.Mesh(new THREE.BoxGeometry(TW*2.5,0.4,spawnPadLen),_floorMat);
   padFm.position.set(padMid.x,cur.pos.y-0.2,padMid.z); padFm.rotation.y=padRy;
   padFm.castShadow=padFm.receiveShadow=true; addMesh(padFm);
   buildStartGate({pos:gatePos, dir:cur.dir});
