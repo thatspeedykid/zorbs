@@ -218,71 +218,48 @@ function makeCursor(x,y,z,dx=0,dz=-1){
 }
 function perpRight(dir){ return new THREE.Vector3(dir.z,0,-dir.x); }
 
-const _floorMat = new THREE.MeshStandardMaterial({color:0x111128,roughness:0.2,metalness:0.8,emissive:0x000d22,emissiveIntensity:0.3});
-const _wallMat  = new THREE.MeshStandardMaterial({color:0x0a1020,roughness:0.3,metalness:0.7});
+const _floorMat = new THREE.MeshStandardMaterial({color:0x111128,roughness:0.2,metalness:0.8,emissive:0x000d22,emissiveIntensity:0.3,side:THREE.DoubleSide});
+const _wallMat  = new THREE.MeshStandardMaterial({color:0x0a1020,roughness:0.3,metalness:0.7,side:THREE.DoubleSide});
 
-// Build track ribbon from spine points
-// Floor = quad strip along centerline
-// Walls = vertical quads rising from each edge (world-up, NOT track-normal)
-// This matches how Marbles on Stream tracks look
+// Build track using Three.js proper geometry
+// pts = [{pos, dir, y}] centerline points
+// Creates: flat floor box + two wall boxes per segment using BoxGeometry
+// Simple, reliable, no custom vertex math
 function _buildRibbon(pts, eL, eR){
   if(pts.length<2) return;
-  const N=pts.length;
-  const WALL_H=1.5;
-  const fv=[],lv=[],rv=[],lgv=[],rgv=[];
+  // Build one straight segment between each consecutive pair of points
+  for(let i=0;i<pts.length-1;i++){
+    const a=pts[i], b=pts[i+1];
+    const dx=b.pos.x-a.pos.x, dy=b.pos.y-a.pos.y, dz=b.pos.z-a.pos.z;
+    const segLen=Math.sqrt(dx*dx+dy*dy+dz*dz);
+    if(segLen<0.01) continue;
+    const mx=(a.pos.x+b.pos.x)/2, my=(a.pos.y+b.pos.y)/2, mz=(a.pos.z+b.pos.z)/2;
+    // Rotation to face segment direction (XZ only for yaw)
+    const ry=Math.atan2(dx,-dz);
+    // Pitch for ramps
+    const pitch=Math.atan2(-dy,Math.sqrt(dx*dx+dz*dz));
 
-  for(let i=0;i<N;i++){
-    const {pos,dir,y}=pts[i];
-    const right=perpRight(dir);
+    // Floor
+    const fm=new THREE.Mesh(new THREE.BoxGeometry(TW,0.4,segLen+0.05),_floorMat);
+    fm.position.set(mx,my-0.2,mz);
+    fm.rotation.order='YXZ'; fm.rotation.y=ry; fm.rotation.x=pitch;
+    fm.castShadow=fm.receiveShadow=true; addMesh(fm);
 
-    // Floor top surface - quad strip (2 verts per point: left edge, right edge)
-    const lx=pos.x-right.x*TW_HALF, lz=pos.z-right.z*TW_HALF;
-    const rx=pos.x+right.x*TW_HALF, rz=pos.z+right.z*TW_HALF;
-    fv.push(lx, y, lz,  rx, y, rz);
-
-    // Floor bottom (thickness) - needed so track isn't paper thin
-    // We just add a duplicate row 0.3 below
-    // Actually skip - DoubleSide on material handles backface
-
-    // Left wall: starts at track left edge, goes straight UP
-    const lwx=pos.x-right.x*(TW_HALF+0.15), lwz=pos.z-right.z*(TW_HALF+0.15);
-    lv.push(lwx, y,          lwz,
-            lwx, y+WALL_H,   lwz);
-    lgv.push(lwx, y+WALL_H+0.05, lwz);
-
-    // Right wall
-    const rwx=pos.x+right.x*(TW_HALF+0.15), rwz=pos.z+right.z*(TW_HALF+0.15);
-    rv.push(rwx, y,          rwz,
-            rwx, y+WALL_H,   rwz);
-    rgv.push(rwx, y+WALL_H+0.05, rwz);
-  }
-
-  function qidx(n){
-    const idx=[];
-    for(let i=0;i<n-1;i++){
-      const a=i*2,b=i*2+1,c=i*2+2,d=i*2+3;
-      idx.push(a,c,b, b,c,d); // flip winding for correct face
+    // Walls - use avg Y so they sit at track level
+    const avgY=(a.y+b.y)/2;
+    const cosRy=Math.cos(ry), sinRy=Math.sin(ry);
+    for(const side of [-1,1]){
+      const wx=mx+cosRy*side*(TW_HALF+0.15);
+      const wz=mz+sinRy*side*(TW_HALF+0.15);
+      const wm=new THREE.Mesh(new THREE.BoxGeometry(0.3,1.5,segLen+0.05),_wallMat);
+      wm.position.set(wx,avgY+0.55,wz); wm.rotation.y=ry;
+      wm.castShadow=wm.receiveShadow=true; addMesh(wm);
+      // Glow cap on wall top
+      const gm=new THREE.Mesh(new THREE.BoxGeometry(0.15,0.15,segLen+0.05),
+        new THREE.MeshBasicMaterial({color:side<0?eL:eR}));
+      gm.position.set(wx,avgY+1.35,wz); gm.rotation.y=ry; addMesh(gm);
     }
-    return idx;
   }
-  function mkMesh(verts,idx,mat){
-    const g=new THREE.BufferGeometry();
-    g.setAttribute('position',new THREE.Float32BufferAttribute(new Float32Array(verts),3));
-    g.setIndex(idx); g.computeVertexNormals();
-    const m=new THREE.Mesh(g,mat); m.castShadow=true; m.receiveShadow=true;
-    return addMesh(m);
-  }
-
-  mkMesh(fv, qidx(N), _floorMat);
-  mkMesh(lv, qidx(N), _wallMat);
-  mkMesh(rv, qidx(N), _wallMat);
-
-  const lg=new THREE.BufferGeometry();
-  lg.setAttribute('position',new THREE.Float32BufferAttribute(new Float32Array(lgv),3));
-  addMesh(new THREE.Line(lg,new THREE.LineBasicMaterial({color:eL})));
-  const rg=new THREE.BufferGeometry();
-  rg.setAttribute('position',new THREE.Float32BufferAttribute(new Float32Array(rgv),3));
-  addMesh(new THREE.Line(rg,new THREE.LineBasicMaterial({color:eR})));
 }
 
 // ── SEGMENT BUILDERS ──────────────────────────────────
