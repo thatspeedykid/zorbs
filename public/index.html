@@ -328,29 +328,28 @@ function segRamp(cur, length, dropY, eL=0x00f0ff, eR=0xff00cc){
 }
 
 function segCurve(cur, angleDelta, radius, eL=0x00f0ff, eR=0xff00cc){
+  // Build curve as many tiny straight segments - each straight already works perfectly
   const absA = Math.abs(angleDelta), arcLen = radius*absA;
-  const steps = Math.max(24, Math.ceil(arcLen/1.2));
-  const ts = Math.sign(angleDelta);
-  const right = perpRight(cur.dir);
-  const centre = cur.pos.clone().addScaledVector(right, ts*radius);
-  const initR = cur.pos.clone().sub(centre);
-  const curvePts = [], lastDir = {x:0,z:-1};
-  for(let i=0;i<=steps;i++){
-    const sw = angleDelta*(i/steps);
-    const cs=Math.cos(sw), sn=Math.sin(sw);
-    const rx=initR.x*cs-initR.z*sn, rz=initR.x*sn+initR.z*cs;
-    const pos = new THREE.Vector3(centre.x+rx, cur.pos.y, centre.z+rz);
-    const tx=(-sn*initR.x-cs*initR.z)*ts, tz=(cs*initR.x-sn*initR.z)*ts;
-    const tl=Math.sqrt(tx*tx+tz*tz);
-    const dir = new THREE.Vector3(tx/tl,0,tz/tl);
-    curvePts.push(pos.clone());
-    pathNodes.push({pos:pos.clone(), dir:dir.clone(), right:perpRight(dir), floorY:cur.pos.y, halfW:TW_HALF});
-    if(i===steps){lastDir.x=dir.x;lastDir.z=dir.z;}
+  const steps = Math.max(16, Math.ceil(arcLen/2));
+  const stepAngle = angleDelta / steps;
+  const segLen = arcLen / steps;
+  let c2 = cur;
+  for(let i=0;i<steps;i++){
+    // Rotate the cursor direction by stepAngle
+    const cos = Math.cos(stepAngle), sin = Math.sin(stepAngle);
+    const ndx = c2.dir.x*cos - c2.dir.z*sin;
+    const ndz = c2.dir.x*sin + c2.dir.z*cos;
+    const nextDir = new THREE.Vector3(ndx,0,ndz).normalize();
+    // Build one short straight from current pos in current direction
+    const end = c2.pos.clone().addScaledVector(c2.dir, segLen);
+    end.y = c2.pos.y;
+    _buildTube([c2.pos.clone(), end.clone()], eL, eR);
+    const right = perpRight(c2.dir);
+    pathNodes.push({pos:end.clone(), dir:c2.dir.clone(), right:right.clone(), floorY:c2.pos.y, halfW:TW_HALF});
+    courseLength += segLen;
+    c2 = makeCursor(end.x, c2.pos.y, end.z, nextDir.x, nextDir.z);
   }
-  _buildTube(curvePts, eL, eR);
-  courseLength += arcLen;
-  const last = curvePts[curvePts.length-1];
-  return makeCursor(last.x, cur.pos.y, last.z, lastDir.x, lastDir.z);
+  return c2;
 }
 
 // ── BOOST PAD ─────────────────────────────────────────
