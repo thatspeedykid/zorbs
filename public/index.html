@@ -152,8 +152,8 @@ grid.position.y=-39.5; scene.add(grid);
 
 // ── CONSTANTS ─────────────────────────────────
 const BALL_R = 0.5;
-const TRACK_W = 3.0;      // half-width of track surface
-const TRACK_THICKNESS = 0.4;
+const TRACK_W = 4.5;      // half-width of track surface
+const TRACK_THICKNESS = 0.8;
 const GRAVITY = new THREE.Vector3(0,-22,0);
 const ZCOLORS = [0x00f0ff,0xff00cc,0xaaff00,0xff8800,0xff4488,0xaa44ff,0x00ffaa,0xffff00,0x44aaff,0xff6644];
 
@@ -257,8 +257,8 @@ function buildTrackGeometry(samples){
   geo.setIndex(indices);
 
   const mat=new THREE.MeshStandardMaterial({
-    color:0x0d0d22, roughness:0.2, metalness:0.85,
-    emissive:0x000820, emissiveIntensity:0.2,
+    color:0x141435, roughness:0.15, metalness:0.9,
+    emissive:0x0a0a33, emissiveIntensity:0.4,
     side:THREE.DoubleSide
   });
   const mesh=new THREE.Mesh(geo,mat);
@@ -309,12 +309,14 @@ function generateControlPoints(complexity){
   const seed=Math.floor(Math.random()*1000);
   const rng=(n)=>Math.sin(seed*n*127.1+n*311.7)*0.5+0.5;
 
-  // Start high
+  // Start FLAT - give balls time to settle before any curves
+  pts.push(new THREE.Vector3(0,20,60));
+  pts.push(new THREE.Vector3(0,20,45));
   pts.push(new THREE.Vector3(0,20,30));
   pts.push(new THREE.Vector3(0,20,15));
-  pts.push(new THREE.Vector3(0,18,0));
+  pts.push(new THREE.Vector3(0,20,0));
 
-  let x=0,y=18,z=0;
+  let x=0,y=20,z=0;
   const numSegments=4+complexity;
 
   for(let i=0;i<numSegments;i++){
@@ -494,7 +496,7 @@ function createZorb(name,isSub,col){
   scene.add(tLine);
 
   // Spawn on start of track
-  const s=trackSamples[2];
+  const s=trackSamples[Math.min(8, trackSamples.length-1)];
   const up=s.normal.clone().negate();
   const spawnOff=(Math.random()-0.5)*(TRACK_W*1.2);
   const spawnPos=s.pos.clone().addScaledVector(up,BALL_R+0.1).addScaledVector(s.binormal,spawnOff);
@@ -532,10 +534,10 @@ function stepPhysics(z, dt){
   // Find nearest sample
   let si=z.sampleIdx;
   // Search nearby samples for closest (not entire array - too slow)
-  const searchRange=30;
+  const searchRange=40;
   let bestD=Infinity;
-  const lo=Math.max(0,si-searchRange);
-  const hi=Math.min(trackSamples.length-1,si+searchRange*3); // bias forward
+  const lo=Math.max(0,si-10);
+  const hi=Math.min(trackSamples.length-1,si+searchRange*4); // strongly bias forward
   for(let i=lo;i<=hi;i++){
     const d=trackSamples[i].pos.distanceTo(z.pos);
     if(d<bestD){bestD=d;si=i;}
@@ -566,73 +568,65 @@ function stepPhysics(z, dt){
 
   // ── TRACK SURFACE CONSTRAINT ─────────────────
   // If close to track, apply surface physics
-  const trackProximity=3.0; // distance within which track physics applies
-  if(distFromSurface<trackProximity&&distFromSurface>-1.0){
-    z.onTrack=true;
-    z.airTime=0;
+  // Strong track sticking - Hot Wheels style
+  const trackProximity = 4.0;
+  if(distFromSurface < trackProximity && distFromSurface > -2.5){
+    z.onTrack = true;
+    z.airTime = 0;
 
-    if(distFromSurface<0){
-      // Below surface - push back up
-      z.pos.addScaledVector(trackUp,-distFromSurface*1.2);
-      const vNormal=z.vel.dot(trackUp);
-      if(vNormal<0) z.vel.addScaledVector(trackUp,-vNormal*1.2);
-    } else if(distFromSurface<0.05){
-      // Right on surface
-      const vNormal=z.vel.dot(trackUp);
-      if(vNormal<0){
-        z.vel.addScaledVector(trackUp,-vNormal*(1+0.15)); // low bounce
+    // Hard surface correction - snap ball to surface
+    if(distFromSurface < BALL_R){
+      // Push above surface
+      z.pos.addScaledVector(trackUp, BALL_R - distFromSurface);
+      const vN = z.vel.dot(trackUp);
+      if(vN < 0) z.vel.addScaledVector(trackUp, -vN * 1.1);
+    }
+
+    // FULLY cancel gravity in track-normal direction
+    // This is what makes Hot Wheels loops work - centripetal force replaces gravity
+    const gravDotUp = GRAVITY.dot(trackUp);
+    z.vel.addScaledVector(trackUp, -gravDotUp * dt);
+
+    // Strong lateral damping - ball cannot drift sideways off track
+    const velRight = z.vel.dot(trackRight);
+    z.vel.addScaledVector(trackRight, -velRight * Math.min(1, dt * 15));
+
+    // Light forward friction only
+    const velFwd = z.vel.dot(trackFwd);
+    const newFwd = velFwd * Math.pow(0.994, dt * 60);
+    z.vel.addScaledVector(trackFwd, newFwd - velFwd);
+
+    // Always-forward push
+    if(phase === "racing"){
+      const fwdSpeed = z.vel.dot(trackFwd);
+      if(fwdSpeed < 2.0){
+        z.vel.addScaledVector(trackFwd, (2.0 - fwdSpeed) * 3.0 * dt);
       }
     }
 
-    // Cancel gravity component perpendicular to track surface
-    // This makes the ball "stick" to the track like Hot Wheels
-    const gravDotUp=GRAVITY.dot(trackUp);
-    z.vel.addScaledVector(trackUp,-gravDotUp*dt*0.85); // partial gravity cancellation
-
-    // Friction along track surface
-    const velFwd=z.vel.dot(trackFwd);
-    const velRight=z.vel.dot(trackRight);
-    const velUp=z.vel.dot(trackUp);
-    // Strong lateral friction (keeps ball on track)
-    const newRight=velRight*Math.pow(0.85,dt*60);
-    z.vel.addScaledVector(trackRight,newRight-velRight);
-    // Light forward friction
-    const newFwd=velFwd*Math.pow(0.992,dt*60);
-    z.vel.addScaledVector(trackFwd,newFwd-velFwd);
-
-    // ── Always forward minimum speed ──────────────
-    if(phase==='racing'){
-      const fwdSpeed=z.vel.dot(trackFwd);
-      if(fwdSpeed<1.5){
-        z.vel.addScaledVector(trackFwd,(1.5-fwdSpeed)*2.5*dt);
-      }
-    }
-
-    // ── Wall constraint ──────────────────────────
-    const lateralOff=toSurface.dot(trackRight);
-    const maxLateral=TRACK_W-BALL_R-0.05;
-    if(Math.abs(lateralOff)>maxLateral){
-      const push=Math.sign(lateralOff)*(Math.abs(lateralOff)-maxLateral);
-      z.pos.addScaledVector(trackRight,-push);
-      const vR=z.vel.dot(trackRight);
-      if(Math.sign(vR)===Math.sign(lateralOff))
-        z.vel.addScaledVector(trackRight,-vR*1.15);
+    // Wall constraint - hard stop at track edges
+    const lateralOff = toSurface.dot(trackRight);
+    const maxLat = TRACK_W - BALL_R - 0.1;
+    if(Math.abs(lateralOff) > maxLat){
+      const push = Math.sign(lateralOff) * (Math.abs(lateralOff) - maxLat + 0.05);
+      z.pos.addScaledVector(trackRight, -push);
+      const vR = z.vel.dot(trackRight);
+      if(Math.sign(vR) === Math.sign(lateralOff))
+        z.vel.addScaledVector(trackRight, -vR * 1.3);
     }
 
   } else {
-    // Off track - full gravity, try to return
-    z.onTrack=false;
-    z.airTime+=dt;
-
-    // If fallen way off, respawn at last known position
-    if(z.airTime>3.0||distFromSurface<-8){
-      const respawnSi=Math.max(0,z.sampleIdx-5);
-      const rs=trackSamples[respawnSi];
-      const rup=rs.normal.clone().negate();
-      z.pos.copy(rs.pos.clone().addScaledVector(rup,BALL_R+0.3));
-      z.vel.copy(rs.tangent.clone().multiplyScalar(2));
-      z.airTime=0; z.sampleIdx=respawnSi;
-      showKO('FELL OFF: '+z.name,0xff4444);
+    z.onTrack = false;
+    z.airTime += dt;
+    // Quick respawn if off track
+    if(z.airTime > 1.5 || distFromSurface < -6){
+      const rsi = Math.max(0, z.sampleIdx - 3);
+      const rs = trackSamples[rsi];
+      const rup = rs.normal.clone().negate();
+      z.pos.copy(rs.pos.clone().addScaledVector(rup, BALL_R + 0.2));
+      z.vel.copy(rs.tangent.clone().multiplyScalar(2.5));
+      z.airTime = 0; z.sampleIdx = rsi;
+      showKO("FELL OFF: " + z.name, 0xff4444);
     }
   }
 
@@ -901,7 +895,7 @@ function streamerStart(){
   trackInfo=buildTrack(complexity);
   // Respawn zorbs at track start
   zorbs.forEach((z,idx)=>{
-    const s=trackSamples[2+idx];
+    const s=trackSamples[Math.min(8+idx*2, 20)];
     const up=s.normal.clone().negate();
     const off=(Math.random()-0.5)*(TRACK_W*1.2);
     z.pos.copy(s.pos.clone().addScaledVector(up,BALL_R+0.1).addScaledVector(s.binormal,off));
