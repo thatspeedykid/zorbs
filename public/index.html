@@ -205,7 +205,7 @@ let courseLength = 0; // approx units
 
 function clearCourse(){
   trackMeshes.forEach(m=>scene.remove(m)); trackMeshes=[];
-  hammers=[]; bumperObjs=[]; boostPads=[]; funnels=[];
+  hammers=[]; bumperObjs=[]; boostPads=[]; funnels=[]; blades=[]; windZones=[]; trapDoors=[];
   pathNodes=[]; courseLength=0;
 }
 function addMesh(m){ scene.add(m); trackMeshes.push(m); return m; }
@@ -409,6 +409,83 @@ function buildBumpers(cur, count){
   }
 }
 
+// SPINNING BLADE - flat disc rotating on track, deflects balls sideways
+let blades=[];
+function buildBlade(cur){
+  const pos=cur.pos.clone().addScaledVector(cur.dir,5);
+  pos.y=cur.pos.y+0.15;
+  const blade=new THREE.Mesh(
+    new THREE.CylinderGeometry(TW_HALF*0.8,TW_HALF*0.8,0.12,16),
+    new THREE.MeshStandardMaterial({color:0x334466,roughness:0.1,metalness:0.95,emissive:0x0044aa,emissiveIntensity:0.4})
+  );
+  blade.position.copy(pos); scene.add(blade); trackMeshes.push(blade);
+  // Glow ring on blade edge
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(TW_HALF*0.8,0.08,6,24),
+    new THREE.MeshBasicMaterial({color:0x4488ff}));
+  ring.position.copy(pos); ring.rotation.x=Math.PI/2; scene.add(ring); trackMeshes.push(ring);
+  // Arrow indicators
+  const pl=new THREE.PointLight(0x4488ff,1.5,6); pl.position.copy(pos); scene.add(pl); trackMeshes.push(pl);
+  blades.push({mesh:blade,ring,pos:pos.clone(),phase:Math.random()*Math.PI*2,
+    speed:(1.5+Math.random())*(Math.random()<0.5?1:-1),dir:cur.dir.clone(),right:perpRight(cur.dir)});
+}
+
+// WIND TUNNEL - section pushes balls sideways (random dir per race)
+let windZones=[];
+function buildWindZone(cur, length){
+  const windDir=(Math.random()<0.5?1:-1); // random left or right
+  const mid=cur.pos.clone().addScaledVector(cur.dir,length/2);
+  // Visual - glowing floor strips showing wind direction
+  const right=perpRight(cur.dir);
+  for(let i=0;i<5;i++){
+    const t=(i/4-0.5)*TW*0.8;
+    const strip=new THREE.Mesh(new THREE.BoxGeometry(0.15,0.06,length*0.8),
+      new THREE.MeshBasicMaterial({color:windDir>0?0x00ffaa:0xffaa00}));
+    strip.position.set(mid.x+right.x*t,cur.pos.y+0.03,mid.z+right.z*t);
+    strip.rotation.y=Math.atan2(cur.dir.x,-cur.dir.z);
+    scene.add(strip); trackMeshes.push(strip);
+  }
+  const end=cur.pos.clone().addScaledVector(cur.dir,length);
+  windZones.push({start:cur.pos.clone(),end:end.clone(),dir:cur.dir.clone(),
+    right:perpRight(cur.dir),windDir,force:3.5+Math.random()*2});
+}
+
+// NARROW GATE - track squeezes, forces bunching
+function buildNarrowGate(cur){
+  const pos=cur.pos.clone().addScaledVector(cur.dir,4);
+  const right=perpRight(cur.dir);
+  const angle=Math.atan2(cur.dir.x,-cur.dir.z);
+  // Two walls jutting in from sides, gap in middle
+  for(const side of [-1,1]){
+    const wx=pos.x+right.x*side*TW_HALF*0.45, wz=pos.z+right.z*side*TW_HALF*0.45;
+    const barrier=new THREE.Mesh(new THREE.BoxGeometry(TW_HALF*0.5,1.8,0.4),
+      new THREE.MeshStandardMaterial({color:0xff4400,roughness:0.2,metalness:0.8,emissive:0xff2200,emissiveIntensity:0.5}));
+    barrier.position.set(wx,pos.y+0.9,wz); barrier.rotation.y=angle;
+    scene.add(barrier); trackMeshes.push(barrier);
+    const gl=new THREE.Mesh(new THREE.BoxGeometry(TW_HALF*0.5,0.1,0.45),
+      new THREE.MeshBasicMaterial({color:0xff6600}));
+    gl.position.set(wx,pos.y+1.85,wz); gl.rotation.y=angle;
+    scene.add(gl); trackMeshes.push(gl);
+  }
+}
+
+// TRAP DOOR - section of floor randomly drops, balls fall through then respawn
+let trapDoors=[];
+function buildTrapDoor(cur){
+  const pos=cur.pos.clone().addScaledVector(cur.dir,5);
+  const angle=Math.atan2(cur.dir.x,-cur.dir.z);
+  const door=new THREE.Mesh(new THREE.BoxGeometry(TW*0.85,0.3,4),
+    new THREE.MeshStandardMaterial({color:0x331100,roughness:0.3,metalness:0.7,emissive:0x220800,emissiveIntensity:0.6}));
+  door.position.set(pos.x,cur.pos.y-0.05,pos.z); door.rotation.y=angle;
+  scene.add(door); trackMeshes.push(door);
+  // Warning stripes
+  const warn=new THREE.Mesh(new THREE.BoxGeometry(TW*0.85,0.05,4),
+    new THREE.MeshBasicMaterial({color:0xff8800}));
+  warn.position.set(pos.x,cur.pos.y+0.18,pos.z); warn.rotation.y=angle;
+  scene.add(warn); trackMeshes.push(warn);
+  trapDoors.push({mesh:door,warn,pos:pos.clone(),dir:cur.dir.clone(),
+    open:false,timer:2+Math.random()*3,floorY:cur.pos.y,angle});
+}
+
 // ── GATES ─────────────────────────────────────────────
 function buildStartGate(cur){
   const right=perpRight(cur.dir), angle=Math.atan2(cur.dir.x,cur.dir.z);
@@ -526,10 +603,18 @@ function buildCourse(durSecs){
   cur = makeCursor(gatePos.x, cur.pos.y, gatePos.z, cur.dir.x, cur.dir.z);
 
   // Segment type pool — weighted toward variety
-  const segPool = [
-    'straight','straight','ramp','corkscrew','straight','ramp',
-    'straight','corkscrew','straight','bumper_gauntlet','hammer_zone'
-  ];
+  // Guaranteed one of each obstacle type, rest random
+  const obstacleTypes=['bumper_gauntlet','hammer_zone','blade_zone','wind_zone','narrow_gate','trap_door'];
+  const fillerTypes=['straight','ramp','corkscrew'];
+  // Shuffle obstacles so order is random each race
+  for(let i=obstacleTypes.length-1;i>0;i--){const j=rnd(0,i);[obstacleTypes[i],obstacleTypes[j]]=[obstacleTypes[j],obstacleTypes[i]];}
+  // Build pool: guaranteed obstacles + fillers between
+  const segPool=[];
+  obstacleTypes.forEach(o=>{
+    segPool.push(fillerTypes[rnd(0,fillerTypes.length-1)]);
+    segPool.push(o);
+  });
+  segPool.push('straight','ramp');
   // Shuffle pool
   function shuffle(a){for(let i=a.length-1;i>0;i--){const j=rnd(0,i);[a[i],a[j]]=[a[j],a[i]];} return a;}
   let pool = shuffle([...segPool]);
@@ -570,9 +655,27 @@ function buildCourse(durSecs){
       cur = segCurve(cur, -dir*angle, radius, eR, eL);        // back (no flush)
       cur = segStraight(cur, 12, eL, eR); // exit straight after S                     // exit straight
     } else if(type==='bumper_gauntlet'){
+      cur = segStraight(cur, 8, eL, eR);
+      buildBumpers(cur, rnd(2,4));
+      cur = segStraight(cur, 20, eL, eR);
+    } else if(type==='blade_zone'){
+      cur = segStraight(cur, 6, eL, eR);
+      buildBlade(cur);
+      cur = segStraight(cur, 16, eL, eR);
+    } else if(type==='wind_zone'){
+      cur = segStraight(cur, 5, eL, eR);
+      buildWindZone(cur, 18);
+      cur = segStraight(cur, 18, eL, eR);
+    } else if(type==='narrow_gate'){
+      cur = segStraight(cur, 10, eL, eR);
+      buildNarrowGate(cur);
+      cur = segStraight(cur, 6, eL, eR);
+      buildNarrowGate(cur);
+      cur = segStraight(cur, 10, eL, eR);
+    } else if(type==='trap_door'){
+      cur = segStraight(cur, 8, eL, eR);
+      buildTrapDoor(cur);
       cur = segStraight(cur, 12, eL, eR);
-      buildBumpers(cur, rnd(3,5));
-      cur = segStraight(cur, 25, eL, eR);
     } else if(type==='hammer_zone'){
       cur = segStraight(cur, 10, eL, eR);
       buildHammers(cur, rnd(2,3));
@@ -1178,6 +1281,9 @@ function loop(ts){
   if(phase==='racing'){
     updateTimer();
     updateHammers(dt);
+  updateBlades(dt);
+  updateWindZones();
+  updateTrapDoors(dt);
     const SUB = zorbs.length > 200 ? 1 : zorbs.length > 50 ? 2 : 3;
     for(let s=0;s<SUB;s++){zorbs.forEach(z=>stepPhysics(z,dt/SUB));ballCollide();}
 
