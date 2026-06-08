@@ -50,7 +50,7 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;}
 #mm{position:absolute;bottom:12px;right:12px;width:110px;height:110px;border-radius:50%;overflow:hidden;border:1px solid rgba(0,240,255,0.18);background:rgba(0,0,0,0.7);}
 #mmc{width:110px;height:110px;}
 #banner{position:absolute;top:45%;left:50%;transform:translate(-50%,-50%);font-size:34px;font-weight:900;letter-spacing:6px;color:#fff;text-shadow:0 0 30px #00f0ff;opacity:0;pointer-events:none;transition:opacity .3s;text-align:center;white-space:nowrap;}
-#kfeed{position:absolute;top:56px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:3px;pointer-events:none;}
+#kfeed{position:absolute;top:50px;right:12px;margin-top:160px;display:flex;flex-direction:column;align-items:flex-end;gap:2px;pointer-events:none;}
 .kf{font-size:11px;letter-spacing:1px;animation:kfa 2.5s forwards;}
 @keyframes kfa{0%{opacity:1;transform:translateY(0);}100%{opacity:0;transform:translateY(-16px);}}
 #speedline{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;opacity:0;transition:opacity 0.2s;}
@@ -69,6 +69,7 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;}
       <button class="cb" id="btn-wide" onclick="setCam('wide')">WIDE</button>
       <button class="cb" id="btn-top" onclick="setCam('top')">TOP</button>
       <button class="cb" id="btn-auto" onclick="setCam('auto')">AUTO</button>
+      <button class="cb" id="btn-free" onclick="setCam('free')">FREE</button>
     </div>
   </div>
   <div id="info">
@@ -782,8 +783,15 @@ function createZorb(name,isSub,col){
   const sz=(spawnNode?spawnNode.pos.z:START_POS.z)+(Math.random()-0.5)*(TW-1.6)*right.z;
   const sy=(spawnNode?spawnNode.floorY:START_POS.y)+BALL_R+0.3;
 
+  // Name label above ball
+  const nameLabel = document.createElement('div');
+  nameLabel.className = 'ball-name';
+  nameLabel.textContent = name;
+  nameLabel.style.cssText = `position:absolute;font-family:'Courier New',monospace;font-size:9px;font-weight:700;color:#${col.toString(16).padStart(6,'0')};text-shadow:0 0 6px #${col.toString(16).padStart(6,'0')};pointer-events:none;transform:translateX(-50%);white-space:nowrap;letter-spacing:1px;`;
+  document.getElementById('ui').appendChild(nameLabel);
+
   return {
-    name,isSub,color:col,mesh,ring,tLine,streaks,light,
+    name,isSub,color:col,nameLabel,mesh,ring,tLine,streaks,light,
     trailHistory:[],
     pos:new THREE.Vector3(sx,sy,sz),
     vel:new THREE.Vector3(0,0,0),
@@ -801,6 +809,7 @@ function createZorb(name,isSub,col){
 }
 
 function removeZorb(z){
+  if(z.nameLabel&&z.nameLabel.parentNode)z.nameLabel.parentNode.removeChild(z.nameLabel);
   scene.remove(z.mesh);
   if(z.tLine) scene.remove(z.tLine);
   z.streaks.forEach(s=>scene.remove(s));
@@ -896,17 +905,19 @@ function stepPhysics(z,dt){
       }
     }
 
-    // Fell off track - respawn at last safe node (lose time not race)
+    // Fell off track - ELIMINATED
     if(z.pos.y < node.floorY - 10){
-      // Find a safe node slightly behind current position
-      const respawnIdx = Math.max(0, z.nodeIdx - 3);
-      const rn = pathNodes[respawnIdx];
-      if(rn){
-        z.pos.set(rn.pos.x, rn.floorY + BALL_R + 0.5, rn.pos.z);
-        z.vel.set(rn.dir.x * MIN_FWD, 0, rn.dir.z * MIN_FWD);
-        z.nodeIdx = respawnIdx;
-        showKO('💀 FELL: '+z.name+' (respawning)', 0xff4400);
-      }
+      z.disqualified = true;
+      z.finished = true;
+      z.finishTime = performance.now();
+      const dqRank = zorbs.filter(r => r.finished).length;
+      z.rank = dqRank;
+      z.mesh.visible = false;
+      if(z.tLine) z.tLine.visible = false;
+      z.streaks.forEach(s => s.visible = false);
+      showKO('💀 ELIMINATED: '+z.name, 0xff2200);
+      const remaining = zorbs.filter(r => !r.finished);
+      if(remaining.length === 0 && zorbs.length > 0){ setTimeout(resetRace, 3000); }
       return;
     }
   }
@@ -946,7 +957,7 @@ function stepPhysics(z,dt){
     if(toFin.length()<4.5){
       z.finished=true; z.finishTime=performance.now();
       const rank=zorbs.filter(r=>r.finished).length; z.rank=rank;
-      if(rank===1){showBanner('🏆 WINNER: '+z.name,4500);setTimeout(resetRace,5500);}
+      if(rank===1){showBanner('🏆 WINNER: '+z.name,4500);setTimeout(showEndLeaderboard,4500);setTimeout(resetRace,16000);}
       showKO('🏁 #'+rank+': '+z.name,0xffff00);
     }
   }
@@ -1017,6 +1028,19 @@ function updateHammers(dt){
 
 // ── VISUALS ───────────────────────────────────────────
 function updateVisuals(z,frame){
+  // Update name label position
+  if(z.nameLabel){
+    if(z.finished||z.disqualified){ z.nameLabel.style.display='none'; return; }
+    const pos=z.pos.clone().add(new THREE.Vector3(0,1.2,0));
+    const proj=pos.project(camera);
+    const x=(proj.x*0.5+0.5)*canvas.clientWidth;
+    const y=(-proj.y*0.5+0.5)*canvas.clientHeight;
+    if(proj.z<1){
+      z.nameLabel.style.display='block';
+      z.nameLabel.style.left=x+'px';
+      z.nameLabel.style.top=y+'px';
+    } else { z.nameLabel.style.display='none'; }
+  }
   if(z.finished) return;
   const spd=Math.sqrt(z.vel.x*z.vel.x+z.vel.z*z.vel.z);
   const ns=Math.min(spd/MAX_SPD,1);
@@ -1065,7 +1089,11 @@ function updateCamera(dt){
   const lp=leader.pos;
   let mode=camMode;
   if(mode==='auto'){autoTimer+=dt;if(autoTimer>7){autoTimer=0;autoIdx=(autoIdx+1)%autoModes.length;}mode=autoModes[autoIdx];}
-  if(mode==='follow'){
+  if(mode==='free'){
+    // Free cam - WASD/arrow keys control it, no auto follow
+    // Just maintain current position, let keydown handle it
+    return;
+  } else if(mode==='follow'){
     const spd=Math.sqrt(leader.vel.x*leader.vel.x+leader.vel.z*leader.vel.z);
     let travelDir;
     if(spd>0.5){
@@ -1121,7 +1149,7 @@ function drawMinimap(){
 function updateLB(){
   const sorted=[...zorbs].sort((a,b)=>a.pos.distanceTo(FINISH_POS)-b.pos.distanceTo(FINISH_POS));
   const rows=document.getElementById('lbr'); rows.innerHTML='';
-  sorted.slice(0,10).forEach((z,i)=>{
+  sorted.slice(0,15).forEach((z,i)=>{
     const d=document.createElement('div'); d.className='lr';
     const spd=Math.sqrt(z.vel.x*z.vel.x+z.vel.z*z.vel.z);
     const dist=Math.round(z.pos.distanceTo(FINISH_POS));
@@ -1251,6 +1279,33 @@ function streamerStart(){
   },3000);
 }
 
+function showEndLeaderboard(){
+  // Show full scrolling leaderboard
+  const fin=[...zorbs].filter(z=>z.finished).sort((a,b)=>a.rank-b.rank);
+  const notFin=[...zorbs].filter(z=>!z.finished);
+  const all=[...fin,...notFin];
+  const overlay=document.createElement('div');
+  overlay.id='end-lb';
+  overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.88);z-index:999;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:40px;font-family:Courier New,monospace;overflow:hidden;';
+  overlay.innerHTML='<div style="font-size:28px;font-weight:900;letter-spacing:6px;color:#00f0ff;text-shadow:0 0 20px #00f0ff;margin-bottom:30px;">RACE RESULTS</div>';
+  const list=document.createElement('div');
+  list.style.cssText='width:100%;max-width:500px;display:flex;flex-direction:column;gap:6px;';
+  all.forEach((z,i)=>{
+    const row=document.createElement('div');
+    const col=i===0?'#ffd700':i===1?'#aaa':i===2?'#cd7f32':'#fff';
+    row.style.cssText=`display:flex;align-items:center;gap:12px;padding:8px 16px;background:rgba(255,255,255,0.05);border-radius:6px;border:1px solid rgba(255,255,255,0.08);`;
+    row.innerHTML=`<span style="color:${col};font-size:16px;width:30px;">${i+1}</span><span style="flex:1;color:#fff;font-size:14px;">${z.name}${z.isSub?'<span style="color:#ff00cc;font-size:10px;"> SUB</span>':''}</span><span style="color:${z.disqualified?'#ff4400':'#00ff88'};font-size:12px;">${z.disqualified?'ELIMINATED':z.finished?'FINISHED':'DNF'}</span>`;
+    list.appendChild(row);
+  });
+  overlay.appendChild(list);
+  document.body.appendChild(overlay);
+  // Auto scroll
+  let scrollY=0;
+  const scrollInt=setInterval(()=>{scrollY+=0.5;list.style.transform=`translateY(-${scrollY}px)`;if(scrollY>list.scrollHeight)clearInterval(scrollInt);},30);
+  // Remove after 12s
+  setTimeout(()=>{if(overlay.parentNode)overlay.parentNode.removeChild(overlay);clearInterval(scrollInt);},12000);
+}
+
 function resetRace(){
   zorbs.forEach(z=>removeZorb(z)); zorbs.length=0;
   phase='lobby'; raceStartTime=null; raceDurSecs=null;
@@ -1290,6 +1345,15 @@ setInterval(()=>{
 // Random gust events
 let frame=0;
 
+// Free cam state
+let freeCamTarget = new THREE.Vector3(0,10,0);
+let freeCamPhi = Math.PI/4, freeCamTheta = 0, freeCamDist = 30;
+document.addEventListener('wheel', e=>{
+  if(camMode==='free'){ freeCamDist=Math.max(5,Math.min(200,freeCamDist+e.deltaY*0.05)); }
+});
+let _freeKeys={};
+document.addEventListener('keydown',e=>{ _freeKeys[e.key]=true; });
+document.addEventListener('keyup',e=>{ _freeKeys[e.key]=false; });
 document.addEventListener('keydown',e=>{
   const ms=['follow','wide','top','auto'];
   if(e.key==='ArrowLeft'){const i=ms.indexOf(camMode);setCam(ms[(i-1+4)%4]);}
