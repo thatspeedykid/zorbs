@@ -3,514 +3,556 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ZORBS on Stream - Dashboard</title>
+<title>ZORBS Dashboard</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
 body{background:#05050f;color:#fff;font-family:'Courier New',monospace;min-height:100vh;}
-:root{--cyan:#00f0ff;--pink:#ff00cc;--green:#00ff88;--dark:#0a0a1e;}
+:root{--c:#00f0ff;--p:#ff00cc;--g:#00ff88;--y:#ffff00;--o:#ff8800;}
 
-/* ── NAV ── */
-#nav{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;background:rgba(0,240,255,0.04);border-bottom:1px solid rgba(0,240,255,0.12);}
-#logo{font-size:16px;font-weight:900;letter-spacing:4px;color:var(--cyan);text-shadow:0 0 14px var(--cyan);}
-#logo span{color:var(--pink);}
-#nav-tabs{display:flex;gap:4px;}
-.ntab{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.5);padding:6px 16px;border-radius:4px;font-size:11px;letter-spacing:2px;cursor:pointer;font-family:inherit;transition:all .15s;}
-.ntab.active,.ntab:hover{background:rgba(0,240,255,0.12);border-color:var(--cyan);color:var(--cyan);}
-#user-info{display:flex;align-items:center;gap:10px;font-size:11px;color:rgba(255,255,255,0.5);}
-#user-badge{background:rgba(0,240,255,0.1);border:1px solid var(--cyan);border-radius:20px;padding:4px 12px;color:var(--cyan);font-size:10px;}
-#btn-logout{background:rgba(255,0,80,0.1);border:1px solid rgba(255,0,80,0.3);color:#ff4060;padding:4px 12px;border-radius:4px;font-size:10px;cursor:pointer;font-family:inherit;}
+/* NAV */
+#nav{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;background:rgba(0,240,255,0.03);border-bottom:1px solid rgba(0,240,255,0.1);position:sticky;top:0;z-index:100;backdrop-filter:blur(10px);}
+#logo{font-size:15px;font-weight:900;letter-spacing:4px;color:var(--c);text-shadow:0 0 14px var(--c);}
+#logo span{color:var(--p);}
+#logo a{text-decoration:none;color:inherit;}
+#nav-right{display:flex;align-items:center;gap:12px;}
+.user-pill{background:rgba(0,240,255,0.08);border:1px solid rgba(0,240,255,0.2);border-radius:20px;padding:5px 14px;font-size:10px;letter-spacing:1px;color:var(--c);display:flex;align-items:center;gap:8px;}
+.user-pill .role-tag{background:rgba(255,0,204,0.15);border:1px solid var(--p);border-radius:10px;padding:1px 6px;font-size:8px;color:var(--p);}
+.user-pill .role-tag.admin{background:rgba(255,0,80,0.15);border-color:#ff4060;color:#ff4060;}
+#btn-logout{background:none;border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.3);padding:5px 12px;border-radius:4px;font-size:10px;cursor:pointer;font-family:inherit;transition:.2s;}
+#btn-logout:hover{border-color:rgba(255,0,80,0.4);color:#ff4060;}
 
-/* ── LOGIN SCREEN ── */
-#login-screen{display:flex;align-items:center;justify-content:center;min-height:calc(100vh - 57px);padding:20px;}
-.login-box{background:rgba(255,255,255,0.03);border:1px solid rgba(0,240,255,0.15);border-radius:16px;padding:40px;width:100%;max-width:400px;display:flex;flex-direction:column;gap:20px;align-items:center;}
-.login-box h2{font-size:20px;font-weight:900;letter-spacing:3px;color:var(--cyan);}
-.login-box p{font-size:11px;color:rgba(255,255,255,0.4);text-align:center;line-height:1.6;}
-.login-divider{width:100%;display:flex;align-items:center;gap:12px;color:rgba(255,255,255,0.2);font-size:10px;}
-.login-divider::before,.login-divider::after{content:'';flex:1;height:1px;background:rgba(255,255,255,0.1);}
-.input-group{width:100%;display:flex;flex-direction:column;gap:6px;}
-.input-group label{font-size:10px;letter-spacing:2px;color:rgba(255,255,255,0.4);}
-.input-group input{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:10px 14px;color:#fff;font-size:13px;font-family:inherit;outline:none;width:100%;}
-.input-group input:focus{border-color:var(--cyan);}
-.btn-primary{background:linear-gradient(135deg,rgba(0,240,255,0.15),rgba(255,0,204,0.1));border:1px solid var(--cyan);color:var(--cyan);padding:12px 24px;border-radius:8px;font-size:12px;letter-spacing:3px;cursor:pointer;font-family:inherit;width:100%;transition:all .2s;}
-.btn-primary:hover{background:rgba(0,240,255,0.2);}
-.btn-kick{background:linear-gradient(135deg,#1a1a2e,#16213e);border:2px solid #53fc18;color:#53fc18;padding:12px 24px;border-radius:8px;font-size:12px;letter-spacing:2px;cursor:pointer;font-family:inherit;width:100%;display:flex;align-items:center;justify-content:center;gap:10px;}
-.btn-kick:hover{background:rgba(83,252,24,0.1);}
-.kick-icon{width:20px;height:20px;background:#53fc18;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;color:#000;}
-.role-selector{display:flex;gap:8px;width:100%;}
-.role-btn{flex:1;padding:10px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.03);color:rgba(255,255,255,0.4);font-size:10px;letter-spacing:1px;cursor:pointer;font-family:inherit;transition:all .15s;text-align:center;}
-.role-btn.selected{border-color:var(--cyan);color:var(--cyan);background:rgba(0,240,255,0.08);}
+/* SIDEBAR */
+#layout{display:flex;min-height:calc(100vh - 53px);}
+#sidebar{width:200px;flex-shrink:0;background:rgba(0,0,0,0.3);border-right:1px solid rgba(255,255,255,0.05);padding:20px 0;}
+.nav-section{font-size:8px;letter-spacing:3px;color:rgba(255,255,255,0.2);padding:12px 20px 6px;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 20px;font-size:11px;letter-spacing:1px;color:rgba(255,255,255,0.45);cursor:pointer;transition:.15s;border-left:2px solid transparent;user-select:none;}
+.nav-item:hover{color:#fff;background:rgba(255,255,255,0.03);}
+.nav-item.active{color:var(--c);border-left-color:var(--c);background:rgba(0,240,255,0.05);}
+.nav-item.disabled{opacity:.3;cursor:not-allowed;pointer-events:none;}
+.nav-item .icon{width:16px;text-align:center;font-size:13px;}
+.nav-badge{margin-left:auto;background:rgba(255,0,204,0.2);border:1px solid var(--p);border-radius:10px;padding:1px 6px;font-size:8px;color:var(--p);}
+.coming-soon{margin-left:auto;font-size:8px;color:rgba(255,255,255,0.2);letter-spacing:1px;}
 
-/* ── DASHBOARD PANELS ── */
-#dashboard{display:none;padding:24px;}
-.panel-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:24px;}
-.card{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:20px;}
-.card h3{font-size:10px;letter-spacing:3px;color:rgba(255,255,255,0.35);margin-bottom:14px;}
-.stat-big{font-size:36px;font-weight:900;color:var(--cyan);text-shadow:0 0 20px rgba(0,240,255,0.4);}
-.stat-label{font-size:10px;color:rgba(255,255,255,0.3);margin-top:4px;letter-spacing:1px;}
-.stat-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:12px;}
-.stat-row:last-child{border-bottom:none;}
-.stat-row .val{color:var(--cyan);}
-.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:9px;letter-spacing:1px;}
-.badge.admin{background:rgba(255,0,80,0.15);border:1px solid rgba(255,0,80,0.3);color:#ff4060;}
-.badge.streamer{background:rgba(0,240,255,0.1);border:1px solid var(--cyan);color:var(--cyan);}
-.badge.active{background:rgba(0,255,136,0.1);border:1px solid var(--green);color:var(--green);}
-.badge.inactive{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.3);}
+/* MAIN */
+#main{flex:1;padding:28px;overflow-y:auto;}
 
-/* ── STREAMER TABLE ── */
-.table{width:100%;border-collapse:collapse;font-size:12px;}
-.table th{text-align:left;padding:8px 12px;font-size:9px;letter-spacing:2px;color:rgba(255,255,255,0.3);border-bottom:1px solid rgba(255,255,255,0.08);}
-.table td{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04);}
-.table tr:hover td{background:rgba(255,255,255,0.02);}
+/* LOGIN */
+#login-screen{display:flex;align-items:center;justify-content:center;min-height:calc(100vh - 53px);}
+.login-box{background:rgba(255,255,255,0.02);border:1px solid rgba(0,240,255,0.12);border-radius:16px;padding:40px;width:100%;max-width:380px;display:flex;flex-direction:column;gap:16px;align-items:center;}
+.login-title{font-size:18px;font-weight:900;letter-spacing:4px;color:var(--c);text-shadow:0 0 14px var(--c);}
+.login-sub{font-size:10px;color:rgba(255,255,255,0.3);text-align:center;line-height:1.7;letter-spacing:1px;}
+.btn-kick{width:100%;padding:13px;background:linear-gradient(135deg,#0d1a0d,#0a150a);border:2px solid #53fc18;color:#53fc18;border-radius:10px;font-size:12px;letter-spacing:2px;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:10px;transition:.2s;}
+.btn-kick:hover{background:rgba(83,252,24,0.08);box-shadow:0 0 20px rgba(83,252,24,0.15);}
+.k-icon{background:#53fc18;color:#000;width:22px;height:22px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:11px;flex-shrink:0;}
+.login-note{font-size:9px;color:rgba(255,255,255,0.2);text-align:center;line-height:1.6;}
+.login-note a{color:rgba(0,240,255,0.4);text-decoration:none;}
+.error-msg{background:rgba(255,0,80,0.08);border:1px solid rgba(255,0,80,0.25);border-radius:6px;padding:10px 14px;font-size:11px;color:#ff4060;width:100%;text-align:center;display:none;}
 
-/* ── TOGGLE ── */
-.toggle-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);}
+/* CARDS */
+.page{display:none;}.page.active{display:block;}
+.page-title{font-size:11px;letter-spacing:3px;color:rgba(255,255,255,0.25);margin-bottom:20px;}
+.grid{display:grid;gap:16px;}
+.grid-4{grid-template-columns:repeat(4,1fr);}
+.grid-2{grid-template-columns:repeat(2,1fr);}
+.card{background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:20px;}
+.card h3{font-size:9px;letter-spacing:3px;color:rgba(255,255,255,0.3);margin-bottom:12px;}
+.stat-big{font-size:34px;font-weight:900;color:var(--c);line-height:1;}
+.stat-label{font-size:9px;color:rgba(255,255,255,0.3);margin-top:6px;letter-spacing:1px;}
+.stat-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:11px;}
+.stat-row:last-child{border:none;}
+.stat-val{color:var(--c);}
+
+/* TABLE */
+.tbl{width:100%;border-collapse:collapse;font-size:11px;}
+.tbl th{text-align:left;padding:8px 12px;font-size:8px;letter-spacing:2px;color:rgba(255,255,255,0.25);border-bottom:1px solid rgba(255,255,255,0.06);}
+.tbl td{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.03);}
+.tbl tr:hover td{background:rgba(255,255,255,0.02);}
+
+/* BADGES */
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:8px;letter-spacing:1px;}
+.badge.admin{background:rgba(255,0,80,0.12);border:1px solid rgba(255,0,80,0.3);color:#ff4060;}
+.badge.live{background:rgba(0,255,136,0.1);border:1px solid var(--g);color:var(--g);}
+.badge.idle{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.3);}
+
+/* BUTTONS */
+.btn{padding:8px 16px;border-radius:6px;font-size:10px;letter-spacing:2px;cursor:pointer;font-family:inherit;border:1px solid;transition:.15s;}
+.btn-cyan{background:rgba(0,240,255,0.08);border-color:rgba(0,240,255,0.3);color:var(--c);}
+.btn-cyan:hover{background:rgba(0,240,255,0.18);}
+.btn-green{background:rgba(0,255,136,0.08);border-color:rgba(0,255,136,0.3);color:var(--g);}
+.btn-red{background:rgba(255,0,80,0.08);border-color:rgba(255,0,80,0.25);color:#ff4060;}
+.btn-big{padding:12px 28px;font-size:12px;}
+
+/* TOGGLE */
+.toggle-row{display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:1px solid rgba(255,255,255,0.04);}
 .toggle-row:last-child{border:none;}
-.toggle-label{font-size:12px;color:rgba(255,255,255,0.7);}
-.toggle-sub{font-size:10px;color:rgba(255,255,255,0.3);margin-top:2px;}
-.toggle{position:relative;width:40px;height:22px;flex-shrink:0;}
+.tl{font-size:12px;color:rgba(255,255,255,0.7);}
+.ts{font-size:9px;color:rgba(255,255,255,0.28);margin-top:2px;letter-spacing:.5px;}
+.toggle{position:relative;width:38px;height:21px;flex-shrink:0;}
 .toggle input{opacity:0;width:0;height:0;}
-.toggle-slider{position:absolute;inset:0;background:rgba(255,255,255,0.1);border-radius:22px;cursor:pointer;transition:.3s;}
-.toggle-slider::before{content:'';position:absolute;width:16px;height:16px;left:3px;top:3px;background:#666;border-radius:50%;transition:.3s;}
-.toggle input:checked+.toggle-slider{background:var(--cyan);}
-.toggle input:checked+.toggle-slider::before{transform:translateX(18px);background:#fff;}
+.tslider{position:absolute;inset:0;background:rgba(255,255,255,0.1);border-radius:21px;cursor:pointer;transition:.25s;}
+.tslider::before{content:'';position:absolute;width:15px;height:15px;left:3px;top:3px;background:#555;border-radius:50%;transition:.25s;}
+.toggle input:checked+.tslider{background:var(--c);}
+.toggle input:checked+.tslider::before{transform:translateX(17px);background:#fff;}
 
-/* ── ACTION BUTTONS ── */
-.btn-sm{background:rgba(0,240,255,0.08);border:1px solid rgba(0,240,255,0.25);color:var(--cyan);padding:5px 12px;border-radius:4px;font-size:10px;letter-spacing:1px;cursor:pointer;font-family:inherit;transition:all .15s;}
-.btn-sm:hover{background:rgba(0,240,255,0.2);}
-.btn-sm.danger{background:rgba(255,0,80,0.08);border-color:rgba(255,0,80,0.3);color:#ff4060;}
-.btn-sm.success{background:rgba(0,255,136,0.08);border-color:rgba(0,255,136,0.25);color:var(--green);}
-.section-title{font-size:11px;letter-spacing:3px;color:rgba(255,255,255,0.3);margin:24px 0 12px;text-transform:uppercase;}
-.flex-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+/* KICK STATUS */
+.kick-block{background:rgba(83,252,24,0.04);border:1px solid rgba(83,252,24,0.15);border-radius:8px;padding:14px 16px;display:flex;align-items:center;gap:12px;margin-bottom:12px;}
+.kick-block .k-icon{flex-shrink:0;}
+.kick-connected{color:#53fc18;font-size:12px;}
+.kick-disconnected{color:rgba(255,255,255,0.3);font-size:11px;}
 
-/* ── STREAMER RACE PANEL ── */
-#race-controls{background:rgba(0,240,255,0.04);border:1px solid rgba(0,240,255,0.12);border-radius:12px;padding:20px;margin-bottom:20px;}
-#race-controls h2{font-size:13px;letter-spacing:3px;color:var(--cyan);margin-bottom:16px;}
-.race-btn{padding:12px 28px;border-radius:8px;font-size:12px;letter-spacing:3px;cursor:pointer;font-family:inherit;transition:all .2s;}
-#btn-launch{background:linear-gradient(135deg,rgba(0,240,255,0.2),rgba(0,255,136,0.1));border:1px solid var(--cyan);color:var(--cyan);}
-#btn-launch:hover{background:rgba(0,240,255,0.3);}
-#race-status{display:flex;align-items:center;gap:8px;font-size:11px;padding:8px 14px;border-radius:6px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);}
-.status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
-.status-dot.live{background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 1.5s infinite;}
-.status-dot.idle{background:rgba(255,255,255,0.2);}
+/* RACE PANEL */
+.race-status{display:flex;align-items:center;gap:8px;padding:10px 16px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:8px;font-size:11px;}
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.dot.live{background:var(--g);box-shadow:0 0 8px var(--g);animation:pulse 1.5s infinite;}
+.dot.idle{background:rgba(255,255,255,0.2);}
 @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
 
-/* ── KICK AUTH STATUS ── */
-.kick-status{display:flex;align-items:center;gap:10px;padding:12px 16px;background:rgba(83,252,24,0.05);border:1px solid rgba(83,252,24,0.2);border-radius:8px;font-size:11px;}
-.kick-status .kick-icon{flex-shrink:0;}
-.kick-connected{color:#53fc18;}
-.kick-disconnected{color:rgba(255,255,255,0.4);}
+/* OBS */
+.obs-link{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:10px 14px;font-size:10px;color:rgba(255,255,255,0.4);letter-spacing:.5px;display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+.obs-link span{color:rgba(0,240,255,0.6);}
+
+/* LB TABLE */
+.lb-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:11px;}
+.lb-rank{width:28px;color:rgba(255,255,255,0.3);font-size:10px;}
+.lb-rank.gold{color:#ffd700;}
+.lb-rank.silver{color:#aaa;}
+.lb-rank.bronze{color:#cd7f32;}
+
+/* responsive */
+@media(max-width:700px){#sidebar{display:none;}#main{padding:16px;}.grid-4{grid-template-columns:1fr 1fr;}.grid-2{grid-template-columns:1fr;}}
 </style>
 </head>
 <body>
 
 <div id="nav">
-  <div id="logo">ZORBS <span>on</span> Stream</div>
-  <div id="nav-tabs">
-    <button class="ntab active" onclick="switchTab('overview')" id="tab-overview">OVERVIEW</button>
-    <button class="ntab" onclick="switchTab('streamers')" id="tab-streamers">STREAMERS</button>
-    <button class="ntab" onclick="switchTab('settings')" id="tab-settings">SETTINGS</button>
-    <button class="ntab" onclick="switchTab('race')" id="tab-race">RACE CONTROL</button>
-  </div>
-  <div id="user-info">
-    <span id="user-badge">NOT LOGGED IN</span>
+  <div id="logo"><a href="/">ZORBS <span>on</span> Stream</a></div>
+  <div id="nav-right">
+    <div class="user-pill" id="user-pill" style="display:none">
+      <span id="nav-username">—</span>
+      <span class="role-tag" id="nav-role">USER</span>
+    </div>
     <button id="btn-logout" onclick="logout()" style="display:none">LOGOUT</button>
   </div>
 </div>
 
-<!-- LOGIN SCREEN -->
+<!-- LOGIN -->
 <div id="login-screen">
   <div class="login-box">
-    <h2>DASHBOARD LOGIN</h2>
-    <p>Log in as Admin to manage the platform, or as a Streamer to control your races.</p>
-
-    <!-- Kick OAuth -->
+    <div class="login-title">DASHBOARD</div>
+    <div class="login-sub">Sign in with your Kick account.<br>Role is detected automatically.</div>
+    <div class="error-msg" id="err-msg"></div>
     <button class="btn-kick" onclick="kickLogin()">
-      <div class="kick-icon">K</div>
-      CONTINUE WITH KICK
+      <div class="k-icon">K</div>
+      SIGN IN WITH KICK
     </button>
-
-    <div class="login-divider">OR</div>
-
-    <!-- Role selector -->
-    <div class="input-group">
-      <label>ROLE</label>
-      <div class="role-selector">
-        <button class="role-btn selected" id="role-admin" onclick="selectRole('admin')">ADMIN</button>
-        <button class="role-btn" id="role-streamer" onclick="selectRole('streamer')">STREAMER</button>
-      </div>
+    <div class="login-note">
+      Admins, streamers & chatters all use the same login.<br>
+      Your role is determined by your Kick account.<br><br>
+      <!-- Future: Twitch & YouTube support coming soon -->
+      <span style="opacity:.4">Twitch &amp; YouTube login — coming soon</span>
     </div>
-
-    <div class="input-group">
-      <label>USERNAME</label>
-      <input type="text" id="login-user" placeholder="your username" autocomplete="username"/>
-    </div>
-    <div class="input-group">
-      <label>PASSWORD</label>
-      <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password"/>
-    </div>
-    <div id="login-err" style="color:#ff4060;font-size:11px;display:none;"></div>
-    <button class="btn-primary" onclick="doLogin()">LOG IN</button>
-
-    <a href="/" style="font-size:10px;color:rgba(255,255,255,0.25);text-decoration:none;letter-spacing:1px;">← BACK TO GAME</a>
+    <a href="/" style="font-size:9px;color:rgba(255,255,255,0.2);text-decoration:none;letter-spacing:2px;">← BACK TO GAME</a>
   </div>
 </div>
 
 <!-- DASHBOARD -->
-<div id="dashboard">
+<div id="dashboard" style="display:none;">
+  <div id="layout">
 
-  <!-- OVERVIEW TAB -->
-  <div id="panel-overview">
-    <div class="panel-grid">
-      <div class="card">
-        <h3>TOTAL STREAMERS</h3>
-        <div class="stat-big" id="stat-streamers">0</div>
-        <div class="stat-label">REGISTERED</div>
-      </div>
-      <div class="card">
-        <h3>TOTAL RACES TODAY</h3>
-        <div class="stat-big" id="stat-races">0</div>
-        <div class="stat-label">ACROSS ALL CHANNELS</div>
-      </div>
-      <div class="card">
-        <h3>ACTIVE RIGHT NOW</h3>
-        <div class="stat-big" id="stat-active" style="color:var(--green)">0</div>
-        <div class="stat-label">LIVE SESSIONS</div>
-      </div>
-      <div class="card">
-        <h3>TOTAL PLAYERS</h3>
-        <div class="stat-big" id="stat-players">0</div>
-        <div class="stat-label">ALL TIME CHATTERS</div>
-      </div>
+    <!-- SIDEBAR -->
+    <div id="sidebar">
+      <div class="nav-section">MAIN</div>
+      <div class="nav-item active" onclick="showPage('overview')" id="ni-overview"><span class="icon">◈</span> OVERVIEW</div>
+      <div class="nav-item" onclick="showPage('races')" id="ni-races"><span class="icon">🏁</span> MY RACES</div>
+      <div class="nav-item" onclick="showPage('leaderboard')" id="ni-leaderboard"><span class="icon">◉</span> LEADERBOARD</div>
+
+      <div class="nav-section">STREAM</div>
+      <div class="nav-item" onclick="showPage('race-control')" id="ni-race-control"><span class="icon">▶</span> RACE CONTROL</div>
+      <div class="nav-item" onclick="showPage('obs')" id="ni-obs"><span class="icon">◎</span> OBS LINKS</div>
+      <div class="nav-item" onclick="showPage('bot')" id="ni-bot"><span class="icon">⚙</span> BOT SETUP</div>
+
+      <div class="nav-section">ACCOUNT</div>
+      <div class="nav-item" onclick="showPage('settings')" id="ni-settings"><span class="icon">◧</span> SETTINGS</div>
+      <div class="nav-item disabled"><span class="icon">🛍</span> MARKETPLACE <span class="coming-soon">SOON</span></div>
+
+      <div class="nav-section admin-only" style="display:none">ADMIN</div>
+      <div class="nav-item admin-only" style="display:none" onclick="showPage('admin-streamers')" id="ni-admin-streamers"><span class="icon">◈</span> ALL STREAMERS</div>
+      <div class="nav-item admin-only" style="display:none" onclick="showPage('admin-settings')" id="ni-admin-settings"><span class="icon">◧</span> PLATFORM</div>
     </div>
 
-    <div class="section-title">Recent Activity</div>
-    <div class="card">
-      <div id="activity-feed" style="display:flex;flex-direction:column;gap:4px;">
-        <div class="stat-row"><span>No activity yet</span><span class="val">—</span></div>
-      </div>
-    </div>
-  </div>
+    <!-- MAIN CONTENT -->
+    <div id="main">
 
-  <!-- STREAMERS TAB -->
-  <div id="panel-streamers" style="display:none">
-    <div class="flex-row" style="margin-bottom:16px;">
-      <div class="section-title" style="margin:0">ALL STREAMERS</div>
-      <button class="btn-sm success" onclick="inviteStreamer()">+ INVITE STREAMER</button>
-    </div>
-    <div class="card">
-      <table class="table">
-        <thead>
-          <tr>
-            <th>NAME</th><th>KICK CHANNEL</th><th>RACES</th><th>PLAYERS</th><th>STATUS</th><th>ACTIONS</th>
-          </tr>
-        </thead>
-        <tbody id="streamers-table">
-          <tr><td colspan="6" style="color:rgba(255,255,255,0.3);text-align:center;padding:20px;">No streamers yet</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- SETTINGS TAB -->
-  <div id="panel-settings" style="display:none">
-    <div class="panel-grid" style="grid-template-columns:1fr 1fr;">
-      <div class="card">
-        <h3>GAME SETTINGS</h3>
-        <div class="toggle-row">
-          <div><div class="toggle-label">Bot Players</div><div class="toggle-sub">Show fake players when lobby is empty</div></div>
-          <label class="toggle"><input type="checkbox" id="tog-bots" checked onchange="saveSetting('bots',this.checked)"><span class="toggle-slider"></span></label>
+      <!-- OVERVIEW -->
+      <div class="page active" id="page-overview">
+        <div class="page-title">OVERVIEW</div>
+        <div class="grid grid-4" style="margin-bottom:20px;">
+          <div class="card"><h3>TOTAL RACES</h3><div class="stat-big" id="ov-races">0</div><div class="stat-label">ALL TIME</div></div>
+          <div class="card"><h3>PLAYERS RACED</h3><div class="stat-big" id="ov-players">0</div><div class="stat-label">UNIQUE CHATTERS</div></div>
+          <div class="card"><h3>WINS</h3><div class="stat-big" id="ov-wins" style="color:var(--y)">0</div><div class="stat-label">1ST PLACE FINISHES</div></div>
+          <div class="card"><h3>CHANNEL</h3><div class="stat-big" id="ov-channel" style="font-size:16px;margin-top:6px;color:#53fc18">—</div><div class="stat-label">KICK CHANNEL</div></div>
         </div>
-        <div class="toggle-row">
-          <div><div class="toggle-label">Auto-Start Races</div><div class="toggle-sub">Start race automatically when lobby fills</div></div>
-          <label class="toggle"><input type="checkbox" id="tog-autostart" onchange="saveSetting('autostart',this.checked)"><span class="toggle-slider"></span></label>
-        </div>
-        <div class="toggle-row">
-          <div><div class="toggle-label">Allow Elimination</div><div class="toggle-sub">Balls that fall off are eliminated</div></div>
-          <label class="toggle"><input type="checkbox" id="tog-elim" checked onchange="saveSetting('elimination',this.checked)"><span class="toggle-slider"></span></label>
-        </div>
-        <div class="toggle-row">
-          <div><div class="toggle-label">Max Players</div><div class="toggle-sub">Per race session</div></div>
-          <select style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);color:#fff;padding:4px 8px;border-radius:4px;font-family:inherit;font-size:11px;" onchange="saveSetting('maxPlayers',this.value)">
-            <option>100</option><option>250</option><option selected>500</option><option>1000</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="card">
-        <h3>KICK.COM INTEGRATION</h3>
-        <div class="kick-status" id="kick-status">
-          <div class="kick-icon">K</div>
-          <div>
-            <div class="kick-disconnected" id="kick-status-text">Not connected</div>
-            <div style="font-size:10px;color:rgba(255,255,255,0.3);margin-top:2px;">Connect to enable Kick chat integration</div>
+        <div class="grid grid-2">
+          <div class="card">
+            <h3>RECENT RACES</h3>
+            <div id="ov-recent"><div class="stat-row"><span style="color:rgba(255,255,255,0.2)">No races yet</span></div></div>
+          </div>
+          <div class="card">
+            <h3>TOP CHATTERS</h3>
+            <div id="ov-top-chatters"><div class="stat-row"><span style="color:rgba(255,255,255,0.2)">No data yet</span></div></div>
           </div>
         </div>
-        <div style="height:12px;"></div>
-        <button class="btn-kick" onclick="kickLogin()" style="font-size:11px;padding:10px;">
-          <div class="kick-icon">K</div>CONNECT KICK ACCOUNT
-        </button>
-        <div style="margin-top:12px;font-size:10px;color:rgba(255,255,255,0.3);line-height:1.7;">
-          Once connected:<br>
-          • Chat commands (!play, !boost) work automatically<br>
-          • Sub status detected for perks<br>
-          • Player names pulled from Kick chat
+      </div>
+
+      <!-- MY RACES -->
+      <div class="page" id="page-races">
+        <div class="page-title">MY RACES</div>
+        <div class="card">
+          <table class="tbl">
+            <thead><tr><th>DATE</th><th>CHANNEL</th><th>PLAYERS</th><th>WINNER</th><th>DURATION</th></tr></thead>
+            <tbody id="races-table"><tr><td colspan="5" style="color:rgba(255,255,255,0.2);padding:20px;text-align:center">No races recorded yet</td></tr></tbody>
+          </table>
         </div>
       </div>
 
-      <div class="card">
-        <h3>ADMIN ACCOUNTS</h3>
-        <div id="admin-list" style="margin-bottom:12px;">
-          <div class="stat-row"><span>thatspeedykid</span><span class="badge admin">OWNER</span></div>
-        </div>
-        <button class="btn-sm" onclick="addAdmin()">+ ADD ADMIN</button>
-      </div>
-
-      <div class="card">
-        <h3>PLATFORM INFO</h3>
-        <div class="stat-row"><span>Version</span><span class="val">v2.0</span></div>
-        <div class="stat-row"><span>Domain</span><span class="val">playzorbs.xyz</span></div>
-        <div class="stat-row"><span>Host</span><span class="val">Vercel</span></div>
-        <div class="stat-row"><span>GitHub</span><span class="val">thatspeedykid/zorbs</span></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- RACE CONTROL TAB (Streamer view) -->
-  <div id="panel-race" style="display:none">
-    <div id="race-controls">
-      <h2>RACE CONTROL</h2>
-      <div class="flex-row">
-        <div id="race-status">
-          <div class="status-dot idle" id="status-dot"></div>
-          <span id="status-text">No active race</span>
-        </div>
-        <input id="race-duration" type="text" placeholder="Duration e.g. 3m" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);color:#fff;padding:8px 14px;border-radius:6px;font-family:inherit;font-size:12px;width:130px;outline:none;">
-        <button class="race-btn" id="btn-launch" onclick="launchRace()">▶ START RACE</button>
-        <button class="race-btn btn-sm danger" onclick="endRace()" style="display:none" id="btn-end">■ END RACE</button>
-      </div>
-    </div>
-
-    <div class="panel-grid">
-      <div class="card">
-        <h3>CURRENT LOBBY</h3>
-        <div class="stat-big" id="lobby-count">0</div>
-        <div class="stat-label">PLAYERS JOINED</div>
-      </div>
-      <div class="card">
-        <h3>YOUR KICK CHANNEL</h3>
-        <div class="kick-status">
-          <div class="kick-icon">K</div>
-          <div id="streamer-kick-status" class="kick-disconnected">Connect Kick to enable chat commands</div>
-        </div>
-        <div style="height:8px;"></div>
-        <button class="btn-kick" onclick="kickLogin()" style="font-size:10px;padding:8px;">CONNECT KICK</button>
-      </div>
-      <div class="card">
-        <h3>STREAMER SETTINGS</h3>
-        <div class="toggle-row">
-          <div><div class="toggle-label">Show Bots</div><div class="toggle-sub">Fill empty lobby with demo bots</div></div>
-          <label class="toggle"><input type="checkbox" id="tog-streamer-bots" checked><span class="toggle-slider"></span></label>
-        </div>
-        <div class="toggle-row">
-          <div><div class="toggle-label">Auto Reset</div><div class="toggle-sub">Auto-start next race after finish</div></div>
-          <label class="toggle"><input type="checkbox" id="tog-auto-reset"><span class="toggle-slider"></span></label>
+      <!-- LEADERBOARD -->
+      <div class="page" id="page-leaderboard">
+        <div class="page-title">LEADERBOARD</div>
+        <div class="grid grid-2">
+          <div class="card">
+            <h3>YOUR BEST RESULTS</h3>
+            <div id="lb-personal"><div class="stat-row"><span style="color:rgba(255,255,255,0.2)">No results yet</span></div></div>
+          </div>
+          <div class="card">
+            <h3>GLOBAL TOP PLAYERS</h3>
+            <div id="lb-global">
+              <div class="lb-row"><div class="lb-rank gold">1</div><div>StreamKing</div><div style="margin-left:auto;color:var(--c)">47 wins</div></div>
+              <div class="lb-row"><div class="lb-rank silver">2</div><div>DataSurge</div><div style="margin-left:auto;color:var(--c)">31 wins</div></div>
+              <div class="lb-row"><div class="lb-rank bronze">3</div><div>NightFox</div><div style="margin-left:auto;color:var(--c)">18 wins</div></div>
+              <div class="lb-row"><div class="lb-rank">4</div><div>CyberZorb</div><div style="margin-left:auto;color:var(--c)">12 wins</div></div>
+              <div class="lb-row"><div class="lb-rank">5</div><div>VoidRunner</div><div style="margin-left:auto;color:var(--c)">9 wins</div></div>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
 
-    <div class="section-title">Recent Race Results</div>
-    <div class="card">
-      <table class="table">
-        <thead><tr><th>#</th><th>PLAYER</th><th>RESULT</th><th>TIME</th></tr></thead>
-        <tbody id="race-results"><tr><td colspan="4" style="color:rgba(255,255,255,0.3);text-align:center;padding:16px;">No races yet</td></tr></tbody>
-      </table>
-    </div>
-  </div>
+      <!-- RACE CONTROL -->
+      <div class="page" id="page-race-control">
+        <div class="page-title">RACE CONTROL</div>
+        <div class="card" style="margin-bottom:16px;">
+          <h3>LAUNCH A RACE</h3>
+          <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
+            <div class="race-status"><div class="dot idle" id="rc-dot"></div><span id="rc-status">No active race</span></div>
+            <input id="rc-dur" type="text" placeholder="Duration e.g. 3m" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);color:#fff;padding:8px 14px;border-radius:6px;font-family:inherit;font-size:11px;width:140px;outline:none;">
+            <button class="btn btn-cyan btn-big" onclick="launchRace()">▶ LAUNCH RACE</button>
+          </div>
+          <div style="font-size:10px;color:rgba(255,255,255,0.25);line-height:1.7;">
+            Launches the game in a new tab with your streamer controls.<br>
+            Share the URL with your viewers or embed as a browser source in OBS.
+          </div>
+        </div>
+        <div class="grid grid-2">
+          <div class="card">
+            <h3>KICK CONNECTION</h3>
+            <div class="kick-block" id="rc-kick-block">
+              <div class="k-icon">K</div>
+              <div id="rc-kick-text" class="kick-disconnected">Not connected</div>
+            </div>
+            <button class="btn-kick" onclick="kickLogin()" style="font-size:10px;padding:9px;">CONNECT KICK CHANNEL</button>
+          </div>
+          <div class="card">
+            <h3>RACE SETTINGS</h3>
+            <div class="toggle-row"><div><div class="tl">Show Bots</div><div class="ts">Fill empty lobby with demo bots</div></div><label class="toggle"><input type="checkbox" id="tog-bots" checked><span class="tslider"></span></label></div>
+            <div class="toggle-row"><div><div class="tl">Auto Reset</div><div class="ts">Auto-start next race after finish</div></div><label class="toggle"><input type="checkbox" id="tog-autoreset"><span class="tslider"></span></label></div>
+            <div class="toggle-row"><div><div class="tl">Elimination On</div><div class="ts">Balls that fall off get DQ'd</div></div><label class="toggle"><input type="checkbox" id="tog-elim" checked><span class="tslider"></span></label></div>
+          </div>
+        </div>
+      </div>
 
+      <!-- OBS LINKS -->
+      <div class="page" id="page-obs">
+        <div class="page-title">OBS OVERLAY LINKS</div>
+        <div class="card" style="margin-bottom:16px;">
+          <h3>BROWSER SOURCES</h3>
+          <p style="font-size:10px;color:rgba(255,255,255,0.3);margin-bottom:16px;line-height:1.7;">Add these as Browser Sources in OBS. Set width 1920, height 1080, transparent background.</p>
+          <div class="obs-link"><span>FULL GAME VIEW</span> <span id="obs-game">playzorbs.xyz/?streamer=you</span></div>
+          <div class="obs-link"><span>LEADERBOARD ONLY</span> <span id="obs-lb">playzorbs.xyz/overlay/lb?ch=you</span></div>
+          <div class="obs-link"><span>ALERTS ONLY</span> <span id="obs-alerts">playzorbs.xyz/overlay/alerts?ch=you</span></div>
+        </div>
+        <div class="card">
+          <h3>CHAT COMMANDS</h3>
+          <div class="stat-row"><span style="color:var(--c)">!play</span><span>Join the current race lobby</span></div>
+          <div class="stat-row"><span style="color:var(--c)">!boost</span><span>Use a speed boost (2 per race)</span></div>
+          <div class="stat-row"><span style="color:var(--p)">!play (sub)</span><span>Subs get mega boost (2.2x)</span></div>
+        </div>
+      </div>
+
+      <!-- BOT SETUP -->
+      <div class="page" id="page-bot">
+        <div class="page-title">BOT SETUP</div>
+        <div class="card" style="margin-bottom:16px;">
+          <h3>CONNECT BOT TO YOUR CHANNEL</h3>
+          <p style="font-size:10px;color:rgba(255,255,255,0.3);margin-bottom:16px;line-height:1.8;">
+            The ZORBS bot reads your Kick chat and automatically handles !play and !boost commands.<br>
+            Connect your Kick channel below to enable live chat integration.
+          </p>
+          <div class="kick-block" id="bot-kick-block">
+            <div class="k-icon">K</div>
+            <div id="bot-kick-text" class="kick-disconnected">Connect your Kick channel to enable the bot</div>
+          </div>
+          <button class="btn-kick" onclick="kickLogin()" style="font-size:10px;padding:9px;max-width:280px;">CONNECT KICK CHANNEL</button>
+        </div>
+        <div class="card">
+          <h3>BOT STATUS</h3>
+          <div class="stat-row"><span>Bot Account</span><span class="stat-val">@ZorbsBot</span></div>
+          <div class="stat-row"><span>Channel</span><span id="bot-channel" class="stat-val">—</span></div>
+          <div class="stat-row"><span>Status</span><span id="bot-status" class="badge idle">OFFLINE</span></div>
+          <div class="stat-row"><span>Commands Handled Today</span><span id="bot-cmds" class="stat-val">0</span></div>
+        </div>
+      </div>
+
+      <!-- SETTINGS -->
+      <div class="page" id="page-settings">
+        <div class="page-title">ACCOUNT SETTINGS</div>
+        <div class="grid grid-2">
+          <div class="card">
+            <h3>KICK ACCOUNT</h3>
+            <div class="kick-block">
+              <div class="k-icon">K</div>
+              <div>
+                <div class="kick-connected" id="set-kick-user">Not connected</div>
+                <div style="font-size:9px;color:rgba(255,255,255,0.25);margin-top:2px;">Kick account</div>
+              </div>
+            </div>
+            <button class="btn-kick" onclick="kickLogin()" style="font-size:10px;padding:9px;">RECONNECT KICK</button>
+            <div style="margin-top:16px;font-size:9px;color:rgba(255,255,255,0.2);line-height:1.7;">
+              Future integrations (coming soon):<br>
+              <span style="opacity:.5">Twitch · YouTube · Discord</span>
+            </div>
+          </div>
+          <div class="card">
+            <h3>NOTIFICATIONS</h3>
+            <div class="toggle-row"><div><div class="tl">Race Start Alerts</div></div><label class="toggle"><input type="checkbox" checked><span class="tslider"></span></label></div>
+            <div class="toggle-row"><div><div class="tl">Win Notifications</div></div><label class="toggle"><input type="checkbox" checked><span class="tslider"></span></label></div>
+            <div class="toggle-row"><div><div class="tl">New Follower Joined</div></div><label class="toggle"><input type="checkbox"><span class="tslider"></span></label></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ADMIN: ALL STREAMERS -->
+      <div class="page" id="page-admin-streamers">
+        <div class="page-title">ALL STREAMERS — ADMIN VIEW</div>
+        <div style="display:flex;gap:10px;margin-bottom:16px;">
+          <button class="btn btn-green" onclick="inviteStreamer()">+ INVITE STREAMER</button>
+        </div>
+        <div class="card">
+          <table class="tbl">
+            <thead><tr><th>KICK USERNAME</th><th>RACES</th><th>PLAYERS</th><th>STATUS</th><th>JOINED</th><th>ACTIONS</th></tr></thead>
+            <tbody id="admin-streamers-table">
+              <tr><td colspan="6" style="color:rgba(255,255,255,0.2);padding:20px;text-align:center">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ADMIN: PLATFORM -->
+      <div class="page" id="page-admin-settings">
+        <div class="page-title">PLATFORM SETTINGS — ADMIN</div>
+        <div class="grid grid-2">
+          <div class="card">
+            <h3>PLATFORM STATS</h3>
+            <div class="stat-row"><span>Total Registered Users</span><span class="stat-val" id="adm-users">—</span></div>
+            <div class="stat-row"><span>Total Races (all time)</span><span class="stat-val" id="adm-races">—</span></div>
+            <div class="stat-row"><span>Active Sessions</span><span class="stat-val" id="adm-active">—</span></div>
+            <div class="stat-row"><span>Version</span><span class="stat-val">v2.0</span></div>
+          </div>
+          <div class="card">
+            <h3>GLOBAL TOGGLES</h3>
+            <div class="toggle-row"><div><div class="tl">Maintenance Mode</div><div class="ts">Block all new sessions</div></div><label class="toggle"><input type="checkbox"><span class="tslider"></span></label></div>
+            <div class="toggle-row"><div><div class="tl">New Registrations</div><div class="ts">Allow new Kick logins</div></div><label class="toggle"><input type="checkbox" checked><span class="tslider"></span></label></div>
+            <div class="toggle-row"><div><div class="tl">Auto-Play Mode</div><div class="ts">playzorbs.xyz open sessions</div></div><label class="toggle"><input type="checkbox" checked><span class="tslider"></span></label></div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- end main -->
+  </div><!-- end layout -->
 </div><!-- end dashboard -->
 
 <script>
-// ── AUTH STATE ─────────────────────────────────────────
-let currentUser = null;
-let currentRole = 'admin';
-let selectedRole = 'admin';
+// ── KICK OAUTH ─────────────────────────────────────────
+const KICK_CLIENT_ID = '01KTMSSQ3PNEAA8EYYX1T6T4CK';
+const KICK_REDIRECT  = 'https://playzorbs.xyz/auth/kick/callback';
+const ADMIN_NAMES    = ['thatspeedykid']; // add more admins here
 
-// Demo credentials (replace with real backend later)
-const ADMIN_CREDS = { username:'admin', password:'zorbs2024!' };
-const STREAMER_DEMO = { username:'streamer', password:'stream123' };
-
-// Check if already logged in (sessionStorage)
-window.addEventListener('load', ()=>{
-  const saved = sessionStorage.getItem('zorbs_user');
-  if(saved){
-    currentUser = JSON.parse(saved);
-    showDashboard();
-  }
-});
-
-function selectRole(role){
-  selectedRole = role;
-  document.getElementById('role-admin').className = 'role-btn'+(role==='admin'?' selected':'');
-  document.getElementById('role-streamer').className = 'role-btn'+(role==='streamer'?' selected':'');
-}
-
-function doLogin(){
-  const u = document.getElementById('login-user').value.trim();
-  const p = document.getElementById('login-pass').value;
-  const err = document.getElementById('login-err');
-
-  // Validate
-  let valid = false;
-  let role = selectedRole;
-
-  if(role==='admin' && u===ADMIN_CREDS.username && p===ADMIN_CREDS.password) valid=true;
-  if(role==='streamer' && u===STREAMER_DEMO.username && p===STREAMER_DEMO.password) valid=true;
-  // Also allow kick-authed users
-  const kickUser = sessionStorage.getItem('kick_user');
-  if(kickUser) valid=true;
-
-  if(!valid){ err.textContent='Invalid credentials.'; err.style.display='block'; return; }
-  err.style.display='none';
-
-  currentUser = { username: u||kickUser, role, kickConnected: !!kickUser };
-  sessionStorage.setItem('zorbs_user', JSON.stringify(currentUser));
-  showDashboard();
-}
+let session = null;
 
 function kickLogin(){
-  // Kick OAuth flow - redirect to Kick auth
-  // In production: redirect to https://kick.com/oauth2/authorize?...
-  // For now simulate with a prompt
-  const kickUser = prompt('Enter your Kick username to connect:');
-  if(kickUser){
-    sessionStorage.setItem('kick_user', kickUser);
-    alert('Kick account "'+kickUser+'" connected! You can now log in as a Streamer.');
-    document.getElementById('login-user').value = kickUser;
-    selectRole('streamer');
-    // Update kick status
-    updateKickStatus(kickUser);
-  }
-}
-
-function updateKickStatus(username){
-  const els = document.querySelectorAll('#kick-status-text, #streamer-kick-status');
-  els.forEach(el=>{
-    el.textContent = '✓ Connected as @'+username;
-    el.className = 'kick-connected';
+  const state = Math.random().toString(36).slice(2);
+  sessionStorage.setItem('kick_state', state);
+  const params = new URLSearchParams({
+    client_id: KICK_CLIENT_ID,
+    redirect_uri: KICK_REDIRECT,
+    response_type: 'code',
+    scope: 'user:read channel:read',
+    state,
   });
+  window.location.href = 'https://id.kick.com/oauth/authorize?' + params;
 }
 
 function logout(){
-  sessionStorage.removeItem('zorbs_user');
-  sessionStorage.removeItem('kick_user');
-  currentUser = null;
-  document.getElementById('login-screen').style.display='flex';
-  document.getElementById('dashboard').style.display='none';
-  document.getElementById('user-badge').textContent='NOT LOGGED IN';
-  document.getElementById('btn-logout').style.display='none';
+  sessionStorage.removeItem('zorbs_session');
+  session = null;
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('user-pill').style.display = 'none';
+  document.getElementById('btn-logout').style.display = 'none';
 }
 
-function showDashboard(){
-  document.getElementById('login-screen').style.display='none';
-  document.getElementById('dashboard').style.display='block';
-  document.getElementById('user-badge').textContent=currentUser.username.toUpperCase()+' · '+(currentUser.role==='admin'?'ADMIN':'STREAMER');
-  document.getElementById('btn-logout').style.display='block';
+// ── SESSION HANDLING ───────────────────────────────────
+function initFromSession(s){
+  session = s;
+  sessionStorage.setItem('zorbs_session', JSON.stringify(s));
 
-  // Hide admin-only tabs for streamers
-  if(currentUser.role==='streamer'){
-    document.getElementById('tab-streamers').style.display='none';
-    // Default to race tab for streamers
-    switchTab('race');
-  } else {
-    // Admin defaults to overview
-    switchTab('overview');
-    loadAdminStats();
+  // Update nav
+  document.getElementById('nav-username').textContent = '@' + s.username;
+  document.getElementById('nav-role').textContent = s.role === 'admin' ? 'ADMIN' : 'USER';
+  if(s.role === 'admin') document.getElementById('nav-role').classList.add('admin');
+  document.getElementById('user-pill').style.display = 'flex';
+  document.getElementById('btn-logout').style.display = 'block';
+
+  // Show dashboard
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'block';
+
+  // Show admin sections if admin
+  if(s.role === 'admin'){
+    document.querySelectorAll('.admin-only').forEach(el => el.style.display = '');
   }
 
-  // Check kick connection
-  const kickUser = sessionStorage.getItem('kick_user');
-  if(kickUser) updateKickStatus(kickUser);
-}
+  // Fill in user data
+  document.getElementById('ov-channel').textContent = s.username;
+  document.getElementById('set-kick-user').textContent = '@' + s.username;
+  const obsBase = 'playzorbs.xyz/?streamer=' + s.username;
+  document.getElementById('obs-game').textContent = obsBase;
+  document.getElementById('obs-lb').textContent = 'playzorbs.xyz/overlay/lb?ch=' + s.username;
+  document.getElementById('obs-alerts').textContent = 'playzorbs.xyz/overlay/alerts?ch=' + s.username;
+  document.getElementById('bot-channel').textContent = '@' + s.username;
+  document.getElementById('bot-status').textContent = 'READY';
+  document.getElementById('bot-status').className = 'badge live';
 
-// ── TAB SWITCHING ──────────────────────────────────────
-function switchTab(tab){
-  ['overview','streamers','settings','race'].forEach(t=>{
-    document.getElementById('panel-'+t).style.display = t===tab?'block':'none';
-    const el=document.getElementById('tab-'+t);
-    if(el) el.className='ntab'+(t===tab?' active':'');
+  // Kick connected status
+  const kickTxt = '✓ Connected as @' + s.username;
+  ['rc-kick-text','bot-kick-text'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el){ el.textContent = kickTxt; el.className = 'kick-connected'; }
   });
+
+  // Load demo data (replace with real API later)
+  loadDemoData(s);
 }
 
-// ── ADMIN STATS (demo data - replace with real API) ────
-function loadAdminStats(){
-  // Fake stats for now
-  document.getElementById('stat-streamers').textContent='3';
-  document.getElementById('stat-races').textContent='47';
-  document.getElementById('stat-active').textContent='1';
-  document.getElementById('stat-players').textContent='1,284';
+function loadDemoData(s){
+  document.getElementById('ov-races').textContent = '12';
+  document.getElementById('ov-players').textContent = '347';
+  document.getElementById('ov-wins').textContent = '3';
 
-  // Demo activity
-  const activity=[
-    {time:'2m ago',event:'Race finished on StreamKing channel',val:'12 players'},
-    {time:'8m ago',event:'New streamer registered: NightFox',val:'streamer'},
-    {time:'15m ago',event:'Race started on DataSurge channel',val:'8 players'},
-    {time:'1h ago',event:'New player record: 1,284 total',val:'milestone'},
-  ];
-  const feed=document.getElementById('activity-feed');
-  feed.innerHTML=activity.map(a=>`<div class="stat-row"><span>${a.time} — ${a.event}</span><span class="val">${a.val}</span></div>`).join('');
+  document.getElementById('ov-recent').innerHTML = [
+    {date:'Today 5:42pm', players:8, winner:'NightFox'},
+    {date:'Today 3:18pm', players:14, winner:'StreamKing'},
+    {date:'Yesterday',    players:22, winner: s.username},
+  ].map(r=>`<div class="stat-row"><span>${r.date} · ${r.players} players</span><span class="stat-val">🏆 ${r.winner}</span></div>`).join('');
 
-  // Demo streamers table
-  const streamers=[
-    {name:'StreamKing',kick:'streamking',races:23,players:156,status:'active'},
-    {name:'DataSurge',kick:'datasurge_tv',races:18,players:89,status:'active'},
-    {name:'NightFox',kick:'nightfox',races:6,players:39,status:'inactive'},
-  ];
-  document.getElementById('streamers-table').innerHTML=streamers.map(s=>`
-    <tr>
-      <td>${s.name}</td>
-      <td style="color:#53fc18;">@${s.kick}</td>
-      <td>${s.races}</td>
-      <td>${s.players}</td>
+  document.getElementById('ov-top-chatters').innerHTML = [
+    {name:'NightFox',races:28},{name:'CyberZorb',races:19},{name:'VoidRunner',races:14},
+  ].map((c,i)=>`<div class="lb-row"><div class="lb-rank ${['gold','silver','bronze'][i]||''}">${i+1}</div><div>${c.name}</div><div style="margin-left:auto;color:var(--c)">${c.races} races</div></div>`).join('');
+
+  if(s.role === 'admin'){
+    document.getElementById('adm-users').textContent = '1,284';
+    document.getElementById('adm-races').textContent = '847';
+    document.getElementById('adm-active').textContent = '3';
+    document.getElementById('admin-streamers-table').innerHTML = [
+      {name:'StreamKing', races:23, players:156, status:'live', joined:'May 2025'},
+      {name:'DataSurge',  races:18, players:89,  status:'idle', joined:'Jun 2025'},
+      {name:'NightFox',   races:6,  players:39,  status:'idle', joined:'Jun 2025'},
+    ].map(s=>`<tr>
+      <td style="color:#53fc18">@${s.name}</td>
+      <td>${s.races}</td><td>${s.players}</td>
       <td><span class="badge ${s.status}">${s.status.toUpperCase()}</span></td>
-      <td><div class="flex-row"><button class="btn-sm" onclick="viewStreamer('${s.name}')">VIEW</button><button class="btn-sm danger" onclick="removeStreamer('${s.name}')">REMOVE</button></div></td>
-    </tr>
-  `).join('');
+      <td style="color:rgba(255,255,255,0.3)">${s.joined}</td>
+      <td><button class="btn btn-red" onclick="alert('Remove '+${JSON.stringify(s.name)}+' (backend needed)')">REMOVE</button></td>
+    </tr>`).join('');
+  }
 }
 
-function saveSetting(key, val){
-  const settings = JSON.parse(localStorage.getItem('zorbs_settings')||'{}');
-  settings[key]=val; localStorage.setItem('zorbs_settings',JSON.stringify(settings));
-  console.log('Setting saved:',key,'=',val);
+// ── PAGE NAV ───────────────────────────────────────────
+function showPage(id){
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const page = document.getElementById('page-'+id);
+  const nav  = document.getElementById('ni-'+id);
+  if(page) page.classList.add('active');
+  if(nav)  nav.classList.add('active');
+}
+
+// ── RACE CONTROL ───────────────────────────────────────
+function launchRace(){
+  if(!session){ alert('Log in first'); return; }
+  const dur = document.getElementById('rc-dur').value || '3m';
+  const url = '/?streamer='+encodeURIComponent(session.username)+'&dur='+dur;
+  window.open(url, '_blank');
+  document.getElementById('rc-dot').className = 'dot live';
+  document.getElementById('rc-status').textContent = 'Race launched · ' + dur;
 }
 
 function inviteStreamer(){
-  const email=prompt('Enter streamer email to invite:');
-  if(email) alert('Invite sent to '+email+' (backend integration needed)');
+  const email = prompt('Streamer Kick username or email to invite:');
+  if(email) alert('Invite sent to ' + email + ' (backend integration needed for real invites)');
 }
-function addAdmin(){
-  const u=prompt('New admin username:');
-  if(u) alert('Admin "'+u+'" added (backend integration needed)');
-}
-function viewStreamer(name){ alert('Streamer detail page for '+name+' - coming soon'); }
-function removeStreamer(name){ if(confirm('Remove '+name+'?')) alert('Removed (backend needed)'); }
 
-// ── RACE CONTROL ───────────────────────────────────────
-let raceActive=false;
-function launchRace(){
-  // Opens the game in a new tab with streamer mode
-  const dur=document.getElementById('race-duration').value||'3m';
-  window.open('/?streamer='+encodeURIComponent(currentUser.username)+'&dur='+dur,'_blank');
-  raceActive=true;
-  document.getElementById('status-dot').className='status-dot live';
-  document.getElementById('status-text').textContent='Race live · '+dur+' duration';
-  document.getElementById('btn-end').style.display='block';
-}
-function endRace(){
-  raceActive=false;
-  document.getElementById('status-dot').className='status-dot idle';
-  document.getElementById('status-text').textContent='No active race';
-  document.getElementById('btn-end').style.display='none';
-}
+// ── INIT ───────────────────────────────────────────────
+window.addEventListener('load', ()=>{
+  // Check for OAuth return params
+  const params = new URLSearchParams(window.location.search);
+  const urlSession = params.get('session');
+  const urlUsername = params.get('username');
+  const urlRole = params.get('role');
+  const urlError = params.get('error');
+
+  if(urlError){
+    const err = document.getElementById('err-msg');
+    err.textContent = 'Login error: ' + decodeURIComponent(urlError);
+    err.style.display = 'block';
+    window.history.replaceState({}, '', '/dashboard.html');
+    return;
+  }
+
+  if(urlSession && urlUsername){
+    // Coming back from Kick OAuth
+    try{
+      const s = JSON.parse(atob(urlSession));
+      initFromSession(s);
+    } catch(e){
+      // Fallback: construct from URL params
+      initFromSession({
+        username: decodeURIComponent(urlUsername),
+        role: urlRole || 'user',
+        kickConnected: true,
+      });
+    }
+    window.history.replaceState({}, '', '/dashboard.html');
+    return;
+  }
+
+  // Check saved session
+  const saved = sessionStorage.getItem('zorbs_session');
+  if(saved){
+    try{ initFromSession(JSON.parse(saved)); return; } catch(e){}
+  }
+
+  // Show login
+  document.getElementById('login-screen').style.display = 'flex';
+});
 </script>
 </body>
 </html>

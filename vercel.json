@@ -1,6 +1,14 @@
 {
-  "version": 2,
   "rewrites": [
-    { "source": "/(.*)", "destination": "/public/$1" }
+    { "source": "/auth/kick/callback", "destination": "/auth/kick/callback.html" },
+    { "source": "/api/(.*)", "destination": "/api/$1" }
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" }
+      ]
+    }
   ]
 }
