@@ -278,14 +278,14 @@ function _spinePt(pos,dir,floorY,hw,eL,eR){
 
 // ── SEGMENT BUILDERS ──────────────────────────────────
 
-function segStraight(cur, length, eL=0x00f0ff, eR=0xff00cc, withBoost=false){
+function segStraight(cur, length, eL=0x00f0ff, eR=0xff00cc, withBoost=false, noFlush=false){
   const steps=Math.max(3,Math.ceil(length/2.5));
   for(let i=0;i<=steps;i++){
     const t=i/steps;
     const p=cur.pos.clone().addScaledVector(cur.dir,length*t); p.y=cur.pos.y;
     _spinePt(p,cur.dir,cur.pos.y,TW_HALF,eL,eR);
   }
-  courseLength+=length; _flushSpine();
+  courseLength+=length; if(!noFlush)_flushSpine();
   const end=cur.pos.clone().addScaledVector(cur.dir,length); end.y=cur.pos.y;
   if(withBoost){const bp=cur.pos.clone().addScaledVector(cur.dir,length*0.55);buildBoostPad(bp,cur.dir,cur.pos.y);}
   return makeCursor(end.x,cur.pos.y,end.z,cur.dir.x,cur.dir.z);
@@ -320,7 +320,7 @@ function segCurve(cur, angleDelta, radius, eL=0x00f0ff, eR=0xff00cc){
     const tl=Math.sqrt(tx*tx+tz*tz);
     _spinePt(p,new THREE.Vector3(tx/tl,0,tz/tl),cur.pos.y,TW_HALF,eL,eR);
   }
-  courseLength+=arcLen; _flushSpine();
+  courseLength+=arcLen; // curve keeps spine open for connection
   const sw=angleDelta,cs=Math.cos(sw),sn=Math.sin(sw);
   const erx=initR.x*cs-initR.z*sn, erz=initR.x*sn+initR.z*cs;
   const ep=new THREE.Vector3(centre.x+erx,cur.pos.y,centre.z+erz);
@@ -492,11 +492,7 @@ function buildCourse(durSecs){
 
     if(type==='straight'){
       const len = rnd(25,45);
-      cur = segStraight(cur, len, eL, eR);
-      if(len>30 && Math.random()<0.5){
-        buildBumpers(cur, rnd(2,4));
-        cur = segStraight(cur, len*0.4, eL, eR);
-      }
+      cur = segStraight(cur, len, eL, eR); // flushes at end
     } else if(type==='ramp'){
       const dropY=rnd(7,14), dropLen=rnd(18,28);
       cur = segRamp(cur, dropLen, dropY, eL, eR);
@@ -513,14 +509,15 @@ function buildCourse(durSecs){
       cur = segCurve(cur, +angle, radius, eL, eR);
       cur = segStraight(cur, rnd(15,25), eL, eR);
     } else if(type==='corkscrew'){
-      // True S-curve: gentle left then gentle right, same angle, large radius
+      // True S-curve: all connected as one mesh - no Z gaps
       const angle = Math.PI/7 + Math.random()*(Math.PI/10); // 25-43 degrees
       const radius = rnd(30,45);
       const dir = Math.random()<0.5?1:-1;
-      cur = segCurve(cur, dir*angle, radius, eL, eR);
-      cur = segStraight(cur, 12, eL, eR);
-      cur = segCurve(cur, -dir*angle, radius, eR, eL); // opposite = S shape
-      cur = segStraight(cur, 12, eL, eR);
+      cur = segCurve(cur, dir*angle, radius, eL, eR);         // curve (no flush)
+      cur = segStraight(cur, 10, eL, eR, false, true);  // connector no flush
+      cur = segCurve(cur, -dir*angle, radius, eR, eL);        // back (no flush)
+      _flushSpine();                                           // flush whole S as one mesh
+      cur = segStraight(cur, 12, eL, eR);                     // exit straight
     } else if(type==='bumper_gauntlet'){
       cur = segStraight(cur, 12, eL, eR);
       buildBumpers(cur, rnd(3,5));
