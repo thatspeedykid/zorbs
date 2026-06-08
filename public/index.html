@@ -1081,17 +1081,35 @@ function setCam(m){
   const el=document.getElementById('btn-'+m); if(el)el.classList.add('active');
 }
 
+const _smoothCamPos = new THREE.Vector3();
+let _camInit = false;
 function updateCamera(dt){
   const sm=Math.min(dt*5,0.15);
-  const leader=zorbs.filter(z=>!z.finished).sort((a,b)=>
-    a.pos.distanceTo(FINISH_POS)-b.pos.distanceTo(FINISH_POS))[0]||zorbs[0];
+  const leader=zorbs.filter(z=>!z.finished&&!z.disqualified).sort((a,b)=>b.nodeIdx-a.nodeIdx)[0]||zorbs[0];
   if(!leader) return;
-  const lp=leader.pos;
+  // Smooth the leader position we track - prevents stutter from knockbacks
+  if(!_camInit){ _smoothCamPos.copy(leader.pos); _camInit=true; }
+  // Max 12 units/sec movement prevents sudden jumps when ball gets zapped
+  const step = new THREE.Vector3().subVectors(leader.pos, _smoothCamPos);
+  const maxD = 12 * dt;
+  if(step.length() > maxD) step.setLength(maxD);
+  _smoothCamPos.add(step);
+  const lp = _smoothCamPos;
   let mode=camMode;
   if(mode==='auto'){autoTimer+=dt;if(autoTimer>7){autoTimer=0;autoIdx=(autoIdx+1)%autoModes.length;}mode=autoModes[autoIdx];}
   if(mode==='free'){
-    // Free cam - WASD/arrow keys control it, no auto follow
-    // Just maintain current position, let keydown handle it
+    // Spherical orbit around target point
+    const sc = freeCam;
+    // Keep target roughly at track level (follow leader height slowly)
+    if(zorbs.length>0){
+      const leader=zorbs.filter(z=>!z.finished&&!z.disqualified).sort((a,b)=>b.nodeIdx-a.nodeIdx)[0]||zorbs[0];
+      if(leader) sc.target.lerp(leader.pos, 0.02); // very slow follow so it feels manual
+    }
+    const x = sc.target.x + sc.dist*Math.sin(sc.phi)*Math.sin(sc.theta);
+    const y = sc.target.y + sc.dist*Math.cos(sc.phi);
+    const z2 = sc.target.z + sc.dist*Math.sin(sc.phi)*Math.cos(sc.theta);
+    camera.position.set(x,y,z2);
+    camera.lookAt(sc.target);
     return;
   } else if(mode==='follow'){
     const spd=Math.sqrt(leader.vel.x*leader.vel.x+leader.vel.z*leader.vel.z);
@@ -1345,15 +1363,31 @@ setInterval(()=>{
 // Random gust events
 let frame=0;
 
-// Free cam state
-let freeCamTarget = new THREE.Vector3(0,10,0);
-let freeCamPhi = Math.PI/4, freeCamTheta = 0, freeCamDist = 30;
-document.addEventListener('wheel', e=>{
-  if(camMode==='free'){ freeCamDist=Math.max(5,Math.min(200,freeCamDist+e.deltaY*0.05)); }
+// Free cam - mouse drag orbit
+const freeCam = {
+  target: new THREE.Vector3(0,5,0),
+  phi: Math.PI/4,    // vertical angle
+  theta: 0,          // horizontal angle  
+  dist: 40,          // distance from target
+  dragging: false,
+  lastX: 0, lastY: 0
+};
+canvas.addEventListener('mousedown', e=>{
+  if(camMode==='free'){ freeCam.dragging=true; freeCam.lastX=e.clientX; freeCam.lastY=e.clientY; }
 });
-let _freeKeys={};
-document.addEventListener('keydown',e=>{ _freeKeys[e.key]=true; });
-document.addEventListener('keyup',e=>{ _freeKeys[e.key]=false; });
+canvas.addEventListener('mousemove', e=>{
+  if(camMode==='free' && freeCam.dragging){
+    const dx=e.clientX-freeCam.lastX, dy=e.clientY-freeCam.lastY;
+    freeCam.theta -= dx*0.005;
+    freeCam.phi   = Math.max(0.1, Math.min(Math.PI*0.48, freeCam.phi+dy*0.005));
+    freeCam.lastX=e.clientX; freeCam.lastY=e.clientY;
+  }
+});
+canvas.addEventListener('mouseup', ()=>{ freeCam.dragging=false; });
+canvas.addEventListener('mouseleave', ()=>{ freeCam.dragging=false; });
+canvas.addEventListener('wheel', e=>{
+  if(camMode==='free'){ freeCam.dist=Math.max(5,Math.min(300,freeCam.dist+e.deltaY*0.08)); e.preventDefault(); }
+},{passive:false});
 document.addEventListener('keydown',e=>{
   const ms=['follow','wide','top','auto'];
   if(e.key==='ArrowLeft'){const i=ms.indexOf(camMode);setCam(ms[(i-1+4)%4]);}
