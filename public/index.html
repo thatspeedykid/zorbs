@@ -122,7 +122,9 @@ scene.add(new THREE.AmbientLight(0x334466,5));
 const sun=new THREE.DirectionalLight(0xaaccff,2.5);
 sun.position.set(30,80,30);sun.castShadow=true;
 sun.shadow.mapSize.set(1024,1024);scene.add(sun);
-scene.add(Object.assign(new THREE.DirectionalLight(0xff00cc,0.6),{position:new THREE.Vector3(-20,10,-20)}));
+const fill2=new THREE.DirectionalLight(0xff00cc,0.6);
+fill2.position.set(-20,10,-20);
+scene.add(fill2);
 const movingLight=new THREE.PointLight(0x00f0ff,2,100);scene.add(movingLight);
 
 // Stars
@@ -159,89 +161,75 @@ function tAdd(m){scene.add(m);segMeshes.push(m);return m;}
 function makePipeSegment(start, end, color1, color2){
   const dir=new THREE.Vector3().subVectors(end,start);
   const len=dir.length();
+  if(len<0.01) return {start:start.clone(),end:end.clone(),dir:new THREE.Vector3(0,-1,0),len:0.01};
   dir.normalize();
   const mid=new THREE.Vector3().addVectors(start,end).multiplyScalar(0.5);
 
-  // Main pipe tube - open half-pipe (U-channel)
-  // Build as cylinder with open top using custom geometry
-  const segsAround=16;
-  const openAngle=Math.PI*0.8; // how much of circle is solid (0.8*PI = 144 deg = U shape)
-  const positions=[];
-  const normals=[];
-  const indices=[];
+  // Right vector perpendicular to dir
+  let right=new THREE.Vector3();
+  if(Math.abs(dir.y)<0.98){ right.crossVectors(dir,new THREE.Vector3(0,1,0)).normalize(); }
+  else { right.crossVectors(dir,new THREE.Vector3(1,0,0)).normalize(); }
+  const up=new THREE.Vector3().crossVectors(right,dir).normalize();
 
-  // Two rings: start and end of segment
+  // Build U-channel (half-pipe) as a series of quads around bottom arc
+  const arcSegs = 10;  // segments around half circle
+  const verts = [], idx = [];
+
   for(let ring=0;ring<2;ring++){
-    const rPos=ring===0?start:end;
-    // Right vector: perpendicular to dir, try to keep Y-up bias
-    let right=new THREE.Vector3();
-    if(Math.abs(dir.y)<0.99){
-      right.crossVectors(dir,new THREE.Vector3(0,1,0)).normalize();
-    } else {
-      right.crossVectors(dir,new THREE.Vector3(1,0,0)).normalize();
-    }
-    const up=new THREE.Vector3().crossVectors(right,dir).normalize();
-
-    for(let i=0;i<=segsAround;i++){
-      // angle from bottom: -openAngle/2 to +openAngle/2
-      const a=-openAngle/2+(i/segsAround)*openAngle;
-      // Bottom of pipe at a=0 (pointing down in world)
-      const nx=right.x*Math.sin(a)-up.x*Math.cos(a);
-      const ny=right.y*Math.sin(a)-up.y*Math.cos(a);
-      const nz=right.z*Math.sin(a)-up.z*Math.cos(a);
-      positions.push(rPos.x+nx*PIPE_R, rPos.y+ny*PIPE_R, rPos.z+nz*PIPE_R);
-      normals.push(-nx,-ny,-nz); // inward normal
+    const rp = ring===0 ? start : end;
+    for(let i=0;i<=arcSegs;i++){
+      // sweep from -PI*0.7 to +PI*0.7 (bottom 252 degrees)
+      const a = -Math.PI*0.7 + (i/arcSegs)*Math.PI*1.4;
+      const nx = right.x*Math.sin(a) - up.x*Math.cos(a);
+      const ny = right.y*Math.sin(a) - up.y*Math.cos(a);
+      const nz = right.z*Math.sin(a) - up.z*Math.cos(a);
+      verts.push(rp.x+nx*PIPE_R, rp.y+ny*PIPE_R, rp.z+nz*PIPE_R);
     }
   }
-  for(let i=0;i<segsAround;i++){
-    const a=i, b=i+1, c=segsAround+1+i, d=segsAround+1+i+1;
-    indices.push(a,c,b,b,c,d);
+  for(let i=0;i<arcSegs;i++){
+    const a=i,b=i+1,c2=arcSegs+1+i,d=arcSegs+1+i+1;
+    idx.push(a,c2,b, b,c2,d);
   }
 
   const geo=new THREE.BufferGeometry();
-  geo.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
-  geo.setAttribute('normal',new THREE.Float32BufferAttribute(normals,3));
-  geo.setIndex(indices);
+  geo.setAttribute('position',new THREE.Float32BufferAttribute(verts,3));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
   const mat=new THREE.MeshStandardMaterial({
-    color:0x0d1230,roughness:0.1,metalness:0.95,
-    emissive:0x060918,emissiveIntensity:0.8,
-    side:THREE.FrontSide
+    color:0x111835, roughness:0.15, metalness:0.85,
+    emissive:0x050d28, emissiveIntensity:1.0,
+    side:THREE.DoubleSide
   });
   tAdd(new THREE.Mesh(geo,mat));
 
-  // Glowing edge lines along lips of pipe
-  // Need the right/up vectors for this segment
-  let right2=new THREE.Vector3();
-  if(Math.abs(dir.y)<0.99){right2.crossVectors(dir,new THREE.Vector3(0,1,0)).normalize();}
-  else{right2.crossVectors(dir,new THREE.Vector3(1,0,0)).normalize();}
-  const up2=new THREE.Vector3().crossVectors(right2,dir).normalize();
-
+  // Glowing edges at lips of half-pipe
   for(const side of [-1,1]){
-    const a=side*openAngle/2;
-    const ex=right2.x*Math.sin(a)-up2.x*Math.cos(a);
-    const ey=right2.y*Math.sin(a)-up2.y*Math.cos(a);
-    const ez=right2.z*Math.sin(a)-up2.z*Math.cos(a);
+    const a=side*Math.PI*0.7;
+    const ex=right.x*Math.sin(a)-up.x*Math.cos(a);
+    const ey=right.y*Math.sin(a)-up.y*Math.cos(a);
+    const ez=right.z*Math.sin(a)-up.z*Math.cos(a);
     const eGeo=new THREE.BufferGeometry();
     eGeo.setAttribute('position',new THREE.Float32BufferAttribute([
       start.x+ex*PIPE_R,start.y+ey*PIPE_R,start.z+ez*PIPE_R,
       end.x+ex*PIPE_R,end.y+ey*PIPE_R,end.z+ez*PIPE_R
     ],3));
-    tAdd(new THREE.Line(eGeo,new THREE.LineBasicMaterial({color:side>0?color1:color2,linewidth:2})));
+    tAdd(new THREE.Line(eGeo,new THREE.LineBasicMaterial({color:side>0?color1:color2})));
   }
 
-  // Pillar support
-  const groundY=-58;
-  if(mid.y>groundY+3){
-    const h=mid.y-groundY;
-    const pillar=new THREE.Mesh(
-      new THREE.CylinderGeometry(0.07,0.1,h,6),
-      new THREE.MeshStandardMaterial({color:0x0a0a22,metalness:0.8,roughness:0.4})
-    );
-    pillar.position.set(mid.x,groundY+h/2,mid.z);
-    tAdd(pillar);
+  // Pillar
+  if(mid.y>-55){
+    const h=mid.y+58;
+    if(h>1){
+      const pillar=new THREE.Mesh(
+        new THREE.CylinderGeometry(0.07,0.1,h,6),
+        new THREE.MeshStandardMaterial({color:0x0a0a22,metalness:0.8,roughness:0.4})
+      );
+      pillar.position.set(mid.x,-58+h/2,mid.z);
+      tAdd(pillar);
+    }
   }
 
-  // Store segment data for physics
+    // Store segment data for physics
   const seg={
     start:start.clone(), end:end.clone(), dir:dir.clone(), len,
     right:right2.clone(), up:up2.clone()
