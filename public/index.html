@@ -379,8 +379,8 @@ function buildHammers(cur, count){
     head.position.y=-2.15; grp.add(head);
     const gs=new THREE.Mesh(new THREE.BoxGeometry(3.5,0.12,0.9),new THREE.MeshBasicMaterial({color:0xff4400}));
     gs.position.y=-2.52; grp.add(gs);
-    grp.position.set(hx,hy+4,hz); scene.add(grp); trackMeshes.push(grp);
-    hammers.push({grp,pivY:hy+4,x:hx,z:hz,phase:i*(Math.PI*2/count),speed:(0.9+Math.random()*0.4)*(i%2===0?1:-1)});
+    grp.position.set(hx,hy+2.2,hz); scene.add(grp); trackMeshes.push(grp);
+    hammers.push({grp,pivY:hy+2.2,x:hx,z:hz,phase:i*(Math.PI*2/count),speed:(0.9+Math.random()*0.4)*(i%2===0?1:-1)});
   }
 }
 
@@ -600,18 +600,29 @@ function buildCourse(durSecs){
   cur = makeCursor(gatePos.x, cur.pos.y, gatePos.z, cur.dir.x, cur.dir.z);
 
   // Segment type pool — weighted toward variety
-  // Guaranteed one of each obstacle type, rest random
-  const obstacleTypes=['bumper_gauntlet','hammer_zone','blade_zone','wind_zone','narrow_gate','trap_door'];
-  const fillerTypes=['straight','ramp','corkscrew'];
-  // Shuffle obstacles so order is random each race
-  for(let i=obstacleTypes.length-1;i>0;i--){const j=rnd(0,i);[obstacleTypes[i],obstacleTypes[j]]=[obstacleTypes[j],obstacleTypes[i]];}
-  // Build pool: guaranteed obstacles + fillers between
+  // Build a random flowing map like a real marble track
+  // Mix of: long sweeps, spirals, drops, S-bends, straights
+  // Each race is totally different
+  const trackStyles = ['sweep_right','sweep_left','s_bend','spiral_drop','straight_run','ramp_straight'];
+  const obstacleTypes = ['bumper_gauntlet','hammer_zone','blade_zone','wind_zone','narrow_gate','trap_door'];
+  
+  // Shuffle both
+  function shuffleArr(a){for(let i=a.length-1;i>0;i--){const j=rnd(0,i);[a[i],a[j]]=[a[j],a[i]];} return a;}
+  shuffleArr(obstacleTypes);
+  
+  // Build pool: alternate between track shape and obstacle
+  // guarantees every obstacle appears once, track shapes are random
   const segPool=[];
-  obstacleTypes.forEach(o=>{
-    segPool.push(fillerTypes[rnd(0,fillerTypes.length-1)]);
-    segPool.push(o);
-  });
-  segPool.push('straight','ramp');
+  for(let i=0;i<obstacleTypes.length;i++){
+    // 1-3 track shape sections between each obstacle
+    const numShapes = rnd(1,3);
+    for(let j=0;j<numShapes;j++){
+      segPool.push(trackStyles[rnd(0,trackStyles.length-1)]);
+    }
+    segPool.push(obstacleTypes[i]);
+  }
+  // End with a couple track sections leading to finish
+  segPool.push(trackStyles[rnd(0,trackStyles.length-1)],'straight_run');
   // Shuffle pool
   function shuffle(a){for(let i=a.length-1;i>0;i--){const j=rnd(0,i);[a[i],a[j]]=[a[j],a[i]];} return a;}
   let pool = segPool;
@@ -624,33 +635,58 @@ function buildCourse(durSecs){
     const type = pool[pIdx % pool.length]; pIdx++;
     const [eL,eR] = edgePalettes[pIdx % edgePalettes.length];
 
-    if(type==='straight'){
-      const len = rnd(25,45);
-      cur = segStraight(cur, len, eL, eR); // flushes at end
-    } else if(type==='ramp'){
-      const dropY=rnd(7,14), dropLen=rnd(18,28);
-      cur = segRamp(cur, dropLen, dropY, eL, eR);
-      cur = segStraight(cur, 12, eL, eR, true); // landing + boost
-    } else if(type==='curve_left'){
-      // Gentle sweep - max 40 degrees, large radius = smooth flowing turn
-      const angle = Math.PI/6 + Math.random()*(Math.PI/9); // 30-50 degrees only
-      const radius = rnd(28,45); // large radius = gentle arc
-      cur = segCurve(cur, -angle, radius, eL, eR);
-      cur = segStraight(cur, rnd(15,25), eL, eR);
-    } else if(type==='curve_right'){
-      const angle = Math.PI/6 + Math.random()*(Math.PI/9); // 30-50 degrees only
-      const radius = rnd(28,45);
+    if(type==='straight_run'){
+      // Long straight, feels fast
+      cur = segStraight(cur, rnd(30,55), eL, eR);
+
+    } else if(type==='sweep_right'){
+      // Big sweeping right turn - like the outer loops in the drawing
+      const angle = Math.PI/4 + Math.random()*(Math.PI/4); // 45-90 deg sweep
+      const radius = rnd(35,60); // large radius = gentle feel
       cur = segCurve(cur, +angle, radius, eL, eR);
-      cur = segStraight(cur, rnd(15,25), eL, eR);
-    } else if(type==='corkscrew'){
-      // True S-curve: all connected as one mesh - no Z gaps
-      const angle = Math.PI/7 + Math.random()*(Math.PI/10); // 25-43 degrees
-      const radius = rnd(30,45);
+      cur = segStraight(cur, rnd(10,20), eL, eR);
+
+    } else if(type==='sweep_left'){
+      // Big sweeping left turn
+      const angle = Math.PI/4 + Math.random()*(Math.PI/4);
+      const radius = rnd(35,60);
+      cur = segCurve(cur, -angle, radius, eL, eR);
+      cur = segStraight(cur, rnd(10,20), eL, eR);
+
+    } else if(type==='s_bend'){
+      // S-curve - gentle left then right (or right then left)
+      const angle = Math.PI/5 + Math.random()*(Math.PI/8); // 36-58 deg
+      const radius = rnd(28,45);
       const dir = Math.random()<0.5?1:-1;
-      cur = segCurve(cur, dir*angle, radius, eL, eR);         // curve (no flush)
-      cur = segStraight(cur, 10, eL, eR);
-      cur = segCurve(cur, -dir*angle, radius, eR, eL);        // back (no flush)
-      cur = segStraight(cur, 12, eL, eR); // exit straight after S                     // exit straight
+      cur = segCurve(cur, dir*angle, radius, eL, eR);
+      cur = segStraight(cur, rnd(8,16), eL, eR);
+      cur = segCurve(cur, -dir*angle, radius, eR, eL);
+      cur = segStraight(cur, rnd(8,16), eL, eR);
+
+    } else if(type==='spiral_drop'){
+      // Spiral going down - multiple turns while dropping height
+      // Like the inner spiral in the drawing
+      const numTurns = rnd(2,4);
+      const angle = (Math.PI/3 + Math.random()*(Math.PI/4)); // 60-105 per turn
+      const radius = rnd(20,35);
+      const dir = Math.random()<0.5?1:-1;
+      const dropPerTurn = rnd(3,7);
+      for(let t=0;t<numTurns;t++){
+        const dropY = dropPerTurn;
+        // Curve + slight drop
+        const startY = cur.pos.y;
+        cur = segCurve(cur, dir*angle, radius, eL, eR);
+        // Manual Y drop after curve
+        cur = makeCursor(cur.pos.x, cur.pos.y-dropY, cur.pos.z, cur.dir.x, cur.dir.z);
+        cur = segStraight(cur, rnd(5,12), eL, eR);
+      }
+
+    } else if(type==='ramp_straight'){
+      // Drop down then long straight - feels like picking up speed
+      const dropY = rnd(6,12), dropLen = rnd(16,26);
+      cur = segRamp(cur, dropLen, dropY, eL, eR);
+      cur = segStraight(cur, rnd(20,35), eL, eR, true); // boost at end
+
     } else if(type==='bumper_gauntlet'){
       cur = segStraight(cur, 8, eL, eR);
       buildBumpers(cur, rnd(2,4));
