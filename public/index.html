@@ -222,46 +222,76 @@ const _floorMat = new THREE.MeshStandardMaterial({color:0x111128,roughness:0.2,m
 const _wallMat  = new THREE.MeshStandardMaterial({color:0x0a1020,roughness:0.3,metalness:0.7,side:THREE.DoubleSide});
 
 // ── SEGMENT BUILDERS ──────────────────────────────────
-// Uses THREE.TubeGeometry around a CatmullRomCurve3 spline.
+// Quad-strip mesh track builder.
 // This is the RIGHT way to do it - Three.js handles all the geometry.
 
 function _buildTube(splinePts, eL, eR){
+  // Build track from spline points as quad-strip meshes.
+  // For each consecutive pair of points, build one floor quad + two wall quads.
+  // Each quad is just 2 triangles - simple, no rotation bugs, no spikes.
   if(splinePts.length < 2) return;
-  const curve = new THREE.CatmullRomCurve3(splinePts);
-  const tubeSegs = Math.max(8, splinePts.length * 4);
 
-  // Main tube - open top (half-pipe) using custom shape
-  // Actually use a flat track with walls - TubeGeometry makes a full tube
-  // Instead: extrude a U-shape along the spline using TubeGeometry concepts
-  // but simpler: just a flat ribbon + two wall tubes
+  const floorVerts=[], wallLVerts=[], wallRVerts=[], glowLPts=[], glowRPts=[];
 
-  // Floor ribbon - thin flat tube (very wide, very short radius = flat slab)
-  const floorGeo = new THREE.TubeGeometry(curve, tubeSegs, 0.2, 3, false);
-  const floorMesh = new THREE.Mesh(floorGeo, _floorMat);
-  floorMesh.receiveShadow = true;
-  addMesh(floorMesh);
+  for(let i=0;i<splinePts.length;i++){
+    const p = splinePts[i];
+    // Tangent: direction to next point (or from prev)
+    let tx, tz;
+    if(i < splinePts.length-1){
+      tx = splinePts[i+1].x - p.x;
+      tz = splinePts[i+1].z - p.z;
+    } else {
+      tx = p.x - splinePts[i-1].x;
+      tz = p.z - splinePts[i-1].z;
+    }
+    const tl = Math.sqrt(tx*tx+tz*tz)||1;
+    // Right vector = perpendicular to tangent in XZ
+    const rx = -tz/tl, rz = tx/tl;
+    const y = p.y;
 
-  // Left and right wall tubes - small radius, offset sideways
-  // We build offset curves for the walls
-  for(const side of [-1, 1]){
-    const wallPts = splinePts.map((p, i) => {
-      // Get tangent at this point
-      const t = i / (splinePts.length - 1);
-      const tan = curve.getTangent(t).normalize();
-      // Right vector: perpendicular to tangent in XZ
-      const right = new THREE.Vector3(-tan.z, 0, tan.x).normalize();
-      return p.clone().addScaledVector(right, side * (TW_HALF + 0.15));
-    });
-    const wallCurve = new THREE.CatmullRomCurve3(wallPts);
-    const wallGeo = new THREE.TubeGeometry(wallCurve, tubeSegs, 0.15, 4, false);
-    const wallMesh = new THREE.Mesh(wallGeo, _wallMat);
-    addMesh(wallMesh);
-
-    // Glow line at top of wall
-    const glowPts = wallPts.map(p => new THREE.Vector3(p.x, p.y + 1.4, p.z));
-    const glowGeo = new THREE.BufferGeometry().setFromPoints(glowPts);
-    addMesh(new THREE.Line(glowGeo, new THREE.LineBasicMaterial({color: side < 0 ? eL : eR, linewidth:2})));
+    // Floor: left edge and right edge at floor level
+    floorVerts.push(
+      p.x - rx*TW_HALF,  y,  p.z - rz*TW_HALF,
+      p.x + rx*TW_HALF,  y,  p.z + rz*TW_HALF
+    );
+    // Left wall: two verts (bottom and top)
+    wallLVerts.push(
+      p.x - rx*(TW_HALF+0.25),  y,      p.z - rz*(TW_HALF+0.25),
+      p.x - rx*(TW_HALF+0.25),  y+1.4,  p.z - rz*(TW_HALF+0.25)
+    );
+    // Right wall
+    wallRVerts.push(
+      p.x + rx*(TW_HALF+0.25),  y,      p.z + rz*(TW_HALF+0.25),
+      p.x + rx*(TW_HALF+0.25),  y+1.4,  p.z + rz*(TW_HALF+0.25)
+    );
+    glowLPts.push(new THREE.Vector3(p.x - rx*(TW_HALF+0.25), y+1.42, p.z - rz*(TW_HALF+0.25)));
+    glowRPts.push(new THREE.Vector3(p.x + rx*(TW_HALF+0.25), y+1.42, p.z + rz*(TW_HALF+0.25)));
   }
+
+  // Build quad-strip indices
+  const N = splinePts.length;
+  function qIdx(n){
+    const idx=[];
+    for(let i=0;i<n-1;i++){
+      const a=i*2,b=i*2+1,c=i*2+2,d=i*2+3;
+      idx.push(a,b,c, b,d,c);
+    }
+    return idx;
+  }
+  function mkMesh(verts, idx, mat){
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(verts,3));
+    g.setIndex(idx); g.computeVertexNormals();
+    const m = new THREE.Mesh(g, mat); m.receiveShadow=true; return addMesh(m);
+  }
+  mkMesh(floorVerts, qIdx(N), _floorMat);
+  mkMesh(wallLVerts, qIdx(N), _wallMat);
+  mkMesh(wallRVerts, qIdx(N), _wallMat);
+
+  const glg=new THREE.BufferGeometry().setFromPoints(glowLPts);
+  addMesh(new THREE.Line(glg,new THREE.LineBasicMaterial({color:eL})));
+  const grg=new THREE.BufferGeometry().setFromPoints(glowRPts);
+  addMesh(new THREE.Line(grg,new THREE.LineBasicMaterial({color:eR})));
 }
 
 function segStraight(cur, length, eL=0x00f0ff, eR=0xff00cc, withBoost=false){
