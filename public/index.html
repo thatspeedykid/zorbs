@@ -221,125 +221,108 @@ function perpRight(dir){ return new THREE.Vector3(dir.z,0,-dir.x); }
 const _floorMat = new THREE.MeshStandardMaterial({color:0x111128,roughness:0.2,metalness:0.8,emissive:0x000d22,emissiveIntensity:0.3,side:THREE.DoubleSide});
 const _wallMat  = new THREE.MeshStandardMaterial({color:0x0a1020,roughness:0.3,metalness:0.7,side:THREE.DoubleSide});
 
-// Build track ribbon from centerline points
-// Each segment = floor box + 2 wall boxes, all properly rotated
-function _buildRibbon(pts, eL, eR){
-  if(pts.length<2) return;
-  for(let i=0;i<pts.length-1;i++){
-    const a=pts[i], b=pts[i+1];
-    const dx=b.pos.x-a.pos.x, dz=b.pos.z-a.pos.z;
-    const segLen=Math.sqrt(dx*dx+dz*dz+(b.pos.y-a.pos.y)**2);
-    if(segLen<0.01) continue;
+// ── SEGMENT BUILDERS ──────────────────────────────────
+// Uses THREE.TubeGeometry around a CatmullRomCurve3 spline.
+// This is the RIGHT way to do it - Three.js handles all the geometry.
 
-    const mx=(a.pos.x+b.pos.x)/2;
-    const my=(a.pos.y+b.pos.y)/2;
-    const mz=(a.pos.z+b.pos.z)/2;
+function _buildTube(splinePts, eL, eR){
+  if(splinePts.length < 2) return;
+  const curve = new THREE.CatmullRomCurve3(splinePts);
+  const tubeSegs = Math.max(8, splinePts.length * 4);
 
-    // Yaw = rotation around Y to face forward direction
-    const ry=Math.atan2(dx,-dz);
-    // Pitch = tilt for ramps
-    const hDist=Math.sqrt(dx*dx+dz*dz);
-    const pitch=Math.atan2(b.pos.y-a.pos.y, hDist);
+  // Main tube - open top (half-pipe) using custom shape
+  // Actually use a flat track with walls - TubeGeometry makes a full tube
+  // Instead: extrude a U-shape along the spline using TubeGeometry concepts
+  // but simpler: just a flat ribbon + two wall tubes
 
-    // RIGHT vector = perpendicular to forward in XZ plane
-    // forward=(dx,dz), right=(-dz, dx) normalized... but as world offsets:
-    // right.x = cos(ry+PI/2) = -sin(ry), right.z = sin(ry+PI/2) = cos(ry)  -- WRONG in prev code
-    // Correct: atan2(dx,-dz)=ry means forward=(sin(ry), -cos(ry)) in XZ
-    // So right = (cos(ry), sin(ry)) in XZ (perpendicular CCW)
-    const rx = Math.cos(ry);  // right X
-    const rz = Math.sin(ry);  // right Z
+  // Floor ribbon - thin flat tube (very wide, very short radius = flat slab)
+  const floorGeo = new THREE.TubeGeometry(curve, tubeSegs, 0.2, 3, false);
+  const floorMesh = new THREE.Mesh(floorGeo, _floorMat);
+  floorMesh.receiveShadow = true;
+  addMesh(floorMesh);
 
-    // Floor plank
-    const fm=new THREE.Mesh(new THREE.BoxGeometry(TW,0.4,segLen+0.08),_floorMat);
-    fm.position.set(mx,my-0.2,mz);
-    fm.rotation.order='YXZ'; fm.rotation.y=ry; fm.rotation.x=pitch;
-    fm.castShadow=fm.receiveShadow=true; addMesh(fm);
+  // Left and right wall tubes - small radius, offset sideways
+  // We build offset curves for the walls
+  for(const side of [-1, 1]){
+    const wallPts = splinePts.map((p, i) => {
+      // Get tangent at this point
+      const t = i / (splinePts.length - 1);
+      const tan = curve.getTangent(t).normalize();
+      // Right vector: perpendicular to tangent in XZ
+      const right = new THREE.Vector3(-tan.z, 0, tan.x).normalize();
+      return p.clone().addScaledVector(right, side * (TW_HALF + 0.15));
+    });
+    const wallCurve = new THREE.CatmullRomCurve3(wallPts);
+    const wallGeo = new THREE.TubeGeometry(wallCurve, tubeSegs, 0.15, 4, false);
+    const wallMesh = new THREE.Mesh(wallGeo, _wallMat);
+    addMesh(wallMesh);
 
-    // Walls - offset sideways using correct right vector
-    for(const side of [-1,1]){
-      const wx=mx+rx*side*(TW_HALF+0.15);
-      const wz=mz+rz*side*(TW_HALF+0.15);
-      const wm=new THREE.Mesh(new THREE.BoxGeometry(0.3,1.5,segLen+0.08),_wallMat);
-      wm.position.set(wx,my+0.55,wz);
-      wm.rotation.order='YXZ'; wm.rotation.y=ry; wm.rotation.x=pitch;
-      wm.castShadow=wm.receiveShadow=true; addMesh(wm);
-      const gm=new THREE.Mesh(new THREE.BoxGeometry(0.15,0.15,segLen+0.08),
-        new THREE.MeshBasicMaterial({color:side<0?eL:eR}));
-      gm.position.set(wx,my+1.35,wz);
-      gm.rotation.order='YXZ'; gm.rotation.y=ry; gm.rotation.x=pitch;
-      addMesh(gm);
-    }
+    // Glow line at top of wall
+    const glowPts = wallPts.map(p => new THREE.Vector3(p.x, p.y + 1.4, p.z));
+    const glowGeo = new THREE.BufferGeometry().setFromPoints(glowPts);
+    addMesh(new THREE.Line(glowGeo, new THREE.LineBasicMaterial({color: side < 0 ? eL : eR, linewidth:2})));
   }
 }
 
-// ── SEGMENT BUILDERS ──────────────────────────────────
-
 function segStraight(cur, length, eL=0x00f0ff, eR=0xff00cc, withBoost=false){
-  const end=cur.pos.clone().addScaledVector(cur.dir,length); end.y=cur.pos.y;
-  // One single box for the whole straight - no fence posts
-  _buildRibbon([
-    {pos:cur.pos.clone(), dir:cur.dir.clone(), y:cur.pos.y},
-    {pos:end.clone(),     dir:cur.dir.clone(), y:cur.pos.y}
-  ], eL, eR);
-  // Path nodes every 3 units for physics
-  const steps=Math.max(2,Math.ceil(length/3));
-  const right=perpRight(cur.dir);
+  const end = cur.pos.clone().addScaledVector(cur.dir, length); end.y = cur.pos.y;
+  _buildTube([cur.pos.clone(), end.clone()], eL, eR);
+  const steps = Math.max(2, Math.ceil(length/3));
+  const right = perpRight(cur.dir);
   for(let i=0;i<=steps;i++){
-    const pos=cur.pos.clone().addScaledVector(cur.dir,length*(i/steps)); pos.y=cur.pos.y;
-    pathNodes.push({pos,dir:cur.dir.clone(),right:right.clone(),floorY:cur.pos.y,halfW:TW_HALF});
+    const pos = cur.pos.clone().addScaledVector(cur.dir, length*(i/steps)); pos.y = cur.pos.y;
+    pathNodes.push({pos, dir:cur.dir.clone(), right:right.clone(), floorY:cur.pos.y, halfW:TW_HALF});
   }
-  courseLength+=length;
-  if(withBoost){
-    const bp=cur.pos.clone().addScaledVector(cur.dir,length*0.55);
-    buildBoostPad(bp,cur.dir,cur.pos.y);
-  }
-  return makeCursor(end.x,cur.pos.y,end.z,cur.dir.x,cur.dir.z);
+  courseLength += length;
+  if(withBoost){ buildBoostPad(cur.pos.clone().addScaledVector(cur.dir,length*0.55), cur.dir, cur.pos.y); }
+  return makeCursor(end.x, cur.pos.y, end.z, cur.dir.x, cur.dir.z);
 }
 
 function segRamp(cur, length, dropY, eL=0x00f0ff, eR=0xff00cc){
-  const ey=cur.pos.y-dropY;
-  const end=cur.pos.clone().addScaledVector(cur.dir,length); end.y=ey;
-  // One pitched box for the whole ramp
-  _buildRibbon([
-    {pos:cur.pos.clone(), dir:cur.dir.clone(), y:cur.pos.y},
-    {pos:end.clone(),     dir:cur.dir.clone(), y:ey}
-  ], eL, eR);
-  // Path nodes for physics
-  const steps=Math.max(4,Math.ceil(length/2.5));
-  const right=perpRight(cur.dir);
+  const ey = cur.pos.y - dropY;
+  const end = cur.pos.clone().addScaledVector(cur.dir, length); end.y = ey;
+  // Multiple points along ramp so tube follows the slope
+  const steps = Math.max(3, Math.ceil(length/5));
+  const rampPts = [];
   for(let i=0;i<=steps;i++){
     const t=i/steps;
-    const pos=cur.pos.clone().addScaledVector(cur.dir,length*t);
-    pos.y=cur.pos.y+(ey-cur.pos.y)*t;
-    pathNodes.push({pos:pos.clone(),dir:cur.dir.clone(),right:right.clone(),floorY:pos.y,halfW:TW_HALF});
+    const p = cur.pos.clone().addScaledVector(cur.dir, length*t);
+    p.y = cur.pos.y + (ey - cur.pos.y)*t;
+    rampPts.push(p);
   }
-  courseLength+=length;
-  return makeCursor(end.x,ey,end.z,cur.dir.x,cur.dir.z);
+  _buildTube(rampPts, eL, eR);
+  const right = perpRight(cur.dir);
+  rampPts.forEach(pos => {
+    pathNodes.push({pos:pos.clone(), dir:cur.dir.clone(), right:right.clone(), floorY:pos.y, halfW:TW_HALF});
+  });
+  courseLength += length;
+  return makeCursor(end.x, ey, end.z, cur.dir.x, cur.dir.z);
 }
 
 function segCurve(cur, angleDelta, radius, eL=0x00f0ff, eR=0xff00cc){
-  const absA=Math.abs(angleDelta), arcLen=radius*absA;
-  const steps=Math.max(4,Math.ceil(arcLen/8)); // fewer steps = longer arc boxes = no fence posts
-  const ts=Math.sign(angleDelta);
-  const right=perpRight(cur.dir);
-  const centre=cur.pos.clone().addScaledVector(right,ts*radius);
-  const initR=cur.pos.clone().sub(centre);
-  const pts=[];
+  const absA = Math.abs(angleDelta), arcLen = radius*absA;
+  const steps = Math.max(6, Math.ceil(arcLen/4));
+  const ts = Math.sign(angleDelta);
+  const right = perpRight(cur.dir);
+  const centre = cur.pos.clone().addScaledVector(right, ts*radius);
+  const initR = cur.pos.clone().sub(centre);
+  const curvePts = [], lastDir = {x:0,z:-1};
   for(let i=0;i<=steps;i++){
-    const sw=angleDelta*(i/steps);
-    const cs=Math.cos(sw),sn=Math.sin(sw);
+    const sw = angleDelta*(i/steps);
+    const cs=Math.cos(sw), sn=Math.sin(sw);
     const rx=initR.x*cs-initR.z*sn, rz=initR.x*sn+initR.z*cs;
-    const pos=new THREE.Vector3(centre.x+rx,cur.pos.y,centre.z+rz);
+    const pos = new THREE.Vector3(centre.x+rx, cur.pos.y, centre.z+rz);
     const tx=(-sn*initR.x-cs*initR.z)*ts, tz=(cs*initR.x-sn*initR.z)*ts;
     const tl=Math.sqrt(tx*tx+tz*tz);
-    const dir=new THREE.Vector3(tx/tl,0,tz/tl);
-    pts.push({pos,dir,y:cur.pos.y});
-    pathNodes.push({pos:pos.clone(),dir:dir.clone(),right:perpRight(dir),floorY:cur.pos.y,halfW:TW_HALF});
+    const dir = new THREE.Vector3(tx/tl,0,tz/tl);
+    curvePts.push(pos.clone());
+    pathNodes.push({pos:pos.clone(), dir:dir.clone(), right:perpRight(dir), floorY:cur.pos.y, halfW:TW_HALF});
+    if(i===steps){lastDir.x=dir.x;lastDir.z=dir.z;}
   }
-  _buildRibbon(pts,eL,eR);
-  courseLength+=arcLen;
-  const last=pts[pts.length-1];
-  return makeCursor(last.pos.x,cur.pos.y,last.pos.z,last.dir.x,last.dir.z);
+  _buildTube(curvePts, eL, eR);
+  courseLength += arcLen;
+  const last = curvePts[curvePts.length-1];
+  return makeCursor(last.x, cur.pos.y, last.z, lastDir.x, lastDir.z);
 }
 
 // ── BOOST PAD ─────────────────────────────────────────
