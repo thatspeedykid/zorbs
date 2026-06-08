@@ -146,7 +146,7 @@ const TW_HALF = TW/2;
 const GRAV   = -20;
 const BOUNCE = 0.2;
 const FRIC   = 0.995; // less friction = balls keep rolling
-const MIN_FWD = 3.0; // balls always moving
+const MIN_FWD = 2.5;
 const ZCOLORS= [0x00f0ff,0xff00cc,0xaaff00,0xff8800,0xff4488,0xaa44ff,0x00ffaa,0xffff00,0x44aaff,0xff6644];
 
 // ── PATH SYSTEM ───────────────────────────────────────
@@ -473,7 +473,7 @@ function stepPhysics(z,dt){
   if(z.finished) return;
 
   // ── Gravity
-  z.vel.y+=GRAV*dt;
+  if(!z.onGround) z.vel.y+=GRAV*dt; // only gravity when airborne
 
   // ── Boost
   if(z.boost>0){
@@ -508,11 +508,10 @@ function stepPhysics(z,dt){
     // ── Floor collision
     if(z.pos.y<=floorY){
       z.pos.y=floorY;
-      if(z.vel.y<0) z.vel.y=-z.vel.y*BOUNCE;
+      z.vel.y=0; // land flat, no bounce
       z.onTrack=true;
       // Apply friction on ground
-      z.vel.x*=Math.pow(FRIC,dt*60);
-      z.vel.z*=Math.pow(FRIC,dt*60);
+      // No friction on ground - forward force handles speed control
     } else {
       z.onTrack=false;
     }
@@ -537,13 +536,16 @@ function stepPhysics(z,dt){
       }
     }
 
-    // ── Always-forward push when racing
+    // Always push forward - runs every frame on track
     if(phase==='racing'){
       const fwdSpeed=z.vel.x*node.dir.x+z.vel.z*node.dir.z;
+      // Constant force like gravity on a slope - never stops
+      z.vel.x+=node.dir.x*6*dt;
+      z.vel.z+=node.dir.z*6*dt;
+      // Extra kick if really slow
       if(fwdSpeed<MIN_FWD){
-        const deficit=MIN_FWD-fwdSpeed;
-        z.vel.x+=node.dir.x*deficit*8*dt;
-        z.vel.z+=node.dir.z*deficit*8*dt;
+        z.vel.x+=node.dir.x*(MIN_FWD-fwdSpeed)*12*dt;
+        z.vel.z+=node.dir.z*(MIN_FWD-fwdSpeed)*12*dt;
       }
     }
 
