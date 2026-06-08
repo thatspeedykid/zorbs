@@ -389,34 +389,10 @@ function buildCourse(durSecs){
   z-=8;
 
   // ── SECTIONS
-  const sectionTypes=['curve_right','curve_left','ramp_down','curve_right','curve_left','ramp_down','curve_right'];
-  const edgePalette=[[0x00f0ff,0xff00cc],[0xffff00,0xff8800],[0x00ff88,0x00aaff],[0xaa44ff,0xff4488]];
-
-  for(let s=0;s<numSections;s++){
-    const type=sectionTypes[s%sectionTypes.length];
-    const [eL,eR]=edgePalette[s%edgePalette.length];
-
-    if(type==='ramp_down'){
-      // Ramp down then straight
-      const newY=y-8; buildRamp(x,y,z,newY,z-12); z-=12; y=newY;
-      const z2=z-20; buildStraight(x,y,z,z2,eL,eR); z=z2;
-
-    } else if(type==='curve_right'){
-      // Short straight then 90-degree right curve
-      const z2=z-8; buildStraight(x,y,z,z2,eL,eR); z=z2;
-      const radius=18;
-      // Right turn: arc from 0 to +PI/2
-      buildCurve(x+radius,y,z, radius, Math.PI,Math.PI/2, eL,eR);
-      x+=radius; z-=radius;
-
-    } else if(type==='curve_left'){
-      const z2=z-8; buildStraight(x,y,z,z2,eL,eR); z=z2;
-      const radius=18;
-      buildCurve(x-radius,y,z, radius, 0,Math.PI/2, eL,eR);
-      x-=radius; z-=radius;
-
-    }
-  }
+  // Straight track only - no turns
+  const trackLen = 80 + complexity * 25;
+  buildStraight(x, y, z, z - trackLen, 0x00f0ff, 0xff00cc);
+  z -= trackLen;
 
   // ── FINAL SPRINT
   const zFinal=z-22;
