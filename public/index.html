@@ -1616,8 +1616,8 @@ fetch('/api/config').then(r=>r.json()).then(cfg=>{
       // Sync ball positions
       state.balls.forEach(bd => {
         let z = zorbs.find(z=>z.name===bd.n);
-        if(!z && phase !== 'lobby'){
-          // Create missing ball from host state
+        if(!z){
+          // Create missing ball from host state - works in any phase
           z = createZorb(bd.n, bd.s===1, bd.c || ZCOLORS[zorbs.length%ZCOLORS.length]);
           zorbs.push(z);
           document.getElementById('cnt').textContent = zorbs.length+' racers';
@@ -1639,7 +1639,7 @@ fetch('/api/config').then(r=>r.json()).then(cfg=>{
       zorbs.filter(z=>!alive.has(z.name)).forEach(z=>{ removeZorb(z); });
       const before = zorbs.length;
       for(let i=zorbs.length-1;i>=0;i--){ if(!alive.has(zorbs[i].name)) zorbs.splice(i,1); }
-      if(zorbs.length !== before) document.getElementById('cnt').textContent = zorbs.length+' racers';
+      document.getElementById('cnt').textContent = zorbs.length+' racers';
     },
     onBecomeHost: () => {
       console.log('[ZORBS] Promoted to host - now running physics');
