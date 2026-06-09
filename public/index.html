@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<script>if(location.hostname.startsWith('www.'))location.replace(location.href.replace('//www.','//'));</script>
 
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -1709,11 +1708,21 @@ fetch('/api/config').then(r=>r.json()).then(cfg=>{
         z.knockFlash = bd.kf || 0;
         z.mesh.visible = !z.disqualified;
       });
-      // Remove balls no longer in host state
+      // Remove balls no longer in host state - but NEVER our own ball
       const alive = new Set(state.balls.map(b=>b.n));
-      zorbs.filter(z=>!alive.has(z.name)).forEach(z=>{ removeZorb(z); });
-      const before = zorbs.length;
-      for(let i=zorbs.length-1;i>=0;i--){ if(!alive.has(zorbs[i].name)) zorbs.splice(i,1); }
+      for(let i=zorbs.length-1;i>=0;i--){
+        const zb = zorbs[i];
+        if(alive.has(zb.name)) continue;
+        if(zb.name === window._myName){
+          // Host doesn't know us (it probably refreshed) - reintroduce ourselves
+          if(!window._rejoinCd || Date.now()-window._rejoinCd > 3000){
+            window._rejoinCd = Date.now();
+            ZORBS_SESSION.publishJoin(zb.name, window._myIsSub||false, zb.color);
+          }
+          continue; // keep our ball
+        }
+        removeZorb(zb); zorbs.splice(i,1);
+      }
       document.getElementById('cnt').textContent = zorbs.length+' racers';
     },
     onBecomeHost: () => {
@@ -1754,6 +1763,15 @@ if(_savedNick){
     }, 1500); // extra delay to ensure Ably is connected
   }, 3000);
 }
+
+// SELF-HEALING SYNC: re-broadcast our join every 5s so any tab
+// (especially a freshly-refreshed host) always learns about our ball
+setInterval(()=>{
+  if(window._myName && typeof ZORBS_SESSION !== 'undefined' && ZORBS_SESSION.isConnected()){
+    const myZorb = zorbs.find(z=>z.name===window._myName);
+    ZORBS_SESSION.publishJoin(window._myName, window._myIsSub||false, myZorb?myZorb.color:null);
+  }
+}, 5000);
 
 // Remote control from dashboard (streamer lobbies)
 window.handleRemoteCtl = (cmd, val) => {
