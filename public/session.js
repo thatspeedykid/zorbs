@@ -87,6 +87,8 @@ const ZORBS_SESSION = (() => {
         window.phase = v;
         const el = document.getElementById('stxt');
         if (el) el.textContent = v.toUpperCase();
+        // Track last known phase so new host knows not to restart mid-race
+        window._lastKnownPhase = v;
       }
       if (t === 'banner' && window.showBanner) showBanner(v, 2000);
       if (t === 'ko'     && window.showKO)     showKO(v, c);
@@ -119,6 +121,7 @@ const ZORBS_SESSION = (() => {
       electHost();
     }
     // else: a host is alive, stay as viewer
+    // If we see a racing phase in state, definitely don't take over
   }
 
   async function electHost() {
@@ -142,7 +145,8 @@ const ZORBS_SESSION = (() => {
   function becomeHost() {
     if (isHost) return;
     isHost = true;
-    console.log('[ZORBS] I AM HOST');
+    window._hostSince = Date.now();
+    console.log('[ZORBS] I AM HOST at', new Date().toLocaleTimeString());
     if (callbacks.onBecomeHost) callbacks.onBecomeHost();
 
     // Heartbeat

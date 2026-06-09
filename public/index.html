@@ -63,7 +63,7 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;}
 <canvas id="speedline" style="position:absolute;top:0;left:0;pointer-events:none;"></canvas>
 <div id="ui">
   <div id="topbar">
-    <div id="logo">ZORBS <span>on</span> Stream <a href="/dashboard.html" style="font-size:8px;letter-spacing:1px;color:rgba(255,255,255,0.25);text-decoration:none;margin-left:10px;vertical-align:middle;">DASHBOARD ↗</a></div>
+    <div id="logo">ZORBS <span>on</span> Stream <span style="font-size:9px;color:rgba(255,255,255,0.25);letter-spacing:2px;margin-left:8px;vertical-align:middle;">ALPHA v0.1</span> <a href="/dashboard.html" style="font-size:8px;letter-spacing:1px;color:rgba(255,255,255,0.25);text-decoration:none;margin-left:10px;vertical-align:middle;">DASHBOARD ↗</a></div>
     <div id="cams">
       <button class="cb active" id="btn-follow" onclick="setCam('follow')">FOLLOW</button>
       <button class="cb" id="btn-wide" onclick="setCam('wide')">WIDE</button>
@@ -1519,13 +1519,19 @@ if(_isStreamer){
   window.ZORBS_BOTS_ENABLED = _settings2.bots === true; // off by default
   // Auto-start: only host starts races
   let _autoStartPending = false;
+  let _lastRaceEnd = 0;
   setInterval(()=>{
     const amHost = typeof ZORBS_SESSION === 'undefined' || ZORBS_SESSION.amHost();
-    if(!amHost) return; // only host auto-starts
-    if(phase==='lobby' && zorbs.length >= 2 && !_autoStartPending){ // min 2 players
+    if(!amHost) return;
+    // Don't auto-start if we JUST became host (could be a refresh)
+    // Wait at least 8s after becoming host before starting anything
+    if(!window._hostSince || Date.now() - window._hostSince < 8000) return;
+    // Don't start if last known phase was racing (tab just became host mid-race)
+    if(window._lastKnownPhase === 'racing') return;
+    if(phase==='lobby' && zorbs.length >= 2 && !_autoStartPending){
       const delay = zorbs.length >= 10 ? 5000 : zorbs.length >= 3 ? 10000 : 20000;
       _autoStartPending = true;
-      setTimeout(()=>{ if(phase==='lobby' && zorbs.length>=1) streamerStart(); _autoStartPending=false; }, delay);
+      setTimeout(()=>{ if(phase==='lobby' && zorbs.length>=2) streamerStart(); _autoStartPending=false; }, delay);
     }
   }, 3000);
 }
@@ -1634,8 +1640,10 @@ fetch('/api/config').then(r=>r.json()).then(cfg=>{
       console.log('[ZORBS] Promoted to host - now running physics');
       const logo = document.getElementById('logo');
       if(logo) logo.title = 'You are the race host';
-      // Map already built with hourly seed - same on all tabs
-      console.log('[ZORBS] Became host, map seed:', _hourlySeed);
+      // Became host - check if a race was already running
+      // If so, continue it rather than restarting
+      console.log('[ZORBS] Became host, current phase:', window.phase);
+      // The state sync will handle ongoing race - don't touch it
     }
   });
 }).catch(()=>{});
