@@ -74,12 +74,14 @@ const ZORBS_SESSION = (() => {
       }
       if (isHost) return;
       // Viewer gets seed from host - build identical track
-      if (t === 'seed' && window.initCourse && window._currentSeed !== v) {
-        console.log('[ZORBS] Got seed from host:', v, 'phase:', window.phase);
-        // Only rebuild if not mid-race - never change map during a race
-        if(window.phase === 'lobby' || window.phase === 'countdown') {
+      if (t === 'seed') {
+        console.log('[ZORBS] Got seed from host:', v, 'current:', window._currentSeed, 'phase:', window.phase);
+        // ONLY rebuild if seed actually changed AND we're not mid-race
+        if(window._currentSeed !== v && window.phase !== 'racing' && window.phase !== 'countdown') {
+          console.log('[ZORBS] Rebuilding course with new seed:', v);
+          window._currentSeed = v;
           window._courseBuilt = false;
-          window.initCourse(v);
+          if(window.initCourse) window.initCourse(v);
         }
         return;
       }
@@ -108,20 +110,21 @@ const ZORBS_SESSION = (() => {
     // Watch for host death
     setInterval(() => {
       if (!isHost && lastHB > 0 && Date.now() - lastHB > HB_TIMEOUT) {
-        console.log('[ZORBS] Host timeout - electing new host');
-        lastHB = Date.now(); // reset to avoid double-elect
+        console.log('[ZORBS] Host died - electing new host');
+        lastHB = Date.now();
         electHost();
       }
     }, 1000);
   }
 
   function maybeElect() {
-    // If no heartbeat received yet, we're likely the first tab = become host
     if (lastHB === 0) {
       electHost();
+    } else {
+      // Host is alive - we are a viewer, confirmed
+      console.log('[ZORBS] Viewer confirmed - host is alive');
+      if (callbacks.onConfirmViewer) callbacks.onConfirmViewer();
     }
-    // else: a host is alive, stay as viewer
-    // If we see a racing phase in state, definitely don't take over
   }
 
   async function electHost() {

@@ -1320,6 +1320,7 @@ function handleCmd(name,cmd,isSub){
 
 function streamerStart(){
   if(phase!=='lobby') return;
+  if(!window.IS_HOST && typeof ZORBS_SESSION !== 'undefined') return; // only host
   raceDurSecs=parseDur(document.getElementById('dur').value);
   // Build course with a new seed - broadcast to all viewers so they match
   const raceSeed = Math.floor(Math.random()*999999);
@@ -1526,8 +1527,7 @@ if(_isStreamer){
   let _autoStartPending = false;
   let _lastRaceEnd = 0;
   setInterval(()=>{
-    const amHost = typeof ZORBS_SESSION === 'undefined' || ZORBS_SESSION.amHost();
-    if(!amHost) return;
+    if(!window.IS_HOST) return;
     // Don't auto-start if we JUST became host (could be a refresh)
     // Wait at least 8s after becoming host before starting anything
     if(!window._hostSince || Date.now() - window._hostSince < 8000) return;
@@ -1587,8 +1587,12 @@ async function pollKickChat(){
 setInterval(pollKickChat, 500);
 
 // ── START SHARED SESSION ──────────────────────────────
+// IS_HOST is set when we win host election - never changes after that
+window.IS_HOST = false;
+window.IS_VIEWER = false; // set true once we confirm we're a viewer
+
 fetch('/api/config').then(r=>r.json()).then(cfg=>{
-  if(!cfg.ablyKey) return;
+  if(!cfg.ablyKey){ window.IS_HOST=true; return; } // no Ably = single player = host
   ZORBS_SESSION.init(cfg.ablyKey, {
     onJoin: (name, isSub, color) => {
       // Another player joined - add their ball if we don't have it
@@ -1597,15 +1601,7 @@ fetch('/api/config').then(r=>r.json()).then(cfg=>{
       }
     },
     onState: (state) => {
-      // Sync track seed from host state
-      // Sync map seed from host state
-      if(state._seed !== undefined && state._seed !== window._currentSeed){
-        if(window.phase === 'lobby' || window.phase === 'countdown'){
-          console.log('[ZORBS] State seed differs, rebuilding:', state._seed);
-          window._courseBuilt = false;
-          if(window.initCourse) window.initCourse(state._seed);
-        }
-      }
+      // Seed sync handled by explicit 'seed' event only - not state messages
       // We're a viewer - sync from host state
       if(state.phase && state.phase !== phase){
         phase = state.phase;
@@ -1642,13 +1638,15 @@ fetch('/api/config').then(r=>r.json()).then(cfg=>{
       document.getElementById('cnt').textContent = zorbs.length+' racers';
     },
     onBecomeHost: () => {
-      console.log('[ZORBS] Promoted to host - now running physics');
+      window.IS_HOST = true;
+      window.IS_VIEWER = false;
+      console.log('[ZORBS] I AM HOST');
       const logo = document.getElementById('logo');
-      if(logo) logo.title = 'You are the race host';
-      // Became host - check if a race was already running
-      // If so, continue it rather than restarting
-      console.log('[ZORBS] Became host, current phase:', window.phase);
-      // The state sync will handle ongoing race - don't touch it
+      if(logo) logo.title = '★ Race Host';
+    },
+    onConfirmViewer: () => {
+      window.IS_VIEWER = true;
+      window.IS_HOST = false;
     }
   });
 }).catch(()=>{});
@@ -1816,8 +1814,7 @@ function loop(ts){
   if(phase==='racing'){
     updateTimer();
     // Only HOST runs physics - viewers get state via Ably
-    const _amHost = typeof ZORBS_SESSION === 'undefined' || ZORBS_SESSION.amHost();
-    if(_amHost){
+    if(window.IS_HOST){
       updateHammers(dt);
       updateBlades(dt);
       updateWindZones();
