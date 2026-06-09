@@ -1599,22 +1599,39 @@ if(_isStreamer){
   document.getElementById('join-panel').style.display = 'block';
   const _settings2 = JSON.parse(localStorage.getItem('zorbs_settings')||'{}');
   window.ZORBS_BOTS_ENABLED = _settings2.bots === true; // off by default
-  // Auto-start: only host starts races
-  let _autoStartPending = false;
-  let _lastRaceEnd = 0;
+  // Auto-start: visible 30s countdown once 2+ players are in lobby (public lobby only)
+  window._autoStartAt = null;
+  function showCountdown(secs){
+    const tp=document.getElementById('tpill'), el=document.getElementById('timer-display');
+    if(secs===null){ tp.style.display='none'; return; }
+    tp.style.display='flex';
+    el.textContent='STARTING IN '+secs+'s';
+    el.classList.toggle('urgent', secs<=5);
+  }
+  window.showCountdown = showCountdown;
   setInterval(()=>{
     if(!window.IS_HOST) return;
-    // Don't auto-start if we JUST became host (could be a refresh)
-    // Wait at least 8s after becoming host before starting anything
     if(!window._hostSince || Date.now() - window._hostSince < 8000) return;
-    // Don't start if last known phase was racing (tab just became host mid-race)
     if(window._lastKnownPhase === 'racing') return;
-    if(phase==='lobby' && zorbs.length >= 2 && !_autoStartPending){
-      const delay = zorbs.length >= 10 ? 5000 : zorbs.length >= 3 ? 10000 : 20000;
-      _autoStartPending = true;
-      setTimeout(()=>{ if(phase==='lobby' && zorbs.length>=2) streamerStart(); _autoStartPending=false; }, delay);
+    if(phase!=='lobby'){ window._autoStartAt=null; showCountdown(null); return; }
+    if(zorbs.length >= 2){
+      if(!window._autoStartAt) window._autoStartAt = Date.now() + 30000; // 30s countdown
+      const secs = Math.max(0, Math.ceil((window._autoStartAt - Date.now())/1000));
+      showCountdown(secs);
+      // Broadcast countdown so viewers see it too
+      if(typeof ZORBS_SESSION!=='undefined') ZORBS_SESSION.publishEvent('count', secs, 0);
+      if(secs<=0){
+        window._autoStartAt=null; showCountdown(null);
+        streamerStart();
+      }
+    } else {
+      // Lost a player - cancel countdown
+      if(window._autoStartAt){
+        window._autoStartAt=null; showCountdown(null);
+        if(typeof ZORBS_SESSION!=='undefined') ZORBS_SESSION.publishEvent('count', -1, 0);
+      }
     }
-  }, 3000);
+  }, 1000);
 }
 
 // Shared seed system - host picks seed, all tabs build identical track

@@ -98,6 +98,10 @@ const ZORBS_SESSION = (() => {
         const el = document.getElementById('stxt');
         if (el) el.textContent = v.toUpperCase();
       }
+      if (t === 'count') {
+        if (window.showCountdown) window.showCountdown(v >= 0 ? v : null);
+        return;
+      }
       if (t === 'winner') {
         if(window.showBanner) showBanner('🏆 WINNER: '+v, 4500);
         setTimeout(()=>{ if(window.showEndLeaderboard) showEndLeaderboard(); }, 4500);
