@@ -59,10 +59,20 @@ const ZORBS_SESSION = (() => {
       if (!isHost && callbacks.onJoin) callbacks.onJoin(msg.data.name, msg.data.isSub, msg.data.color);
     });
 
-    // Race events (start, end, KO, banner, seed)
+    // Race events (start, end, KO, banner, seed, chat)
     ch.subscribe('ev', msg => {
-      if (isHost) return;
       const {t, v, c} = msg.data;
+      // Chat sync - show on all tabs
+      if (t === 'chat') {
+        try {
+          const {name, text, isSub} = JSON.parse(v);
+          if(window.addChat) addChat(name, text, isSub);
+          // Non-host tabs also process commands
+          if(!isHost && window.handleCmd) handleCmd(name, text, isSub);
+        } catch(e) {}
+        return;
+      }
+      if (isHost) return;
       // Viewer gets seed from host - build identical track
       if (t === 'seed' && window.initCourse && window._currentSeed !== v) {
         console.log('[ZORBS] Got seed from host:', v, 'phase:', window.phase);

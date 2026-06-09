@@ -10,8 +10,8 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;}
 #app{width:100%;height:100vh;position:relative;}
 #c{display:block;width:100%;height:100%;}
 #ui{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;font-family:'Courier New',monospace;}
-#topbar{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:linear-gradient(180deg,rgba(0,0,0,0.92)0%,transparent);}
-#logo{font-size:18px;font-weight:900;letter-spacing:4px;color:#00f0ff;text-shadow:0 0 18px #00f0ff;}
+#topbar{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:linear-gradient(180deg,rgba(0,0,0,0.92)0%,transparent);pointer-events:auto;}
+#logo{font-size:18px;font-weight:900;letter-spacing:4px;color:#00f0ff;text-shadow:0 0 18px #00f0ff;pointer-events:auto;}
 #logo span{color:#ff00cc;}
 #cams{display:flex;gap:5px;pointer-events:auto;}
 .cb{background:rgba(0,240,255,0.07);border:1px solid rgba(0,240,255,0.28);color:#00f0ff;padding:4px 10px;border-radius:4px;font-size:10px;cursor:pointer;letter-spacing:2px;font-family:'Courier New',monospace;}
@@ -1415,9 +1415,12 @@ function resetRace(){
   // Auto-restart: if host, start new race after 60s (give time for end leaderboard)
   if(typeof ZORBS_SESSION==='undefined' || ZORBS_SESSION.amHost()){
     setTimeout(()=>{
-      if(phase==='lobby'){
+      if(phase==='lobby' && zorbs.length >= 2){
         showBanner('NEW RACE STARTING...',2000);
         setTimeout(streamerStart, 2500);
+      } else if(phase==='lobby'){
+        // Not enough players, wait for more
+        showBanner('WAITING FOR PLAYERS...',2000);
       }
     }, 20000); // 20s after reset = ~32s total after winner (12s leaderboard + 20s)
   }
@@ -1488,9 +1491,12 @@ document.addEventListener('keydown',e=>{
 });
 document.getElementById('cg').onclick=()=>{
   const v=document.getElementById('ci').value.trim(); if(!v)return;
-  handleCmd(window._myName||'You',v,window._myIsSub||false);
-  if(typeof ZORBS_SESSION !== 'undefined' && window._myName)
-    ZORBS_SESSION.publishChat(window._myName, v, window._myIsSub||false);
+  const name = window._myName||'You';
+  const isSub = window._myIsSub||false;
+  handleCmd(name, v, isSub);
+  // Sync chat to all tabs via Ably
+  if(typeof ZORBS_SESSION !== 'undefined')
+    ZORBS_SESSION.publishEvent('chat', JSON.stringify({name,text:v,isSub}), 0);
   document.getElementById('ci').value='';
 };
 document.getElementById('ci').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('cg').click();});
@@ -1516,8 +1522,8 @@ if(_isStreamer){
   setInterval(()=>{
     const amHost = typeof ZORBS_SESSION === 'undefined' || ZORBS_SESSION.amHost();
     if(!amHost) return; // only host auto-starts
-    if(phase==='lobby' && zorbs.length >= 1 && !_autoStartPending){
-      const delay = zorbs.length >= 5 ? 5000 : zorbs.length >= 2 ? 10000 : 30000;
+    if(phase==='lobby' && zorbs.length >= 2 && !_autoStartPending){ // min 2 players
+      const delay = zorbs.length >= 10 ? 5000 : zorbs.length >= 3 ? 10000 : 20000;
       _autoStartPending = true;
       setTimeout(()=>{ if(phase==='lobby' && zorbs.length>=1) streamerStart(); _autoStartPending=false; }, delay);
     }
@@ -1555,9 +1561,12 @@ async function pollKickChat(){
       data.commands.forEach(cmd => {
         addChat(cmd.username, cmd.command, cmd.isSub);
         handleCmd(cmd.username, cmd.command, cmd.isSub);
-        // If we're host, broadcast to all viewers via Ably
+        // Broadcast to all viewers via Ably (both as command and chat message)
         if(typeof ZORBS_SESSION !== 'undefined' && ZORBS_SESSION.amHost()){
           ZORBS_SESSION.publishKickCmd(cmd.username, cmd.command, cmd.isSub);
+          ZORBS_SESSION.publishEvent('chat', JSON.stringify({
+            name:cmd.username, text:cmd.command, isSub:cmd.isSub
+          }), 0);
         }
       });
     }
