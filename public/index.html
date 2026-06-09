@@ -177,6 +177,8 @@ let composer = null;
 try {
   if (THREE.EffectComposer && THREE.UnrealBloomPass) {
     composer = new THREE.EffectComposer(renderer);
+    composer.setPixelRatio(window.devicePixelRatio || 1);
+    composer.setSize(innerWidth, innerHeight);
     composer.addPass(new THREE.RenderPass(scene, camera));
     const bloom = new THREE.UnrealBloomPass(
       new THREE.Vector2(innerWidth, innerHeight), 0.55, 0.6, 0.82);
@@ -1804,7 +1806,7 @@ async function joinWithKick(){
   sessionStorage.setItem('kick_verifier', verifier);
   const params = new URLSearchParams({
     client_id: '01KTMSSQ3PNEAA8EYYX1T6T4CK',
-    redirect_uri: 'https://playzorbs.xyz/auth/kick/game-callback',
+    redirect_uri: 'https://www.playzorbs.xyz/auth/kick/game-callback',
     response_type: 'code',
     scope: 'user:read',
     state,

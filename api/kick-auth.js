@@ -1,6 +1,6 @@
 const KICK_CLIENT_ID = '01KTMSSQ3PNEAA8EYYX1T6T4CK';
 const KICK_SECRET = 'c4daf86f9492d0ac466af921c8846e5ed00b6bea0dc4fcda78607db5c0f93ad8';
-const REDIRECT_URI = 'https://playzorbs.xyz/auth/kick/callback';
+const REDIRECT_URI = 'https://www.playzorbs.xyz/auth/kick/callback';
 const ADMIN_USERNAMES = ['marsscumbags'];
 
 export default async function handler(req, res) {
