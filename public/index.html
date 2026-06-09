@@ -1114,7 +1114,9 @@ const _smoothCamPos = new THREE.Vector3();
 let _camInit = false;
 function updateCamera(dt){
   const sm=Math.min(dt*5,0.15);
-  const leader=zorbs.filter(z=>!z.finished&&!z.disqualified).sort((a,b)=>b.nodeIdx-a.nodeIdx)[0]||zorbs[0];
+  // Prefer following the local player, fall back to race leader
+  const localZorb = window._myName ? zorbs.find(z=>z.name===window._myName&&!z.disqualified) : null;
+  const leader = localZorb || zorbs.filter(z=>!z.finished&&!z.disqualified).sort((a,b)=>b.nodeIdx-a.nodeIdx)[0] || zorbs[0];
   if(!leader) return;
   // Smooth the leader position we track - prevents stutter from knockbacks
   if(!_camInit){ _smoothCamPos.copy(leader.pos); _camInit=true; }
@@ -1315,6 +1317,11 @@ function streamerStart(){
   setTimeout(()=>{
     showBanner('GO! 🚀',800); phase='racing';
     document.getElementById('stxt').textContent='RACING';
+    // Broadcast race start to all viewers
+    if(typeof ZORBS_SESSION !== 'undefined' && ZORBS_SESSION.amHost()){
+      ZORBS_SESSION.publishEvent('phase','racing',0);
+      ZORBS_SESSION.publishEvent('banner','GO! 🚀',0);
+    }
     raceStartTime=performance.now();
     zorbs.forEach(z=>{
       const {node}=nearestNodeFromHint(z.pos,0);
@@ -1362,6 +1369,10 @@ function resetRace(){
   document.getElementById('btn-go').disabled=false;
   document.getElementById('dur').value='';
   showBanner('NEW RACE — TYPE !play',2500);
+  if(typeof ZORBS_SESSION !== 'undefined' && ZORBS_SESSION.amHost()){
+    ZORBS_SESSION.publishEvent('phase','lobby',0);
+    ZORBS_SESSION.publishEvent('banner','NEW RACE',0);
+  }
   setTimeout(startMock,2500);
 }
 
@@ -1440,9 +1451,11 @@ if(_isStreamer){
   // Auto-play mode - show join panel
   document.getElementById('join-panel').style.display = 'block';
   window.ZORBS_BOTS_ENABLED = false; // no bots in auto-play either
-  // Auto-start: start when 2+ players join, or after 30s with 1+ player
+  // Auto-start: only host starts races
   let _autoStartPending = false;
   setInterval(()=>{
+    const amHost = typeof ZORBS_SESSION === 'undefined' || ZORBS_SESSION.amHost();
+    if(!amHost) return; // only host auto-starts
     if(phase==='lobby' && zorbs.length >= 1 && !_autoStartPending){
       const delay = zorbs.length >= 5 ? 5000 : zorbs.length >= 2 ? 10000 : 30000;
       _autoStartPending = true;
@@ -1451,6 +1464,10 @@ if(_isStreamer){
   }, 3000);
 }
 
+// Use time-based seed so all tabs today get same map layout
+// Seed changes every hour so races feel fresh
+const _courseSeed = Math.floor(Date.now() / 3600000); // changes hourly
+Math.seedrandom ? Math.seedrandom(_courseSeed) : null; // if seedrandom available
 buildCourse(null);
 if(window.ZORBS_BOTS_ENABLED) startMock();
 
@@ -1667,12 +1684,16 @@ function loop(ts){
 
   if(phase==='racing'){
     updateTimer();
-    updateHammers(dt);
-  updateBlades(dt);
-  updateWindZones();
-  updateTrapDoors(dt);
-    const SUB = zorbs.length > 200 ? 1 : zorbs.length > 50 ? 2 : 3;
-    for(let s=0;s<SUB;s++){zorbs.forEach(z=>stepPhysics(z,dt/SUB));ballCollide();}
+    // Only HOST runs physics - viewers get state via Ably
+    const _amHost = typeof ZORBS_SESSION === 'undefined' || ZORBS_SESSION.amHost();
+    if(_amHost){
+      updateHammers(dt);
+      updateBlades(dt);
+      updateWindZones();
+      updateTrapDoors(dt);
+      const SUB = zorbs.length > 200 ? 1 : zorbs.length > 50 ? 2 : 3;
+      for(let s=0;s<SUB;s++){zorbs.forEach(z=>stepPhysics(z,dt/SUB));ballCollide();}
+    }
 
     // Wind gust events
     if(frame%960===480&&zorbs.length>0){
