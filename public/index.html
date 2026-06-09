@@ -56,10 +56,6 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;}
 #speedline{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;opacity:0;transition:opacity 0.2s;}
 #hint{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);font-size:9px;color:rgba(255,255,255,.16);pointer-events:none;white-space:nowrap;}
 </style>
-<script>
-// Load Ably key from config endpoint
-fetch('/api/config').then(r=>r.json()).then(d=>{ window.ABLY_API_KEY=d.ablyKey||''; }).catch(()=>{});
-</script>
 </head>
 <body>
 <div id="app">
@@ -1469,10 +1465,12 @@ async function pollKickChat(){
     const data = await r.json();
     if(data.commands && data.commands.length){
       data.commands.forEach(cmd => {
-        // Add to chat display
         addChat(cmd.username, cmd.command, cmd.isSub);
-        // Handle the command
         handleCmd(cmd.username, cmd.command, cmd.isSub);
+        // If we're host, broadcast to all viewers via Ably
+        if(typeof ZORBS_SESSION !== 'undefined' && ZORBS_SESSION.amHost()){
+          ZORBS_SESSION.publishKickCmd(cmd.username, cmd.command, cmd.isSub);
+        }
       });
     }
   } catch(e){} finally { _kickPollActive = false; }
@@ -1481,53 +1479,59 @@ async function pollKickChat(){
 setInterval(pollKickChat, 500);
 
 // ── START SHARED SESSION ──────────────────────────────
-const ABLY_KEY = window.ABLY_API_KEY || ''; // set via config
-if(ABLY_KEY){
-  ZORBS_SESSION.init(ABLY_KEY, {
-    onJoin: (name, isSub) => {
-      // Viewer tab: someone joined from another tab
-      if(!ZORBS_SESSION.isHostTab()) handleCmd(name, '!play', isSub);
+fetch('/api/config').then(r=>r.json()).then(cfg=>{
+  if(!cfg.ablyKey) return;
+  ZORBS_SESSION.init(cfg.ablyKey, {
+    onJoin: (name, isSub, color) => {
+      // Another viewer joined - add their ball locally
+      if(!zorbs.find(z=>z.name===name)){
+        const col = color || ZCOLORS[zorbs.length%ZCOLORS.length];
+        zorbs.push(createZorb(name, isSub, col));
+        document.getElementById('cnt').textContent = zorbs.length+' racers';
+      }
     },
     onState: (state) => {
-      // Viewer tab: update ball positions from host
+      // We're a viewer - sync from host state
       if(state.phase && state.phase !== phase){
         phase = state.phase;
-        if(phase === 'racing') document.getElementById('stxt').textContent = 'RACING';
+        const stxt = document.getElementById('stxt');
+        if(stxt) stxt.textContent = phase.toUpperCase();
       }
-      if(state.balls){
-        state.balls.forEach(bd => {
-          let z = zorbs.find(z => z.name === bd.name);
-          if(!z){
-            // New ball we don't have yet - create it
-            const col = bd.col || ZCOLORS[zorbs.length % ZCOLORS.length];
-            z = createZorb(bd.name, bd.isSub, col);
-            zorbs.push(z);
-          }
-          // Lerp position toward host state
-          z.pos.x += (bd.x - z.pos.x) * 0.3;
-          z.pos.y += (bd.y - z.pos.y) * 0.3;
-          z.pos.z += (bd.z - z.pos.z) * 0.3;
-          z.vel.set(bd.vx, bd.vy, bd.vz);
-          z.nodeIdx = bd.nodeIdx || 0;
-          z.finished = bd.finished;
-          z.disqualified = bd.dq;
-          z.rank = bd.rank;
-          if(bd.flash) z.knockFlash = bd.flash;
-        });
-        // Remove balls that left
-        const names = new Set(state.balls.map(b => b.name));
-        zorbs.filter(z => !names.has(z.name)).forEach(z => removeZorb(z));
-        zorbs.length = zorbs.filter(z => names.has(z.name)).length;
-      }
+      if(!state.balls) return;
+      // Sync ball positions
+      state.balls.forEach(bd => {
+        let z = zorbs.find(z=>z.name===bd.n);
+        if(!z){
+          const col = bd.c || ZCOLORS[zorbs.length%ZCOLORS.length];
+          z = createZorb(bd.n, bd.s===1, col);
+          zorbs.push(z);
+        }
+        // Smooth interpolation toward host state
+        z.pos.x += (bd.x - z.pos.x) * 0.4;
+        z.pos.y += (bd.y - z.pos.y) * 0.4;
+        z.pos.z += (bd.z - z.pos.z) * 0.4;
+        z.nodeIdx = bd.ni || 0;
+        z.finished = bd.f === 1;
+        z.disqualified = bd.d === 1;
+        z.rank = bd.r || 0;
+        z.knockFlash = bd.kf || 0;
+        z.mesh.visible = !z.disqualified;
+      });
+      // Remove balls no longer in host state
+      const alive = new Set(state.balls.map(b=>b.n));
+      zorbs.filter(z=>!alive.has(z.name)).forEach(z=>{ removeZorb(z); });
+      const before = zorbs.length;
+      for(let i=zorbs.length-1;i>=0;i--){ if(!alive.has(zorbs[i].name)) zorbs.splice(i,1); }
+      if(zorbs.length !== before) document.getElementById('cnt').textContent = zorbs.length+' racers';
     },
-    onHostChange: (isHost) => {
-      if(isHost){
-        // We are now the host - show streamer-like controls
-        console.log('This tab is the race host');
-      }
+    onBecomeHost: () => {
+      console.log('[ZORBS] Promoted to host - now running physics');
+      // Show host indicator
+      const logo = document.getElementById('logo');
+      if(logo) logo.title = 'You are the race host';
     }
   });
-}
+}).catch(()=>{});
 
 // Handle Kick OAuth return
 const _kickJoin = new URLSearchParams(window.location.search).get('kick_join');
@@ -1589,8 +1593,11 @@ function _doJoin(name, isKick){
   }
   document.getElementById('join-panel').style.display='none';
   handleCmd(name, '!play', isKick);
-  // Broadcast join to all other tabs
-  if(typeof ZORBS_SESSION !== 'undefined') ZORBS_SESSION.publishJoin(name, isKick);
+  // Broadcast to all connected tabs via Ably
+  if(typeof ZORBS_SESSION !== 'undefined'){
+    const myZorb = zorbs.find(z=>z.name===name);
+    ZORBS_SESSION.publishJoin(name, isKick, myZorb ? myZorb.color : null);
+  }
   showBanner('Welcome'+(isKick?' [KICK]':'')+': '+name, 2000);
   // Store name for boost command
   window._myName = name;

@@ -1,93 +1,95 @@
-// ZORBS Session Manager - shared session via Ably
-// One tab = HOST (runs physics, broadcasts state)
-// Everyone else = VIEWER (renders received state)
+// ZORBS Shared Session via Ably
+// ONE global race session - everyone on playzorbs.xyz plays together
+// First tab = HOST (runs physics, broadcasts state)
+// All other tabs = VIEWERS (render received state)
+// If host leaves, next viewer auto-promotes to host
 
 const ZORBS_SESSION = (() => {
-  const CHANNEL = 'zorbs-main-session';
-  const STATE_INTERVAL = 50; // broadcast every 50ms = 20fps
-  const HOST_TIMEOUT = 3000;  // 3s without heartbeat = host is gone
+  const CHANNEL_NAME = 'zorbs:main';
+  const BROADCAST_HZ = 20; // 20 state updates/sec
+  const HOST_TIMEOUT = 4000; // 4s no heartbeat = host gone
 
-  let ably = null;
-  let channel = null;
+  let ably, channel;
   let isHost = false;
-  let lastHostbeat = 0;
-  let hostCheckInterval = null;
-  let broadcastInterval = null;
-  let onJoinCallback = null;
-  let onStateCallback = null;
-  let onHostChangeCallback = null;
+  let lastHeartbeat = 0;
   let myId = Math.random().toString(36).slice(2);
-  let playerCount = 0;
+  let broadcastTimer = null;
+  let heartbeatTimer = null;
+  let hostCheckTimer = null;
+  let callbacks = {};
+  let connected = false;
 
-  function init(apiKey, callbacks) {
-    onJoinCallback    = callbacks.onJoin;    // someone joined: (name, isSub)
-    onStateCallback   = callbacks.onState;   // got game state from host
-    onHostChangeCallback = callbacks.onHostChange; // we became host
+  async function init(apiKey, cbs) {
+    callbacks = cbs;
+    // Load Ably SDK dynamically
+    await loadScript('https://cdn.ably.com/lib/ably.min-2.js');
+    ably = new Ably.Realtime({ key: apiKey, clientId: myId });
+    channel = ably.channels.get(CHANNEL_NAME);
 
-    // Load Ably SDK
-    const script = document.createElement('script');
-    script.src = 'https://cdn.ably.com/lib/ably.min-2.js';
-    script.onload = () => connect(apiKey);
-    document.head.appendChild(script);
+    ably.connection.on('connected', () => {
+      connected = true;
+      console.log('[ZORBS] Connected to Ably');
+      subscribeToMessages();
+      // Wait 2s to see if there's already a host broadcasting
+      setTimeout(electHost, 2000);
+    });
   }
 
-  function connect(apiKey) {
-    ably = new Ably.Realtime({ key: apiKey, clientId: myId });
-    channel = ably.channels.get(CHANNEL);
+  function loadScript(src) {
+    return new Promise(resolve => {
+      if (window.Ably) return resolve();
+      const s = document.createElement('script');
+      s.src = src; s.onload = resolve;
+      document.head.appendChild(s);
+    });
+  }
 
+  function subscribeToMessages() {
+    // Someone joined via chat/UI
     channel.subscribe('join', msg => {
-      const { name, isSub } = msg.data;
-      if (onJoinCallback) onJoinCallback(name, isSub);
-      playerCount++;
-      updatePlayerCount();
-    });
-
-    channel.subscribe('leave', msg => {
-      playerCount = Math.max(0, playerCount - 1);
-      updatePlayerCount();
-    });
-
-    channel.subscribe('state', msg => {
-      // Only viewers process state messages from host
-      if (!isHost && onStateCallback) {
-        lastHostbeat = Date.now();
-        onStateCallback(msg.data);
+      if (!isHost) {
+        // Viewer: create ball locally so we see it
+        if (callbacks.onJoin) callbacks.onJoin(msg.data.name, msg.data.isSub, msg.data.color);
       }
     });
 
-    channel.subscribe('heartbeat', msg => {
-      if (!isHost) lastHostbeat = Date.now();
+    // Host broadcasting game state
+    channel.subscribe('state', msg => {
+      lastHeartbeat = Date.now();
+      if (!isHost && callbacks.onState) callbacks.onState(msg.data);
     });
 
-    channel.subscribe('chat', msg => {
-      const { name, text, isSub } = msg.data;
-      if (window.addChat) addChat(name, text, isSub);
+    // Host heartbeat (even when no balls)
+    channel.subscribe('hb', () => {
+      lastHeartbeat = Date.now();
     });
 
-    // Get presence count
-    channel.presence.get((err, members) => {
-      if (!err) playerCount = members.length;
-      updatePlayerCount();
+    // Kick chat commands routed through Ably
+    channel.subscribe('kick', msg => {
+      const { name, cmd, isSub } = msg.data;
+      if (window.handleCmd) handleCmd(name, cmd, isSub);
+      if (window.addChat) addChat(name, cmd, isSub);
     });
-    channel.presence.enter({ id: myId });
 
-    // Listen for presence changes
-    channel.presence.subscribe('enter', () => { playerCount++; updatePlayerCount(); });
-    channel.presence.subscribe('leave', () => { playerCount = Math.max(0, playerCount-1); updatePlayerCount(); });
-
-    // Wait a moment then check if there's a host
-    setTimeout(checkForHost, 1500);
+    // Host announces race events
+    channel.subscribe('event', msg => {
+      const { type, text, color } = msg.data;
+      if (!isHost) {
+        if (type === 'banner' && window.showBanner) showBanner(text, 2000);
+        if (type === 'ko' && window.showKO) showKO(text, color);
+        if (type === 'phase') { window.phase = text; }
+      }
+    });
   }
 
-  function checkForHost() {
-    // If no heartbeat received in HOST_TIMEOUT, become host
-    if (Date.now() - lastHostbeat > HOST_TIMEOUT) {
+  function electHost() {
+    if (Date.now() - lastHeartbeat > HOST_TIMEOUT) {
       becomeHost();
     } else {
-      // Start checking if host goes away
-      hostCheckInterval = setInterval(() => {
-        if (Date.now() - lastHostbeat > HOST_TIMEOUT) {
-          clearInterval(hostCheckInterval);
+      // Check periodically if host dies
+      hostCheckTimer = setInterval(() => {
+        if (Date.now() - lastHeartbeat > HOST_TIMEOUT) {
+          clearInterval(hostCheckTimer);
           becomeHost();
         }
       }, 1000);
@@ -97,53 +99,56 @@ const ZORBS_SESSION = (() => {
   function becomeHost() {
     if (isHost) return;
     isHost = true;
-    console.log('[ZORBS] This tab is now HOST');
-    if (onHostChangeCallback) onHostChangeCallback(true);
+    console.log('[ZORBS] THIS TAB IS NOW HOST');
+    if (callbacks.onBecomeHost) callbacks.onBecomeHost();
 
-    // Broadcast game state at 20fps
-    broadcastInterval = setInterval(() => {
-      if (!window.zorbs || !window.phase) return;
-      const state = {
-        phase: window.phase,
-        balls: window.zorbs.map(z => ({
-          name: z.name,
-          col: z.color,
-          isSub: z.isSub,
-          x: +z.pos.x.toFixed(2),
-          y: +z.pos.y.toFixed(2),
-          z: +z.pos.z.toFixed(2),
-          vx: +z.vel.x.toFixed(2),
-          vy: +z.vel.y.toFixed(2),
-          vz: +z.vel.z.toFixed(2),
-          nodeIdx: z.nodeIdx,
-          finished: z.finished,
-          dq: z.disqualified,
-          rank: z.rank,
-          flash: z.knockFlash || 0,
-        })),
-        t: Date.now(),
-      };
-      channel.publish('state', state);
-    }, STATE_INTERVAL);
+    // Broadcast state at 20fps
+    broadcastTimer = setInterval(() => {
+      if (!window.zorbs || !window.pathNodes) return;
+      try {
+        const state = {
+          phase: window.phase || 'lobby',
+          balls: window.zorbs.slice(0, 1000).map(z => ({
+            n: z.name,
+            c: z.color,
+            s: z.isSub ? 1 : 0,
+            x: +z.pos.x.toFixed(1),
+            y: +z.pos.y.toFixed(1),
+            z: +z.pos.z.toFixed(1),
+            ni: z.nodeIdx || 0,
+            f: z.finished ? 1 : 0,
+            d: z.disqualified ? 1 : 0,
+            r: z.rank || 0,
+            kf: +(z.knockFlash || 0).toFixed(2),
+          })),
+        };
+        channel.publish('state', state);
+      } catch(e) {}
+    }, 1000 / BROADCAST_HZ);
 
-    // Heartbeat every second so viewers know we're alive
-    setInterval(() => channel.publish('heartbeat', { id: myId }), 1000);
+    // Heartbeat every 1.5s
+    heartbeatTimer = setInterval(() => {
+      channel.publish('hb', { id: myId });
+    }, 1500);
   }
 
-  function updatePlayerCount() {
-    const el = document.getElementById('cnt');
-    if (el) el.textContent = playerCount + ' online';
+  // Publish that someone joined
+  function publishJoin(name, isSub, color) {
+    if (channel) channel.publish('join', { name, isSub, color });
   }
 
-  function publishJoin(name, isSub) {
-    if (channel) channel.publish('join', { name, isSub });
+  // Publish a race event (banner, ko, phase change)
+  function publishEvent(type, text, color) {
+    if (channel && isHost) channel.publish('event', { type, text, color });
   }
 
-  function publishChat(name, text, isSub) {
-    if (channel) channel.publish('chat', { name, text, isSub });
+  // Publish a Kick chat command (from webhook polling)
+  function publishKickCmd(name, cmd, isSub) {
+    if (channel && isHost) channel.publish('kick', { name, cmd, isSub });
   }
 
-  function isHostTab() { return isHost; }
+  function amHost() { return isHost; }
+  function isConnected() { return connected; }
 
-  return { init, publishJoin, publishChat, isHostTab };
+  return { init, publishJoin, publishEvent, publishKickCmd, amHost, isConnected };
 })();
