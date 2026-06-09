@@ -1160,7 +1160,7 @@ function updateCamera(dt){
   if(!_camInit){ _smoothCamPos.copy(leader.pos); _camInit=true; }
   // Max 12 units/sec movement prevents sudden jumps when ball gets zapped
   const step = new THREE.Vector3().subVectors(leader.pos, _smoothCamPos);
-  const maxD = 12 * dt;
+  const maxD = 20 * dt; // faster tracking, still smooth
   if(step.length() > maxD) step.setLength(maxD);
   _smoothCamPos.add(step);
   const lp = _smoothCamPos;
@@ -1182,18 +1182,23 @@ function updateCamera(dt){
     return;
   } else if(mode==='follow'){
     const spd=Math.sqrt(leader.vel.x*leader.vel.x+leader.vel.z*leader.vel.z);
-    let travelDir;
-    if(spd>0.5){
-      travelDir=new THREE.Vector3(leader.vel.x,0,leader.vel.z).normalize();
-    } else {
-      const {node}=nearestNodeFromHint(lp,leader.nodeIdx||0);
-      travelDir=node?new THREE.Vector3(node.dir.x,0,node.dir.z).normalize():new THREE.Vector3(0,0,1);
-    }
-    const back=travelDir.clone().negate();
-    // Camera pulls back more at high speed for dramatic feel
-    const pullDist = 4.5 + spd*0.09;
-    const cp=lp.clone().addScaledVector(back,pullDist).add(new THREE.Vector3(0,3.2,0));
-    camPos.lerp(cp,sm*2.5); camLook.lerp(lp.clone().add(new THREE.Vector3(0,0.5,0)),sm*3);
+    // Always use path node direction - never ball velocity
+    // This prevents camera snapping when ball gets knocked
+    const {node:camNode}=nearestNodeFromHint(lp, leader.nodeIdx||0);
+    const travelDir = camNode
+      ? new THREE.Vector3(camNode.dir.x,0,camNode.dir.z).normalize()
+      : new THREE.Vector3(0,0,1);
+    const back = travelDir.clone().negate();
+    // Close behind ball, low angle - feels like racing game
+    const pullDist = 3.5;
+    const cp = lp.clone()
+      .addScaledVector(back, pullDist)
+      .add(new THREE.Vector3(0, 1.8, 0));
+    // Very slow lerp for position = smooth, no snapping on hits
+    camPos.lerp(cp, sm * 1.2);
+    // Look slightly ahead of ball
+    const lookAhead = lp.clone().addScaledVector(travelDir, 2).add(new THREE.Vector3(0,0.3,0));
+    camLook.lerp(lookAhead, sm * 2);
   } else if(mode==='wide'){
     const avg=new THREE.Vector3(); zorbs.forEach(z=>avg.add(z.pos));
     if(zorbs.length>0) avg.divideScalar(zorbs.length);
