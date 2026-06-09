@@ -1138,12 +1138,24 @@ const freeCam = {
 };
 const _smoothCamPos = new THREE.Vector3();
 let _camInit = false;
+let _camLeaderName = null;
 function updateCamera(dt){
   const sm=Math.min(dt*5,0.15);
-  // Prefer following the local player, fall back to race leader
-  const localZorb = window._myName ? zorbs.find(z=>z.name===window._myName&&!z.disqualified) : null;
-  const leader = localZorb || zorbs.filter(z=>!z.finished&&!z.disqualified).sort((a,b)=>b.nodeIdx-a.nodeIdx)[0] || zorbs[0];
+  // Follow local player if they're still racing, else follow leader
+  const localZorb = window._myName ? zorbs.find(z=>z.name===window._myName) : null;
+  const activeZorbs = zorbs.filter(z=>!z.disqualified);
+  const racingZorbs = activeZorbs.filter(z=>!z.finished);
+  // Prefer: local player racing > any racing ball > local player finished > any ball
+  const leader = (localZorb && !localZorb.disqualified ? localZorb : null)
+    || racingZorbs.sort((a,b)=>b.nodeIdx-a.nodeIdx)[0]
+    || activeZorbs[0]
+    || zorbs[0];
   if(!leader) return;
+  // Reset smooth cam if leader changed drastically (e.g. camera was tracking finished ball)
+  if(_camLeaderName && _camLeaderName !== leader.name){
+    _camInit = false; // snap to new leader immediately
+  }
+  _camLeaderName = leader.name;
   // Smooth the leader position we track - prevents stutter from knockbacks
   if(!_camInit){ _smoothCamPos.copy(leader.pos); _camInit=true; }
   // Max 12 units/sec movement prevents sudden jumps when ball gets zapped
@@ -1390,6 +1402,15 @@ function resetRace(){
   zorbs.forEach(z=>removeZorb(z)); zorbs.length=0;
   phase='lobby'; raceStartTime=null; raceDurSecs=null;
   document.getElementById('cnt').textContent='0 racers';
+  // Auto-restart: if host, start new race after 60s (give time for end leaderboard)
+  if(typeof ZORBS_SESSION==='undefined' || ZORBS_SESSION.amHost()){
+    setTimeout(()=>{
+      if(phase==='lobby'){
+        showBanner('NEW RACE STARTING...',2000);
+        setTimeout(streamerStart, 2500);
+      }
+    }, 20000); // 20s after reset = ~32s total after winner (12s leaderboard + 20s)
+  }
   document.getElementById('stxt').textContent='LOBBY';
   document.getElementById('tpill').style.display='none';
   document.getElementById('btn-go').disabled=false;
@@ -1506,12 +1527,10 @@ function initCourse(seed){
     startMock();
 }
 
-// If we're going to be host (no one else connected), build immediately
-// If viewer, wait for host seed - show loading state  
-// We'll know after ELECT_DELAY (2.5s) - for now build with temp seed
-// Host will broadcast real seed and we rebuild
-const _tempSeed = 42; // very short track placeholder
-initCourse(_tempSeed);
+// All tabs use same hourly seed = identical map without needing Ably for this
+// Seed changes every hour so races feel fresh each session
+const _hourlySeed = Math.floor(Date.now() / 3600000);
+initCourse(_hourlySeed);
 
 // ── KICK CHAT POLLING ──────────────────────────────────
 // Poll our webhook endpoint for !play and !boost commands from Kick chat
@@ -1551,10 +1570,7 @@ fetch('/api/config').then(r=>r.json()).then(cfg=>{
     },
     onState: (state) => {
       // Sync track seed from host state
-      if(state._seed && state._seed !== window._currentSeed){
-        console.log("[ZORBS] Rebuilding track with host seed:", state._seed);
-        initCourse(state._seed);
-      }
+      // Map synced via hourly seed - no rebuild needed
       // We're a viewer - sync from host state
       if(state.phase && state.phase !== phase){
         phase = state.phase;
@@ -1592,16 +1608,8 @@ fetch('/api/config').then(r=>r.json()).then(cfg=>{
       console.log('[ZORBS] Promoted to host - now running physics');
       const logo = document.getElementById('logo');
       if(logo) logo.title = 'You are the race host';
-      // Pick a fresh seed, rebuild course, broadcast to viewers
-      const seed = Math.floor(Date.now() % 999999); // time-based so it's unique
-      console.log('[ZORBS] Host picked seed:', seed);
-      initCourse(seed);
-      // Broadcast immediately and again after 1s in case viewer missed it
-      if(typeof ZORBS_SESSION !== 'undefined'){
-        ZORBS_SESSION.publishEvent('seed', seed, 0);
-        setTimeout(()=> ZORBS_SESSION.publishEvent('seed', seed, 0), 1000);
-        setTimeout(()=> ZORBS_SESSION.publishEvent('seed', seed, 0), 3000);
-      }
+      // Map already built with hourly seed - same on all tabs
+      console.log('[ZORBS] Became host, map seed:', _hourlySeed);
     }
   });
 }).catch(()=>{});
