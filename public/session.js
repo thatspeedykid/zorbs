@@ -65,8 +65,12 @@ const ZORBS_SESSION = (() => {
       const {t, v, c} = msg.data;
       // Viewer gets seed from host - build identical track
       if (t === 'seed' && window.initCourse && window._currentSeed !== v) {
-        console.log('[ZORBS] Got seed from host:', v);
-        window.initCourse(v);
+        console.log('[ZORBS] Got seed from host:', v, 'phase:', window.phase);
+        // Only rebuild if not mid-race - never change map during a race
+        if(window.phase === 'lobby' || window.phase === 'countdown') {
+          window._courseBuilt = false;
+          window.initCourse(v);
+        }
         return;
       }
       if (t === 'phase'  && window.phase !== undefined) {

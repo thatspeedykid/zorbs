@@ -1316,8 +1316,18 @@ function handleCmd(name,cmd,isSub){
 function streamerStart(){
   if(phase!=='lobby') return;
   raceDurSecs=parseDur(document.getElementById('dur').value);
-  // Build course based on entered duration (or default auto if blank)
-  buildCourse(raceDurSecs);
+  // Build course with a new seed - broadcast to all viewers so they match
+  const raceSeed = Math.floor(Math.random()*999999);
+  window._currentSeed = raceSeed;
+  window._courseBuilt = false; // allow rebuild
+  buildCourseSeeded(raceDurSecs, raceSeed);
+  window._courseBuilt = true;
+  // Broadcast seed to viewers immediately + retry
+  if(typeof ZORBS_SESSION !== 'undefined' && ZORBS_SESSION.amHost()){
+    ZORBS_SESSION.publishEvent('seed', raceSeed, 0);
+    setTimeout(()=>ZORBS_SESSION.publishEvent('seed', raceSeed, 0), 500);
+    setTimeout(()=>ZORBS_SESSION.publishEvent('seed', raceSeed, 0), 1500);
+  }
 
   // Stagger balls across the full spawn pad (up to 1000 balls)
   const spawnLen = Math.min(20, Math.ceil(zorbs.length / 8)); // rows
@@ -1570,7 +1580,14 @@ fetch('/api/config').then(r=>r.json()).then(cfg=>{
     },
     onState: (state) => {
       // Sync track seed from host state
-      // Map synced via hourly seed - no rebuild needed
+      // Sync map seed from host state
+      if(state._seed !== undefined && state._seed !== window._currentSeed){
+        if(window.phase === 'lobby' || window.phase === 'countdown'){
+          console.log('[ZORBS] State seed differs, rebuilding:', state._seed);
+          window._courseBuilt = false;
+          if(window.initCourse) window.initCourse(state._seed);
+        }
+      }
       // We're a viewer - sync from host state
       if(state.phase && state.phase !== phase){
         phase = state.phase;
