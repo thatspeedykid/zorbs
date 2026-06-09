@@ -411,7 +411,7 @@ async function kickLogin(){
 }
 
 function logout(){
-  sessionStorage.removeItem('zorbs_session');
+  localStorage.removeItem('zorbs_session');
   session = null;
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('dashboard').style.display = 'none';
@@ -422,7 +422,7 @@ function logout(){
 // ── SESSION HANDLING ───────────────────────────────────
 function initFromSession(s){
   session = s;
-  sessionStorage.setItem('zorbs_session', JSON.stringify(s));
+  localStorage.setItem('zorbs_session', JSON.stringify(s));
 
   // Update nav
   document.getElementById('nav-username').textContent = '@' + s.username;
@@ -444,9 +444,9 @@ function initFromSession(s){
   document.getElementById('ov-channel').textContent = s.username;
   document.getElementById('set-kick-user').textContent = '@' + s.username;
   const obsBase = 'playzorbs.xyz/?streamer=' + s.username;
-  document.getElementById('obs-game').textContent = obsBase;
-  document.getElementById('obs-lb').textContent = 'playzorbs.xyz/overlay/lb?ch=' + s.username;
-  document.getElementById('obs-alerts').textContent = 'playzorbs.xyz/overlay/alerts?ch=' + s.username;
+  document.getElementById('obs-game').textContent = 'https://playzorbs.xyz/?streamer=' + s.username + '&obs=1';
+  document.getElementById('obs-lb').textContent = 'https://playzorbs.xyz/?streamer=' + s.username + '&obs=1&view=lb';
+  document.getElementById('obs-alerts').textContent = 'https://playzorbs.xyz/?streamer=' + s.username + '&obs=1&view=alerts';
   document.getElementById('bot-channel').textContent = '@' + s.username;
   document.getElementById('bot-status').textContent = 'READY';
   document.getElementById('bot-status').className = 'badge live';
@@ -546,7 +546,7 @@ window.addEventListener('load', ()=>{
     const err = document.getElementById('err-msg');
     err.textContent = 'Login error: ' + decodeURIComponent(urlError);
     err.style.display = 'block';
-    window.history.replaceState({}, '', '/dashboard.html');
+    window.history.replaceState({}, '', '/dashboard');
     return;
   }
 
@@ -563,12 +563,12 @@ window.addEventListener('load', ()=>{
         kickConnected: true,
       });
     }
-    window.history.replaceState({}, '', '/dashboard.html');
+    window.history.replaceState({}, '', '/dashboard');
     return;
   }
 
   // Check saved session
-  const saved = sessionStorage.getItem('zorbs_session');
+  const saved = localStorage.getItem('zorbs_session');
   if(saved){
     try{ initFromSession(JSON.parse(saved)); return; } catch(e){}
   }

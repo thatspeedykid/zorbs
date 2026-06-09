@@ -45,11 +45,23 @@ const ZORBS_SESSION = (() => {
 
   function subscribe() {
     // Host heartbeat
-    ch.subscribe('hb', () => { lastHB = Date.now(); });
+    ch.subscribe('hb', msg => {
+      lastHB = Date.now();
+      // SPLIT-BRAIN FIX: if we're host but another host has an older join ts, demote
+      if (isHost && msg.clientId !== myId && msg.data && msg.data.ts < myJoinTs) {
+        console.log('[ZORBS] Older host detected - demoting self to viewer');
+        demoteToViewer();
+      }
+    });
 
     // Full game state from host (positions of all balls)
     ch.subscribe('state', msg => {
       lastHB = Date.now();
+      if (isHost && msg.clientId !== myId) {
+        // Another host is broadcasting state. Tie-break: lower clientId stays host.
+        if (msg.clientId < myId) { console.log('[ZORBS] Another host detected - demoting'); demoteToViewer(); }
+        return;
+      }
       if (!isHost && callbacks.onState) callbacks.onState(msg.data);
     });
 
@@ -158,6 +170,14 @@ const ZORBS_SESSION = (() => {
     }
   }
 
+  function demoteToViewer() {
+    isHost = false;
+    window.IS_HOST = false;
+    window.IS_VIEWER = true;
+    if (broadcastTimer) { clearInterval(broadcastTimer); broadcastTimer = null; }
+    if (callbacks.onConfirmViewer) callbacks.onConfirmViewer();
+  }
+
   function becomeHost() {
     if (isHost) return;
     isHost = true;
@@ -166,7 +186,7 @@ const ZORBS_SESSION = (() => {
     if (callbacks.onBecomeHost) callbacks.onBecomeHost();
 
     // Heartbeat
-    setInterval(() => ch.publish('hb', {id: myId}), HB_INTERVAL);
+    setInterval(() => ch.publish('hb', {id: myId, ts: myJoinTs}), HB_INTERVAL);
 
     // Broadcast full game state at 20fps
     broadcastTimer = setInterval(() => {
