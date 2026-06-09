@@ -64,7 +64,7 @@ const ZORBS_SESSION = (() => {
       if (isHost) return;
       const {t, v, c} = msg.data;
       // Viewer gets seed from host - build identical track
-      if (t === 'seed' && window.initCourse && !window._courseBuilt) {
+      if (t === 'seed' && window.initCourse && window._currentSeed !== v) {
         window.initCourse(v);
         return;
       }

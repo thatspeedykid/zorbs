@@ -1493,18 +1493,23 @@ if(_isStreamer){
   }, 3000);
 }
 
-// Host picks seed and broadcasts; viewers wait for seed then build same track
+// Shared seed system - host picks seed, all tabs build identical track
 window._currentSeed = null;
 window._courseBuilt  = false;
 
 function initCourse(seed){
-  if(window._courseBuilt) return;
-  window._courseBuilt = true;
   window._currentSeed = seed;
+  // Allow rebuild if seed changes (new race)
+  window._courseBuilt = true;
   buildCourseSeeded(null, seed);
   if(window.ZORBS_BOTS_ENABLED && (typeof ZORBS_SESSION==='undefined'||ZORBS_SESSION.amHost()))
     startMock();
 }
+
+// Build track immediately with a temp seed so viewer sees something right away
+// Will be rebuilt with real seed when host broadcasts it
+const _tempSeed = 12345; // placeholder - overwritten by host seed
+initCourse(_tempSeed);
 
 // ── KICK CHAT POLLING ──────────────────────────────────
 // Poll our webhook endpoint for !play and !boost commands from Kick chat
@@ -1543,12 +1548,9 @@ fetch('/api/config').then(r=>r.json()).then(cfg=>{
       }
     },
     onState: (state) => {
-      // If viewer has no course yet, build it now (host will have broadcast seed)
-      if(!window._courseBuilt && state._seed){
+      // Sync track seed from host state
+      if(state._seed && state._seed !== window._currentSeed){
         initCourse(state._seed);
-      } else if(!window._courseBuilt){
-        // Fallback: build with seed 1 (host hasn't sent seed yet)
-        // Will be overwritten when seed arrives
       }
       // We're a viewer - sync from host state
       if(state.phase && state.phase !== phase){
