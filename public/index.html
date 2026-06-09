@@ -1373,7 +1373,8 @@ function resetRace(){
     ZORBS_SESSION.publishEvent('phase','lobby',0);
     ZORBS_SESSION.publishEvent('banner','NEW RACE',0);
   }
-  setTimeout(startMock,2500);
+  // Bots only if enabled AND we are host
+  if(window.ZORBS_BOTS_ENABLED && (typeof ZORBS_SESSION==='undefined'||ZORBS_SESSION.amHost())) setTimeout(startMock,2500);
 }
 
 // ── MOCK CHAT ─────────────────────────────────────────
@@ -1446,11 +1447,13 @@ const _autoPlay   = !_isStreamer; // everyone else = auto play mode
 if(_isStreamer){
   // Streamer mode - show controls panel
   document.getElementById('sp').style.display = 'block';
-  window.ZORBS_BOTS_ENABLED = false; // no bots when streamer is running
+  const _settings = JSON.parse(localStorage.getItem('zorbs_settings')||'{}');
+  window.ZORBS_BOTS_ENABLED = _settings.bots === true; // off by default, toggle in dashboard
 } else {
   // Auto-play mode - show join panel
   document.getElementById('join-panel').style.display = 'block';
-  window.ZORBS_BOTS_ENABLED = false; // no bots in auto-play either
+  const _settings2 = JSON.parse(localStorage.getItem('zorbs_settings')||'{}');
+  window.ZORBS_BOTS_ENABLED = _settings2.bots === true; // off by default
   // Auto-start: only host starts races
   let _autoStartPending = false;
   setInterval(()=>{
@@ -1550,6 +1553,26 @@ fetch('/api/config').then(r=>r.json()).then(cfg=>{
   });
 }).catch(()=>{});
 
+// Auto-rejoin with saved nickname (skip the join panel)
+const _savedNick = localStorage.getItem('zorbs_nick');
+const _savedSub  = localStorage.getItem('zorbs_issub') === '1';
+if(_savedNick){
+  window._myName   = _savedNick;
+  window._myIsSub  = _savedSub;
+  // Don't show join panel - auto join after session connects
+  document.getElementById('join-panel').style.display = 'none';
+  // Wait for Ably to connect then join
+  setTimeout(()=>{
+    if(!zorbs.find(z=>z.name===_savedNick)){
+      handleCmd(_savedNick,'!play',_savedSub);
+      if(typeof ZORBS_SESSION!=='undefined'){
+        const myZorb=zorbs.find(z=>z.name===_savedNick);
+        ZORBS_SESSION.publishJoin(_savedNick,_savedSub,myZorb?myZorb.color:null);
+      }
+    }
+  }, 3000);
+}
+
 // Handle Kick OAuth return
 const _kickJoin = new URLSearchParams(window.location.search).get('kick_join');
 if(_kickJoin){
@@ -1609,6 +1632,9 @@ function _doJoin(name, isKick){
     return;
   }
   document.getElementById('join-panel').style.display='none';
+  // Save so they don't have to re-enter
+  localStorage.setItem('zorbs_nick', name);
+  localStorage.setItem('zorbs_issub', isKick?'1':'0');
   handleCmd(name, '!play', isKick);
   // Broadcast to all connected tabs via Ably
   if(typeof ZORBS_SESSION !== 'undefined'){

@@ -460,6 +460,7 @@ function initFromSession(s){
 
   // Load demo data (replace with real API later)
   loadDemoData(s);
+  loadSettings();
 }
 
 function loadDemoData(s){
@@ -518,6 +519,18 @@ function launchRace(){
 function inviteStreamer(){
   const email = prompt('Streamer Kick username or email to invite:');
   if(email) alert('Invite sent to ' + email + ' (backend integration needed for real invites)');
+}
+
+// ── SETTINGS ───────────────────────────────────────────
+function saveSetting(key, val){
+  const s = JSON.parse(localStorage.getItem('zorbs_settings')||'{}');
+  s[key] = val;
+  localStorage.setItem('zorbs_settings', JSON.stringify(s));
+}
+function loadSettings(){
+  const s = JSON.parse(localStorage.getItem('zorbs_settings')||'{}');
+  const togBots = document.getElementById('tog-bots');
+  if(togBots) togBots.checked = s.bots !== false; // default on
 }
 
 // ── INIT ───────────────────────────────────────────────
