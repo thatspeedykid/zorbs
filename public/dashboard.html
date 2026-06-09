@@ -420,7 +420,7 @@ async function kickLogin(){
     client_id: KICK_CLIENT_ID,
     redirect_uri: KICK_REDIRECT,
     response_type: 'code',
-    scope: 'user:read',
+    scope: 'user:read channel:read events:subscribe chat:write',
     state,
     code_challenge: challenge,
     code_challenge_method: 'S256',

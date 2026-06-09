@@ -265,7 +265,7 @@ function drawSpeedLines(intensity){
 }
 
 // ── SCENE OBJECTS ─────────────────────────────────────
-let pathNodes  = [];
+var pathNodes = [];
 let trackMeshes= [];
 let hammers=[], blades=[], windZones=[], trapDoors=[];
 let bumperObjs = [];
@@ -808,8 +808,8 @@ function buildCourse(durSecs){
 }
 
 // ── ZORBS ─────────────────────────────────────────────
-const zorbs=[];
-let phase='lobby';
+var zorbs=[];
+var phase='lobby';
 
 // Shared low-poly sphere geometry for all balls (performance for 1000 balls)
 const _SPHERE_GEO_HI  = new THREE.SphereGeometry(BALL_R,16,12); // subs / top ~50
