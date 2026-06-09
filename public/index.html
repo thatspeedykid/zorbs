@@ -1691,32 +1691,6 @@ function initCourse(seed){
 const _hourlySeed = Math.floor(Date.now() / 3600000);
 initCourse(_hourlySeed);
 
-// ── KICK CHAT POLLING ──────────────────────────────────
-// Poll our webhook endpoint for !play and !boost commands from Kick chat
-let _kickPollActive = false;
-async function pollKickChat(){
-  if(_kickPollActive) return;
-  _kickPollActive = true;
-  try {
-    const r = await fetch('/api/kick-webhook');
-    const data = await r.json();
-    if(data.commands && data.commands.length){
-      data.commands.forEach(cmd => {
-        addChat(cmd.username, cmd.command, cmd.isSub);
-        handleCmd(cmd.username, cmd.command, cmd.isSub);
-        // Broadcast to all viewers via Ably (both as command and chat message)
-        if(typeof ZORBS_SESSION !== 'undefined' && ZORBS_SESSION.amHost()){
-          ZORBS_SESSION.publishKickCmd(cmd.username, cmd.command, cmd.isSub);
-          ZORBS_SESSION.publishEvent('chat', JSON.stringify({
-            name:cmd.username, text:cmd.command, isSub:cmd.isSub
-          }), 0);
-        }
-      });
-    }
-  } catch(e){} finally { _kickPollActive = false; }
-}
-// Poll every 500ms while page is open
-setInterval(pollKickChat, 500);
 
 // ── START SHARED SESSION ──────────────────────────────
 // IS_HOST is set when we win host election - never changes after that
@@ -1725,7 +1699,7 @@ window.IS_VIEWER = false; // set true once we confirm we're a viewer
 
 fetch('/api/config').then(r=>r.json()).then(cfg=>{
   if(!cfg.ablyKey){ window.IS_HOST=true; return; } // no Ably = single player = host
-  ZORBS_SESSION.setChannel(_isStreamer||_isObs ? ('zorbs:ch:'+(_urlParams.get('streamer')||'x')) : 'zorbs:global-v1');
+  ZORBS_SESSION.setChannel(_isStreamer||_isObs ? ('zorbs:ch:'+(_urlParams.get('streamer')||'x').toLowerCase()) : 'zorbs:global-v1');
   ZORBS_SESSION.init(cfg.ablyKey, {
     onJoin: (name, isSub, color) => {
       // Another player joined - add their ball if we don't have it
