@@ -158,7 +158,7 @@ const ZORBS_SESSION = (() => {
       try {
         ch.publish('state', {
           phase: window.phase || 'lobby',
-          _seed: window._currentSeed,  // so late joiners get the seed
+          _seed: window._currentSeed,
           balls: window.zorbs.map(z => ({
             n:  z.name,
             c:  z.color,

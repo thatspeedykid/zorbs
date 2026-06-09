@@ -1586,11 +1586,9 @@ fetch('/api/config').then(r=>r.json()).then(cfg=>{
   if(!cfg.ablyKey) return;
   ZORBS_SESSION.init(cfg.ablyKey, {
     onJoin: (name, isSub, color) => {
-      // Another viewer joined - add their ball locally
+      // Another player joined - add their ball if we don't have it
       if(!zorbs.find(z=>z.name===name)){
-        const col = color || ZCOLORS[zorbs.length%ZCOLORS.length];
-        zorbs.push(createZorb(name, isSub, col));
-        document.getElementById('cnt').textContent = zorbs.length+' racers';
+        handleCmd(name, '!play', isSub);
       }
     },
     onState: (state) => {
@@ -1613,11 +1611,13 @@ fetch('/api/config').then(r=>r.json()).then(cfg=>{
       // Sync ball positions
       state.balls.forEach(bd => {
         let z = zorbs.find(z=>z.name===bd.n);
-        if(!z){
-          const col = bd.c || ZCOLORS[zorbs.length%ZCOLORS.length];
-          z = createZorb(bd.n, bd.s===1, col);
+        if(!z && phase !== 'lobby'){
+          // Create missing ball from host state
+          z = createZorb(bd.n, bd.s===1, bd.c || ZCOLORS[zorbs.length%ZCOLORS.length]);
           zorbs.push(z);
+          document.getElementById('cnt').textContent = zorbs.length+' racers';
         }
+        if(!z) return;
         // Smooth interpolation toward host state
         z.pos.x += (bd.x - z.pos.x) * 0.4;
         z.pos.y += (bd.y - z.pos.y) * 0.4;
@@ -1657,14 +1657,19 @@ if(_savedNick){
   // Don't show join panel - auto join after session connects
   document.getElementById('join-panel').style.display = 'none';
   // Wait for Ably to connect then join
+  // Wait for Ably to connect (3s) then rejoin
   setTimeout(()=>{
     if(!zorbs.find(z=>z.name===_savedNick)){
       handleCmd(_savedNick,'!play',_savedSub);
+    }
+    // Always broadcast join so all tabs know we're here
+    // even if we already exist locally (viewer may have missed it)
+    setTimeout(()=>{
       if(typeof ZORBS_SESSION!=='undefined'){
         const myZorb=zorbs.find(z=>z.name===_savedNick);
         ZORBS_SESSION.publishJoin(_savedNick,_savedSub,myZorb?myZorb.color:null);
       }
-    }
+    }, 1500); // extra delay to ensure Ably is connected
   }, 3000);
 }
 
