@@ -997,8 +997,19 @@ function stepPhysics(z,dt){
     if(toFin.length()<4.5){
       z.finished=true; z.finishTime=performance.now();
       const rank=zorbs.filter(r=>r.finished).length; z.rank=rank;
-      if(rank===1){showBanner('🏆 WINNER: '+z.name,4500);setTimeout(showEndLeaderboard,4500);setTimeout(resetRace,16000);}
-      showKO('🏁 #'+rank+': '+z.name,0xffff00);
+      if(window.IS_HOST){
+        if(rank===1){
+          showBanner('🏆 WINNER: '+z.name,4500);
+          setTimeout(showEndLeaderboard,4500);
+          setTimeout(resetRace,16000);
+          // Broadcast winner to viewers
+          if(typeof ZORBS_SESSION!=='undefined')
+            ZORBS_SESSION.publishEvent('winner', z.name, rank);
+        }
+        showKO('🏁 #'+rank+': '+z.name,0xffff00);
+        if(typeof ZORBS_SESSION!=='undefined')
+          ZORBS_SESSION.publishEvent('finish', z.name, rank);
+      }
     }
   }
 
@@ -1320,7 +1331,8 @@ function handleCmd(name,cmd,isSub){
 
 function streamerStart(){
   if(phase!=='lobby') return;
-  if(!window.IS_HOST && typeof ZORBS_SESSION !== 'undefined') return; // only host
+  // Hard block: never run on viewer tabs
+  if(typeof ZORBS_SESSION !== 'undefined' && !window.IS_HOST) return;
   raceDurSecs=parseDur(document.getElementById('dur').value);
   // Build course with a new seed - broadcast to all viewers so they match
   const raceSeed = Math.floor(Math.random()*999999);
@@ -1419,7 +1431,7 @@ function resetRace(){
   phase='lobby'; raceStartTime=null; raceDurSecs=null;
   document.getElementById('cnt').textContent='0 racers';
   // Auto-restart: if host, start new race after 60s (give time for end leaderboard)
-  if(typeof ZORBS_SESSION==='undefined' || ZORBS_SESSION.amHost()){
+  if(window.IS_HOST){
     setTimeout(()=>{
       if(phase==='lobby' && zorbs.length >= 2){
         showBanner('NEW RACE STARTING...',2000);
@@ -1458,7 +1470,7 @@ function nextMock(){
   if(mockI>=MOCK.length) return;
   handleCmd(MOCK[mockI].name,'!play',MOCK[mockI].sub); mockI++;
   if(mockI<MOCK.length) setTimeout(nextMock,600+Math.random()*800);
-  else setTimeout(()=>{document.getElementById('dur').value='';streamerStart();},1800);
+  else if(window.IS_HOST) setTimeout(()=>{document.getElementById('dur').value='';streamerStart();},1800);
 }
 // Random boosts during race
 setInterval(()=>{
@@ -1546,12 +1558,15 @@ window._currentSeed = null;
 window._courseBuilt  = false;
 
 function initCourse(seed){
+  // NEVER rebuild if we're a confirmed viewer mid-race
+  if(window.IS_VIEWER && (window.phase === 'racing' || window.phase === 'countdown')){
+    console.log('[ZORBS] Blocked initCourse on viewer during race');
+    return;
+  }
   window._currentSeed = seed;
-  // Allow rebuild if seed changes (new race)
   window._courseBuilt = true;
   buildCourseSeeded(null, seed);
-  if(window.ZORBS_BOTS_ENABLED && (typeof ZORBS_SESSION==='undefined'||ZORBS_SESSION.amHost()))
-    startMock();
+  if(window.ZORBS_BOTS_ENABLED && window.IS_HOST) startMock();
 }
 
 // All tabs use same hourly seed = identical map without needing Ably for this
@@ -1726,8 +1741,8 @@ function joinWithNick(){
 }
 
 function _doJoin(name, isKick){
-  // Make sure course is ready
-  if(!pathNodes || pathNodes.length === 0) buildCourse(null);
+  // Make sure course is ready (use seeded build)
+  if(!pathNodes || pathNodes.length === 0) initCourse(window._currentSeed || _hourlySeed);
   // Check not already joined
   if(zorbs.find(z=>z.name===name)){
     showBanner('Already joined as '+name, 1200);

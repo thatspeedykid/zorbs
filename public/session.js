@@ -85,12 +85,24 @@ const ZORBS_SESSION = (() => {
         }
         return;
       }
-      if (t === 'phase'  && window.phase !== undefined) {
+      if (t === 'phase' && window.phase !== undefined) {
         window.phase = v;
+        window._lastKnownPhase = v;
         const el = document.getElementById('stxt');
         if (el) el.textContent = v.toUpperCase();
-        // Track last known phase so new host knows not to restart mid-race
-        window._lastKnownPhase = v;
+      }
+      if (t === 'winner') {
+        if(window.showBanner) showBanner('🏆 WINNER: '+v, 4500);
+        setTimeout(()=>{ if(window.showEndLeaderboard) showEndLeaderboard(); }, 4500);
+        setTimeout(()=>{ if(window.resetRace) resetRace(); }, 16000);
+      }
+      if (t === 'finish') {
+        if(window.showKO) showKO('🏁 #'+c+': '+v, 0xffff00);
+        // Mark ball as finished
+        if(window.zorbs) {
+          const z = window.zorbs.find(z=>z.name===v);
+          if(z){ z.finished=true; z.rank=c; }
+        }
       }
       if (t === 'banner' && window.showBanner) showBanner(v, 2000);
       if (t === 'ko'     && window.showKO)     showKO(v, c);
