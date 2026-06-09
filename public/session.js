@@ -65,6 +65,7 @@ const ZORBS_SESSION = (() => {
       const {t, v, c} = msg.data;
       // Viewer gets seed from host - build identical track
       if (t === 'seed' && window.initCourse && window._currentSeed !== v) {
+        console.log('[ZORBS] Got seed from host:', v);
         window.initCourse(v);
         return;
       }

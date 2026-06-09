@@ -1506,9 +1506,11 @@ function initCourse(seed){
     startMock();
 }
 
-// Build track immediately with a temp seed so viewer sees something right away
-// Will be rebuilt with real seed when host broadcasts it
-const _tempSeed = 12345; // placeholder - overwritten by host seed
+// If we're going to be host (no one else connected), build immediately
+// If viewer, wait for host seed - show loading state  
+// We'll know after ELECT_DELAY (2.5s) - for now build with temp seed
+// Host will broadcast real seed and we rebuild
+const _tempSeed = 42; // very short track placeholder
 initCourse(_tempSeed);
 
 // ── KICK CHAT POLLING ──────────────────────────────────
@@ -1550,6 +1552,7 @@ fetch('/api/config').then(r=>r.json()).then(cfg=>{
     onState: (state) => {
       // Sync track seed from host state
       if(state._seed && state._seed !== window._currentSeed){
+        console.log("[ZORBS] Rebuilding track with host seed:", state._seed);
         initCourse(state._seed);
       }
       // We're a viewer - sync from host state
@@ -1589,12 +1592,16 @@ fetch('/api/config').then(r=>r.json()).then(cfg=>{
       console.log('[ZORBS] Promoted to host - now running physics');
       const logo = document.getElementById('logo');
       if(logo) logo.title = 'You are the race host';
-      // Pick a seed and build the course
-      const seed = Math.floor(Math.random()*999999);
+      // Pick a fresh seed, rebuild course, broadcast to viewers
+      const seed = Math.floor(Date.now() % 999999); // time-based so it's unique
+      console.log('[ZORBS] Host picked seed:', seed);
       initCourse(seed);
-      // Broadcast seed so viewers build identical track
-      if(typeof ZORBS_SESSION !== 'undefined')
+      // Broadcast immediately and again after 1s in case viewer missed it
+      if(typeof ZORBS_SESSION !== 'undefined'){
         ZORBS_SESSION.publishEvent('seed', seed, 0);
+        setTimeout(()=> ZORBS_SESSION.publishEvent('seed', seed, 0), 1000);
+        setTimeout(()=> ZORBS_SESSION.publishEvent('seed', seed, 0), 3000);
+      }
     }
   });
 }).catch(()=>{});
