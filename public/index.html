@@ -152,7 +152,17 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.3;
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x010115,0.007);
+scene.fog = new THREE.FogExp2(0x010115,0.0055);
+// Starfield
+{
+  const starGeo = new THREE.BufferGeometry();
+  const starVerts = [];
+  for(let i=0;i<700;i++){
+    starVerts.push((Math.random()-0.5)*900, 30+Math.random()*250, (Math.random()-0.5)*900);
+  }
+  starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starVerts,3));
+  scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({color:0x8899ff,size:0.7,sizeAttenuation:true,transparent:true,opacity:0.7})));
+}
 scene.background = new THREE.Color(0x010115);
 const camera = new THREE.PerspectiveCamera(70,1,0.1,1200);
 
@@ -295,16 +305,16 @@ function _buildTube(splinePts, eL, eR){
     );
     // Left wall: two verts (bottom and top)
     wallLVerts.push(
-      p.x - rx*(TW_HALF+0.25),  y,      p.z - rz*(TW_HALF+0.25),
-      p.x - rx*(TW_HALF+0.25),  y+1.4,  p.z - rz*(TW_HALF+0.25)
+      p.x - rx*(TW_HALF+0.04),  y,      p.z - rz*(TW_HALF+0.04),
+      p.x - rx*(TW_HALF+0.04),  y+1.4,  p.z - rz*(TW_HALF+0.04)
     );
     // Right wall
     wallRVerts.push(
-      p.x + rx*(TW_HALF+0.25),  y,      p.z + rz*(TW_HALF+0.25),
-      p.x + rx*(TW_HALF+0.25),  y+1.4,  p.z + rz*(TW_HALF+0.25)
+      p.x + rx*(TW_HALF+0.04),  y,      p.z + rz*(TW_HALF+0.04),
+      p.x + rx*(TW_HALF+0.04),  y+1.4,  p.z + rz*(TW_HALF+0.04)
     );
-    glowLPts.push(new THREE.Vector3(p.x - rx*(TW_HALF+0.25), y+1.42, p.z - rz*(TW_HALF+0.25)));
-    glowRPts.push(new THREE.Vector3(p.x + rx*(TW_HALF+0.25), y+1.42, p.z + rz*(TW_HALF+0.25)));
+    glowLPts.push(new THREE.Vector3(p.x - rx*(TW_HALF+0.04), y+1.42, p.z - rz*(TW_HALF+0.04)));
+    glowRPts.push(new THREE.Vector3(p.x + rx*(TW_HALF+0.04), y+1.42, p.z + rz*(TW_HALF+0.04)));
   }
 
   // Build quad-strip indices
@@ -617,19 +627,19 @@ function buildCourse(durSecs){
   for(let i=0;i<=12;i++){
     const t=i/12;
     const p=cur.pos.clone().addScaledVector(cur.dir, spawnPadLen*t); p.y=cur.pos.y;
-    pathNodes.push({pos:p.clone(),dir:cur.dir.clone(),right:perpRight(cur.dir),floorY:cur.pos.y,halfW:TW_HALF*2.5});
+    pathNodes.push({pos:p.clone(),dir:cur.dir.clone(),right:perpRight(cur.dir),floorY:cur.pos.y,halfW:TW_HALF*1.4});
   }
   // Build wide spawn pad with walls
   const padMid=cur.pos.clone().addScaledVector(cur.dir,spawnPadLen/2);
   const padRy=Math.atan2(cur.dir.x,-cur.dir.z);
-  const padFm=new THREE.Mesh(new THREE.BoxGeometry(TW*2.5,0.4,spawnPadLen),_floorMat);
+  const padFm=new THREE.Mesh(new THREE.BoxGeometry(TW*1.4,0.4,spawnPadLen),_floorMat);
   padFm.position.set(padMid.x,cur.pos.y-0.2,padMid.z); padFm.rotation.y=padRy;
   padFm.castShadow=padFm.receiveShadow=true; addMesh(padFm);
   // Spawn pad walls
   const spr=new THREE.Vector3(Math.cos(padRy),0,Math.sin(padRy));
   for(const side of [-1,1]){
-    const wx=padMid.x+spr.x*side*(TW*1.25+0.25);
-    const wz=padMid.z+spr.z*side*(TW*1.25+0.25);
+    const wx=padMid.x+spr.x*side*(TW*0.7+0.2);
+    const wz=padMid.z+spr.z*side*(TW*0.7+0.2);
     const wm=new THREE.Mesh(new THREE.BoxGeometry(0.3,1.4,spawnPadLen),_wallMat);
     wm.position.set(wx,cur.pos.y+0.5,wz); wm.rotation.y=padRy;
     wm.castShadow=true; addMesh(wm);

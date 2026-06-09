@@ -45,14 +45,7 @@ const ZORBS_SESSION = (() => {
 
   function subscribe() {
     // Host heartbeat
-    ch.subscribe('hb', msg => {
-      lastHB = Date.now();
-      // SPLIT-BRAIN FIX: if we're host but another host has an older join ts, demote
-      if (isHost && msg.clientId !== myId && msg.data && msg.data.ts < myJoinTs) {
-        console.log('[ZORBS] Older host detected - demoting self to viewer');
-        demoteToViewer();
-      }
-    });
+    ch.subscribe('hb', msg => { if (msg.clientId !== myId) lastHB = Date.now(); });
 
     // Full game state from host (positions of all balls)
     ch.subscribe('state', msg => {
@@ -132,46 +125,45 @@ const ZORBS_SESSION = (() => {
       if (window.addChat)   addChat(name, cmd, isSub);
     });
 
-    // Watch for host death
-    setInterval(() => {
-      if (!isHost && lastHB > 0 && Date.now() - lastHB > HB_TIMEOUT) {
-        console.log('[ZORBS] Host died - electing new host');
-        lastHB = Date.now();
-        electHost();
-      }
-    }, 1000);
+    // Host death handled by periodic runElection (presence drops dead tabs)
   }
 
+  // Deterministic election: every 2s check presence; member with lowest
+  // (ts, clientId) tuple is THE host. Self-heals split-brain both ways.
   function maybeElect() {
-    if (lastHB === 0) {
-      electHost();
-    } else {
-      // Host is alive - we are a viewer, confirmed
-      console.log('[ZORBS] Viewer confirmed - host is alive');
-      if (callbacks.onConfirmViewer) callbacks.onConfirmViewer();
-    }
+    runElection();
+    setInterval(runElection, 2000);
   }
 
-  async function electHost() {
-    // Check presence - oldest tab (lowest ts) becomes host
-    try {
-      const members = await new Promise((res, rej) =>
-        ch.presence.get((err, m) => err ? rej(err) : res(m))
-      );
-      const myTs = myJoinTs;
-      const oldest = members.reduce((min, m) => {
-        const ts = m.data?.ts || 9999999999999;
-        return ts < min ? ts : min;
-      }, 9999999999999);
-      if (myTs <= oldest) becomeHost();
-    } catch(e) {
-      // Fallback: just become host
-      becomeHost();
-    }
+  function runElection() {
+    ch.presence.get((err, members) => {
+      if (err || !members || members.length === 0) {
+        // Can't see presence - if no heartbeats either, claim host
+        if (lastHB === 0 && !isHost) becomeHost();
+        return;
+      }
+      // Sort by join ts, tie-break clientId - first is the rightful host
+      const sorted = members.slice().sort((a, b) => {
+        const ta = a.data?.ts ?? Infinity, tb = b.data?.ts ?? Infinity;
+        if (ta !== tb) return ta - tb;
+        return (a.clientId || '').localeCompare(b.clientId || '');
+      });
+      const rightfulHost = sorted[0].clientId;
+      if (rightfulHost === myId && !isHost) {
+        becomeHost();
+      } else if (rightfulHost !== myId && isHost) {
+        console.log('[ZORBS] Not rightful host - demoting');
+        demoteToViewer();
+      } else if (rightfulHost !== myId && !isHost && !window.IS_VIEWER) {
+        window.IS_VIEWER = true;
+        if (callbacks.onConfirmViewer) callbacks.onConfirmViewer();
+      }
+    });
   }
 
   function demoteToViewer() {
     isHost = false;
+    if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
     window.IS_HOST = false;
     window.IS_VIEWER = true;
     if (broadcastTimer) { clearInterval(broadcastTimer); broadcastTimer = null; }
@@ -185,8 +177,7 @@ const ZORBS_SESSION = (() => {
     console.log('[ZORBS] I AM HOST at', new Date().toLocaleTimeString());
     if (callbacks.onBecomeHost) callbacks.onBecomeHost();
 
-    // Heartbeat
-    setInterval(() => ch.publish('hb', {id: myId, ts: myJoinTs}), HB_INTERVAL);
+    heartbeatTimer = setInterval(() => ch.publish('hb', {id: myId, ts: myJoinTs}), HB_INTERVAL);
 
     // Broadcast full game state at 20fps
     broadcastTimer = setInterval(() => {
