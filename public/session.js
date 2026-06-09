@@ -146,9 +146,13 @@ const ZORBS_SESSION = (() => {
     setInterval(runElection, 2000);
   }
 
-  function runElection() {
-    ch.presence.get((err, members) => {
-      if (err || !members || members.length === 0) {
+  async function runElection() {
+    let members = null;
+    try {
+      members = await ch.presence.get(); // Ably v2: promise API
+    } catch(e) { members = null; }
+    {
+      if (!members || members.length === 0) {
         // Can't see presence - if no heartbeats either, claim host
         if (lastHB === 0 && !isHost) becomeHost();
         return;
@@ -169,7 +173,7 @@ const ZORBS_SESSION = (() => {
         window.IS_VIEWER = true;
         if (callbacks.onConfirmViewer) callbacks.onConfirmViewer();
       }
-    });
+    }
   }
 
   function demoteToViewer() {

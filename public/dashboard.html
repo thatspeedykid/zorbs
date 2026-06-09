@@ -321,6 +321,11 @@ body{background:#05050f;color:#fff;font-family:'Courier New',monospace;min-heigh
           <div class="stat-row"><span>Channel</span><span id="bot-channel" class="stat-val">—</span></div>
           <div class="stat-row"><span>Status</span><span id="bot-status" class="badge idle">OFFLINE</span></div>
           <div class="stat-row"><span>Commands Handled Today</span><span id="bot-cmds" class="stat-val">0</span></div>
+        <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
+          <button class="btn btn-cyan" onclick="checkKickSubs()">CHECK CHAT CONNECTION</button>
+          <button class="btn btn-green" onclick="reRegisterWebhook()">RE-REGISTER WEBHOOK</button>
+        </div>
+        <pre id="subs-result" style="margin-top:12px;font-size:9px;color:rgba(255,255,255,0.45);white-space:pre-wrap;max-height:200px;overflow:auto;"></pre>
         </div>
       </div>
 
@@ -585,6 +590,35 @@ function remoteCam(mode){
 function inviteStreamer(){
   const email = prompt('Streamer Kick username or email to invite:');
   if(email) alert('Invite sent to ' + email + ' (backend integration needed for real invites)');
+}
+
+// ── KICK DIAGNOSTICS ───────────────────────────────────
+function checkKickSubs(){
+  const out = document.getElementById('subs-result');
+  if(!session || !session.accessToken){ out.textContent = 'No access token in session - log out and back in with Kick.'; return; }
+  out.textContent = 'Checking...';
+  fetch('/api/kick-subscriptions', { headers: {'x-kick-token': session.accessToken} })
+    .then(r=>r.json())
+    .then(d=>{
+      const subs = d?.data?.data || [];
+      if(!d.ok){ out.textContent = 'Kick API error ('+d.status+'): '+JSON.stringify(d.data); return; }
+      if(!subs.length){ out.textContent = 'NO SUBSCRIPTIONS REGISTERED.\nKick is not sending your chat to us yet - hit RE-REGISTER WEBHOOK.'; return; }
+      out.textContent = 'Active subscriptions:\n' + subs.map(s=>'• '+(s.event||s.name)+' -> '+(s.method||'webhook')).join('\n');
+    })
+    .catch(e=> out.textContent = 'Error: '+e.message);
+}
+function reRegisterWebhook(){
+  const out = document.getElementById('subs-result');
+  if(!session || !session.accessToken || !session.kickId){ out.textContent = 'Session missing token/id - log out and back in with Kick.'; return; }
+  out.textContent = 'Registering...';
+  localStorage.removeItem('zorbs_webhook_registered');
+  fetch('/api/kick-register-webhook', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ accessToken: session.accessToken, broadcasterUserId: session.kickId })
+  }).then(r=>r.json()).then(d=>{
+    out.textContent = d.ok ? 'Registered! Response:\n'+JSON.stringify(d.data,null,1) : 'Failed: '+JSON.stringify(d);
+    if(d.ok) localStorage.setItem('zorbs_webhook_registered','1');
+  }).catch(e=> out.textContent = 'Error: '+e.message);
 }
 
 // ── SETTINGS ───────────────────────────────────────────

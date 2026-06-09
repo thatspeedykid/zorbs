@@ -6,7 +6,8 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(200).json({ ok: true, note: 'POST only' });
 
   try {
-    const body = req.body || {};
+    let body = req.body || {};
+    if (typeof body === 'string') { try { body = JSON.parse(body); } catch(e) { body = {}; } }
     const eventType = req.headers['kick-event-type'] || body?.type || body?.event || '';
 
     if (String(eventType).includes('chat.message')) {
