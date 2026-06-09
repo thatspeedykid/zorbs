@@ -1,7 +1,29 @@
 {
   "rewrites": [
-    { "source": "/dashboard", "destination": "/dashboard.html" },
-    { "source": "/auth/kick/callback", "destination": "/auth/kick/callback.html" },
-    { "source": "/auth/kick/game-callback", "destination": "/auth/kick/game-callback.html" }
+    {
+      "source": "/dashboard",
+      "destination": "/dashboard.html"
+    },
+    {
+      "source": "/auth/kick/callback",
+      "destination": "/auth/kick/callback.html"
+    },
+    {
+      "source": "/auth/kick/game-callback",
+      "destination": "/auth/kick/game-callback.html"
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "playzorbs.xyz"
+        }
+      ],
+      "destination": "https://www.playzorbs.xyz/$1",
+      "permanent": true
+    }
   ]
 }

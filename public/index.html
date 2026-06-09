@@ -100,6 +100,7 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;}
       <span id="sp-hint">blank=auto</span>
     </div>
     <button id="btn-go" onclick="streamerStart()">▶ START RACE</button>
+    <button id="btn-auto" onclick="toggleAutoMode()" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.5);border-radius:5px;padding:6px 14px;font-size:10px;letter-spacing:2px;cursor:pointer;font-family:'Courier New',monospace;margin-top:6px;width:100%;">AUTO-START: OFF</button>
     <div id="btn-hide" onclick="hidePanel()">hide panel</div>
   </div>
   <div id="btn-show" onclick="showPanel()">CONTROLS</div>
@@ -1592,6 +1593,41 @@ const _autoPlay   = !_isStreamer; // everyone else = auto play mode
 if(_isStreamer){
   // Streamer mode - show controls panel
   document.getElementById('sp').style.display = 'block';
+  // Auto-start toggle (persisted per streamer)
+  window._streamerAuto = localStorage.getItem('zorbs_streamer_auto') === '1';
+  window.toggleAutoMode = function(){
+    window._streamerAuto = !window._streamerAuto;
+    localStorage.setItem('zorbs_streamer_auto', window._streamerAuto ? '1' : '0');
+    const b = document.getElementById('btn-auto');
+    b.textContent = 'AUTO-START: ' + (window._streamerAuto ? 'ON' : 'OFF');
+    b.style.color = window._streamerAuto ? '#00ff88' : 'rgba(255,255,255,0.5)';
+    b.style.borderColor = window._streamerAuto ? '#00ff88' : 'rgba(255,255,255,0.15)';
+  };
+  if(window._streamerAuto){ window._streamerAuto = false; window.toggleAutoMode(); } // sync button UI
+  // Streamer auto-start loop: 30s countdown when 2+ players, only if toggled on
+  window._autoStartAt = null;
+  window.showCountdown = function(secs){
+    const tp=document.getElementById('tpill'), el=document.getElementById('timer-display');
+    if(secs===null){ tp.style.display='none'; return; }
+    tp.style.display='flex';
+    el.textContent='STARTING IN '+secs+'s';
+    el.classList.toggle('urgent', secs<=5);
+  };
+  setInterval(()=>{
+    if(!window._streamerAuto || !window.IS_HOST) return;
+    if(!window._hostSince || Date.now() - window._hostSince < 8000) return;
+    if(phase!=='lobby'){ window._autoStartAt=null; window.showCountdown(null); return; }
+    if(zorbs.length >= 2){
+      if(!window._autoStartAt) window._autoStartAt = Date.now() + 30000;
+      const secs = Math.max(0, Math.ceil((window._autoStartAt - Date.now())/1000));
+      window.showCountdown(secs);
+      if(typeof ZORBS_SESSION!=='undefined') ZORBS_SESSION.publishEvent('count', secs, 0);
+      if(secs<=0){ window._autoStartAt=null; window.showCountdown(null); streamerStart(); }
+    } else if(window._autoStartAt){
+      window._autoStartAt=null; window.showCountdown(null);
+      if(typeof ZORBS_SESSION!=='undefined') ZORBS_SESSION.publishEvent('count', -1, 0);
+    }
+  }, 1000);
   const _settings = JSON.parse(localStorage.getItem('zorbs_settings')||'{}');
   window.ZORBS_BOTS_ENABLED = _settings.bots === true; // off by default, toggle in dashboard
 } else {
@@ -1612,8 +1648,8 @@ if(_isStreamer){
   setInterval(()=>{
     if(!window.IS_HOST) return;
     if(!window._hostSince || Date.now() - window._hostSince < 8000) return;
-    if(window._lastKnownPhase === 'racing') return;
     if(phase!=='lobby'){ window._autoStartAt=null; showCountdown(null); return; }
+    window._lastKnownPhase='lobby'; // we ARE in lobby - clear any stale racing flag
     if(zorbs.length >= 2){
       if(!window._autoStartAt) window._autoStartAt = Date.now() + 30000; // 30s countdown
       const secs = Math.max(0, Math.ceil((window._autoStartAt - Date.now())/1000));
