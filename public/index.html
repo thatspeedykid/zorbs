@@ -1472,14 +1472,7 @@ function nextMock(){
   if(mockI<MOCK.length) setTimeout(nextMock,600+Math.random()*800);
   else if(window.IS_HOST) setTimeout(()=>{document.getElementById('dur').value='';streamerStart();},1800);
 }
-// Random boosts during race
-setInterval(()=>{
-  if(phase==='racing'&&zorbs.length>0){
-    const z=zorbs[Math.floor(Math.random()*zorbs.length)];
-    handleCmd(z.name,'!boost',Math.random()>0.4);
-  }
-},4000);
-// Random gust events
+// (auto-boost demo code removed - only chat can boost)
 let frame=0;
 
 // Free cam - mouse drag orbit
@@ -1838,14 +1831,7 @@ function loop(ts){
       for(let s=0;s<SUB;s++){zorbs.forEach(z=>stepPhysics(z,dt/SUB));ballCollide();}
     }
 
-    // Wind gust events
-    if(frame%960===480&&zorbs.length>0){
-      const nhits=Math.ceil(zorbs.length*0.35);
-      for(let hi=0;hi<nhits;hi++){
-        const gz=zorbs[Math.floor(Math.random()*zorbs.length)];
-        if(!gz.finished){gz.vel.x+=(Math.random()-0.5)*9;gz.vel.z+=(Math.random()-0.5)*5;showKO('💨 GUST: '+gz.name,0xaaaaff);}
-      }
-    }
+    // (random gusts removed)
   }
 
   zorbs.forEach(z=>updateVisuals(z,frame));

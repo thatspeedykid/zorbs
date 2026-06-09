@@ -53,10 +53,11 @@ const ZORBS_SESSION = (() => {
       if (!isHost && callbacks.onState) callbacks.onState(msg.data);
     });
 
-    // Someone joined (from any tab)
+    // Someone joined (from any tab) - EVERYONE processes this, especially host
     ch.subscribe('join', msg => {
-      lastHB = Date.now(); // host is alive if it published this
-      if (!isHost && callbacks.onJoin) callbacks.onJoin(msg.data.name, msg.data.isSub, msg.data.color);
+      // Don't process our own join (we already added ourselves locally)
+      if (msg.clientId === myId) return;
+      if (callbacks.onJoin) callbacks.onJoin(msg.data.name, msg.data.isSub, msg.data.color);
     });
 
     // Race events (start, end, KO, banner, seed, chat)
