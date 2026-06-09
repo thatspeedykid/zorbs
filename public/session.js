@@ -3,7 +3,8 @@
 // Host election: first tab to claim wins, others follow
 
 const ZORBS_SESSION = (() => {
-  const CHANNEL = 'zorbs:global-v1';
+  let CHANNEL = 'zorbs:global-v1';
+  function setChannel(name){ if(!ably) CHANNEL = name; }
   const HB_INTERVAL = 1500;
   const HB_TIMEOUT  = 5000;
   const ELECT_DELAY = 2500; // wait this long for existing host before claiming
@@ -118,6 +119,12 @@ const ZORBS_SESSION = (() => {
       }
     });
 
+    // Remote control from dashboard (start race, camera, reset)
+    ch.subscribe('ctl', msg => {
+      const {cmd, val} = msg.data || {};
+      if (window.handleRemoteCtl) window.handleRemoteCtl(cmd, val);
+    });
+
     // Kick chat commands routed via host
     ch.subscribe('kick', msg => {
       const {name, cmd, isSub} = msg.data;
@@ -218,5 +225,5 @@ const ZORBS_SESSION = (() => {
   function amHost()      { return isHost; }
   function isConnected() { return ably?.connection.state === 'connected'; }
 
-  return { init, publishJoin, publishEvent, publishKickCmd, amHost, isConnected };
+  return { init, setChannel, publishJoin, publishEvent, publishKickCmd, amHost, isConnected };
 })();

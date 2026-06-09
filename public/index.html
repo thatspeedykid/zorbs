@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script>if(location.hostname.startsWith('www.'))location.replace(location.href.replace('//www.','//'));</script>
+
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ZORBS on Stream</title>
@@ -113,6 +115,12 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;}
 </div>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://unpkg.com/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://unpkg.com/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+<script src="https://unpkg.com/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+<script src="https://unpkg.com/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+<script src="https://unpkg.com/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="https://unpkg.com/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
 <script src="/session.js"></script>
 <script>
 // Seeded random - replaces Math.random() for track generation only
@@ -165,6 +173,17 @@ scene.fog = new THREE.FogExp2(0x010115,0.0055);
 }
 scene.background = new THREE.Color(0x010115);
 const camera = new THREE.PerspectiveCamera(70,1,0.1,1200);
+// ── BLOOM COMPOSER (graceful fallback if CDN blocked) ──
+let composer = null;
+try {
+  if (THREE.EffectComposer && THREE.UnrealBloomPass) {
+    composer = new THREE.EffectComposer(renderer);
+    composer.addPass(new THREE.RenderPass(scene, camera));
+    const bloom = new THREE.UnrealBloomPass(
+      new THREE.Vector2(innerWidth, innerHeight), 0.55, 0.6, 0.82);
+    composer.addPass(bloom);
+  }
+} catch(e) { composer = null; }
 
 function onResize(){
   const w=canvas.parentElement.offsetWidth, h=canvas.parentElement.offsetHeight||window.innerHeight;
@@ -256,7 +275,7 @@ let courseLength = 0; // approx units
 
 function clearCourse(){
   trackMeshes.forEach(m=>scene.remove(m)); trackMeshes=[];
-  hammers=[]; bumperObjs=[]; boostPads=[]; funnels=[]; blades=[]; windZones=[]; trapDoors=[];
+  hammers=[]; bumperObjs=[]; boostPads=[]; funnels=[]; blades=[]; windZones=[]; trapDoors=[]; gateObjs=[];
   pathNodes=[]; courseLength=0;
 }
 function addMesh(m){ scene.add(m); trackMeshes.push(m); return m; }
@@ -420,7 +439,7 @@ function buildBoostPad(pos, dir, floorY){
 
 // ── OBSTACLES ─────────────────────────────────────────
 function buildHammers(cur, count){
-  const spacing=8;
+  const spacing=8; const hright=perpRight(cur.dir);
   for(let i=0;i<count;i++){
     const off=cur.dir.clone().multiplyScalar(spacing*(i+1));
     const hx=cur.pos.x+off.x, hz=cur.pos.z+off.z, hy=cur.pos.y;
@@ -430,8 +449,8 @@ function buildHammers(cur, count){
     head.position.y=-2.15; grp.add(head);
     const gs=new THREE.Mesh(new THREE.BoxGeometry(3.5,0.12,0.9),new THREE.MeshBasicMaterial({color:0xff4400}));
     gs.position.y=-2.52; grp.add(gs);
-    grp.position.set(hx,hy+2.2,hz); scene.add(grp); trackMeshes.push(grp);
-    hammers.push({grp,pivY:hy+2.2,x:hx,z:hz,phase:i*(Math.PI*2/count),speed:(0.9+Math.random()*0.4)*(i%2===0?1:-1)});
+    grp.position.set(hx,hy+2.2,hz); grp.rotation.y=Math.atan2(cur.dir.x,cur.dir.z); scene.add(grp); trackMeshes.push(grp);
+    hammers.push({grp,pivY:hy+2.2,x:hx,z:hz,right:hright.clone(),phase:i*(Math.PI*2/count),speed:(0.9+Math.random()*0.4)*(i%2===0?1:-1)});
   }
 }
 
@@ -499,6 +518,7 @@ function buildWindZone(cur, length){
 }
 
 // NARROW GATE - track squeezes, forces bunching
+let gateObjs=[];
 function buildNarrowGate(cur){
   const pos=cur.pos.clone().addScaledVector(cur.dir,4);
   const right=perpRight(cur.dir);
@@ -510,6 +530,7 @@ function buildNarrowGate(cur){
       new THREE.MeshStandardMaterial({color:0xff4400,roughness:0.2,metalness:0.8,emissive:0xff2200,emissiveIntensity:0.5}));
     barrier.position.set(wx,pos.y+0.9,wz); barrier.rotation.y=angle;
     scene.add(barrier); trackMeshes.push(barrier);
+    gateObjs.push({x:wx,z:wz,y:pos.y,r:TW_HALF*0.32});
     const gl=new THREE.Mesh(new THREE.BoxGeometry(TW_HALF*0.5,0.1,0.45),
       new THREE.MeshBasicMaterial({color:0xff6600}));
     gl.position.set(wx,pos.y+1.85,wz); gl.rotation.y=angle;
@@ -627,19 +648,19 @@ function buildCourse(durSecs){
   for(let i=0;i<=12;i++){
     const t=i/12;
     const p=cur.pos.clone().addScaledVector(cur.dir, spawnPadLen*t); p.y=cur.pos.y;
-    pathNodes.push({pos:p.clone(),dir:cur.dir.clone(),right:perpRight(cur.dir),floorY:cur.pos.y,halfW:TW_HALF*1.4});
+    pathNodes.push({pos:p.clone(),dir:cur.dir.clone(),right:perpRight(cur.dir),floorY:cur.pos.y,halfW:TW_HALF});
   }
   // Build wide spawn pad with walls
   const padMid=cur.pos.clone().addScaledVector(cur.dir,spawnPadLen/2);
   const padRy=Math.atan2(cur.dir.x,-cur.dir.z);
-  const padFm=new THREE.Mesh(new THREE.BoxGeometry(TW*1.4,0.4,spawnPadLen),_floorMat);
+  const padFm=new THREE.Mesh(new THREE.BoxGeometry(TW,0.4,spawnPadLen),_floorMat);
   padFm.position.set(padMid.x,cur.pos.y-0.2,padMid.z); padFm.rotation.y=padRy;
   padFm.castShadow=padFm.receiveShadow=true; addMesh(padFm);
   // Spawn pad walls
   const spr=new THREE.Vector3(Math.cos(padRy),0,Math.sin(padRy));
   for(const side of [-1,1]){
-    const wx=padMid.x+spr.x*side*(TW*0.7+0.2);
-    const wz=padMid.z+spr.z*side*(TW*0.7+0.2);
+    const wx=padMid.x+spr.x*side*(TW_HALF+0.04);
+    const wz=padMid.z+spr.z*side*(TW_HALF+0.04);
     const wm=new THREE.Mesh(new THREE.BoxGeometry(0.3,1.4,spawnPadLen),_wallMat);
     wm.position.set(wx,cur.pos.y+0.5,wz); wm.rotation.y=padRy;
     wm.castShadow=true; addMesh(wm);
@@ -1001,6 +1022,33 @@ function stepPhysics(z,dt){
     }
   }
 
+  // Narrow gate barriers - solid push-out (no zap, just a wall)
+  for(const g of gateObjs){
+    const gdx=z.pos.x-g.x, gdz=z.pos.z-g.z;
+    const gd=Math.sqrt(gdx*gdx+gdz*gdz);
+    const minG=BALL_R+g.r;
+    if(gd<minG && gd>0.001 && Math.abs(z.pos.y-g.y)<2){
+      const nx=gdx/gd, nz=gdz/gd;
+      z.pos.x+=nx*(minG-gd+0.05); z.pos.z+=nz*(minG-gd+0.05);
+      const dot=z.vel.x*nx+z.vel.z*nz;
+      if(dot<0){ z.vel.x-=dot*nx*1.4; z.vel.z-=dot*nz*1.4; }
+    }
+  }
+
+  // Boost pads - flying over one gives a speed surge
+  for(const bp of boostPads){
+    const toBp=new THREE.Vector3().subVectors(z.pos,bp.pos);
+    const along=Math.abs(toBp.dot(bp.dir)), lat=Math.abs(toBp.dot(bp.right));
+    if(along<bp.halfLen && lat<bp.halfW && Math.abs(z.pos.y-bp.pos.y)<1.2){
+      if(!z._padCd || performance.now()-z._padCd>2500){
+        z._padCd=performance.now();
+        z.vel.x+=bp.dir.x*16; z.vel.z+=bp.dir.z*16;
+        z.knockFlash=0.25;
+        showKO('⚡ PAD BOOST: '+z.name,0x00ff88);
+      }
+    }
+  }
+
   // Finish
   if(!z.finished){
     const toFin=new THREE.Vector3().subVectors(FINISH_POS,z.pos); toFin.y=0;
@@ -1075,13 +1123,16 @@ function updateHammers(dt){
     h.phase+=h.speed*dt;
     h.grp.rotation.z=Math.sin(h.phase)*1.1;
     const swing=Math.sin(h.phase);
-    const tipX=h.x+swing*2.1, tipY=h.pivY-Math.cos(h.phase)*2.1;
+    // Tip swings ACROSS the track (along right vector), drops to ball height
+    const tipX=h.x+h.right.x*swing*2.1, tipZ=h.z+h.right.z*swing*2.1;
+    const tipY=h.pivY-Math.abs(Math.cos(h.phase))*2.1;
     zorbs.forEach(z=>{
       if(z.finished) return;
-      const dx=z.pos.x-tipX,dy=z.pos.y-tipY,dz2=z.pos.z-h.z;
-      if(Math.sqrt(dx*dx+dy*dy+dz2*dz2)<BALL_R+0.95){
-        z.vel.x+=(dx>0?1:-1)*3; z.vel.y+=2.5; z.knockFlash=0.35;
-        z.vel.x+=(dx>0?1:-1)*8; z.vel.z+=3; z.vel.y=3; z.knockFlash=0.5; showKO('🔨 SMASHED: '+z.name,0xff4400);
+      const dx=z.pos.x-tipX, dy=z.pos.y-tipY, dz2=z.pos.z-tipZ;
+      if(Math.sqrt(dx*dx+dy*dy+dz2*dz2)<BALL_R+1.4){
+        const kick=(swing>0?1:-1)*(9+Math.random()*5);
+        z.vel.x+=h.right.x*kick; z.vel.z+=h.right.z*kick; z.vel.y=3.5;
+        z.knockFlash=0.5; showKO('🔨 SMASHED: '+z.name,0xff4400);
       }
     });
   });
@@ -1620,6 +1671,7 @@ window.IS_VIEWER = false; // set true once we confirm we're a viewer
 
 fetch('/api/config').then(r=>r.json()).then(cfg=>{
   if(!cfg.ablyKey){ window.IS_HOST=true; return; } // no Ably = single player = host
+  ZORBS_SESSION.setChannel(_isStreamer||_isObs ? ('zorbs:ch:'+(_urlParams.get('streamer')||'x')) : 'zorbs:global-v1');
   ZORBS_SESSION.init(cfg.ablyKey, {
     onJoin: (name, isSub, color) => {
       // Another player joined - add their ball if we don't have it
@@ -1702,6 +1754,13 @@ if(_savedNick){
     }, 1500); // extra delay to ensure Ably is connected
   }, 3000);
 }
+
+// Remote control from dashboard (streamer lobbies)
+window.handleRemoteCtl = (cmd, val) => {
+  if(cmd==='start' && window.IS_HOST){ document.getElementById('dur').value = val||''; streamerStart(); }
+  if(cmd==='cam') setCam(val);
+  if(cmd==='reset' && window.IS_HOST) resetRace();
+};
 
 // Handle Kick OAuth return
 const _kickJoin = new URLSearchParams(window.location.search).get('kick_join');
@@ -1875,7 +1934,7 @@ function loop(ts){
   }
 
   if(frame%(zorbs.length>100?60:18)===0){updateLB();drawMinimap();}
-  renderer.render(scene,camera);
+  if(composer){composer.render();}else{renderer.render(scene,camera);}
 }
 requestAnimationFrame(t=>{lastT=t;loop(t);});
 </script>

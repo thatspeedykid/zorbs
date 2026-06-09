@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script>if(location.hostname.startsWith('www.'))location.replace(location.href.replace('//www.','//'));</script>
+
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ZORBS Dashboard</title>
@@ -244,7 +246,19 @@ body{background:#05050f;color:#fff;font-family:'Courier New',monospace;min-heigh
           <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
             <div class="race-status"><div class="dot idle" id="rc-dot"></div><span id="rc-status">No active race</span></div>
             <input id="rc-dur" type="text" placeholder="Duration e.g. 3m" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);color:#fff;padding:8px 14px;border-radius:6px;font-family:inherit;font-size:11px;width:140px;outline:none;">
-            <button class="btn btn-cyan btn-big" onclick="launchRace()">▶ LAUNCH RACE</button>
+            <button class="btn btn-cyan btn-big" onclick="launchRace()">⧉ OPEN LOBBY</button>
+            <button class="btn btn-green btn-big" onclick="remoteStart()">▶ START RACE</button>
+            <button class="btn btn-red" onclick="remoteReset()">■ RESET</button>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
+            <span style="font-size:9px;letter-spacing:2px;color:rgba(255,255,255,0.3);">CAMERA:</span>
+            <button class="btn btn-cyan" onclick="remoteCam('follow')">FOLLOW</button>
+            <button class="btn btn-cyan" onclick="remoteCam('wide')">WIDE</button>
+            <button class="btn btn-cyan" onclick="remoteCam('top')">TOP</button>
+            <button class="btn btn-cyan" onclick="remoteCam('auto')">AUTO</button>
+          </div>
+          <div style="font-size:9px;color:rgba(255,255,255,0.25);letter-spacing:1px;margin-bottom:8px;">
+            These buttons control your live lobby + all OBS overlays in real time.
           </div>
           <div style="font-size:10px;color:rgba(255,255,255,0.25);line-height:1.7;">
             Launches the game in a new tab with your streamer controls.<br>
@@ -524,11 +538,49 @@ function showPage(id){
 // ── RACE CONTROL ───────────────────────────────────────
 function launchRace(){
   if(!session){ alert('Log in first'); return; }
-  const dur = document.getElementById('rc-dur').value || '3m';
-  const url = '/?streamer='+encodeURIComponent(session.username)+'&dur='+dur;
+  const url = '/?streamer='+encodeURIComponent(session.username);
   window.open(url, '_blank');
   document.getElementById('rc-dot').className = 'dot live';
-  document.getElementById('rc-status').textContent = 'Race launched · ' + dur;
+  document.getElementById('rc-status').textContent = 'Lobby open';
+}
+
+// ── REMOTE CONTROL via Ably ────────────────────────────
+let _ctlChannel = null;
+function getCtlChannel(cb){
+  if(_ctlChannel) return cb(_ctlChannel);
+  if(!session){ alert('Log in first'); return; }
+  const load = () => fetch('/api/config').then(r=>r.json()).then(cfg=>{
+    if(!cfg.ablyKey){ alert('Realtime not configured'); return; }
+    const ably = new Ably.Realtime({ key: cfg.ablyKey, clientId: 'dash_'+session.username });
+    ably.connection.on('connected', ()=>{
+      _ctlChannel = ably.channels.get('zorbs:ch:'+session.username);
+      cb(_ctlChannel);
+    });
+  });
+  if(window.Ably) load();
+  else {
+    const s=document.createElement('script');
+    s.src='https://cdn.ably.com/lib/ably.min-2.js';
+    s.onload=load; document.head.appendChild(s);
+  }
+}
+function remoteStart(){
+  const dur = document.getElementById('rc-dur').value || '';
+  getCtlChannel(ch => {
+    ch.publish('ctl', {cmd:'start', val:dur});
+    document.getElementById('rc-dot').className='dot live';
+    document.getElementById('rc-status').textContent='Race started'+(dur?' · '+dur:'');
+  });
+}
+function remoteReset(){
+  getCtlChannel(ch => {
+    ch.publish('ctl', {cmd:'reset'});
+    document.getElementById('rc-dot').className='dot idle';
+    document.getElementById('rc-status').textContent='Race reset';
+  });
+}
+function remoteCam(mode){
+  getCtlChannel(ch => ch.publish('ctl', {cmd:'cam', val:mode}));
 }
 
 function inviteStreamer(){
