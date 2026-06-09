@@ -1458,6 +1458,28 @@ if(_isStreamer){
 buildCourse(null);
 if(window.ZORBS_BOTS_ENABLED) startMock();
 
+// ── KICK CHAT POLLING ──────────────────────────────────
+// Poll our webhook endpoint for !play and !boost commands from Kick chat
+let _kickPollActive = false;
+async function pollKickChat(){
+  if(_kickPollActive) return;
+  _kickPollActive = true;
+  try {
+    const r = await fetch('/api/kick-webhook');
+    const data = await r.json();
+    if(data.commands && data.commands.length){
+      data.commands.forEach(cmd => {
+        // Add to chat display
+        addChat(cmd.username, cmd.command, cmd.isSub);
+        // Handle the command
+        handleCmd(cmd.username, cmd.command, cmd.isSub);
+      });
+    }
+  } catch(e){} finally { _kickPollActive = false; }
+}
+// Poll every 500ms while page is open
+setInterval(pollKickChat, 500);
+
 // ── START SHARED SESSION ──────────────────────────────
 const ABLY_KEY = window.ABLY_API_KEY || ''; // set via config
 if(ABLY_KEY){

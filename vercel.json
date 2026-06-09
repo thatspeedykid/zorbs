@@ -2,5 +2,10 @@
   "rewrites": [
     { "source": "/auth/kick/callback", "destination": "/auth/kick/callback.html" },
     { "source": "/auth/kick/game-callback", "destination": "/auth/kick/game-callback.html" }
-  ]
+  ],
+  "functions": {
+    "api/kick-webhook.js": {
+      "maxDuration": 10
+    }
+  }
 }
