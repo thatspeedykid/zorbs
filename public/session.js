@@ -59,10 +59,15 @@ const ZORBS_SESSION = (() => {
       if (!isHost && callbacks.onJoin) callbacks.onJoin(msg.data.name, msg.data.isSub, msg.data.color);
     });
 
-    // Race events (start, end, KO, banner)
+    // Race events (start, end, KO, banner, seed)
     ch.subscribe('ev', msg => {
       if (isHost) return;
       const {t, v, c} = msg.data;
+      // Viewer gets seed from host - build identical track
+      if (t === 'seed' && window.initCourse && !window._courseBuilt) {
+        window.initCourse(v);
+        return;
+      }
       if (t === 'phase'  && window.phase !== undefined) {
         window.phase = v;
         const el = document.getElementById('stxt');
@@ -134,6 +139,7 @@ const ZORBS_SESSION = (() => {
       try {
         ch.publish('state', {
           phase: window.phase || 'lobby',
+          _seed: window._currentSeed,  // so late joiners get the seed
           balls: window.zorbs.map(z => ({
             n:  z.name,
             c:  z.color,
