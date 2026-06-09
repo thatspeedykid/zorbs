@@ -451,6 +451,21 @@ function initFromSession(s){
   document.getElementById('bot-status').textContent = 'READY';
   document.getElementById('bot-status').className = 'badge live';
 
+  // Auto-register Kick chat webhook if we have an access token
+  if(s.accessToken && s.kickId && !localStorage.getItem('zorbs_webhook_registered')){
+    fetch('/api/kick-register-webhook', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ accessToken: s.accessToken, broadcasterUserId: s.kickId })
+    }).then(r=>r.json()).then(res=>{
+      if(res.ok){
+        localStorage.setItem('zorbs_webhook_registered','1');
+        console.log('Kick chat webhook registered', res);
+      } else {
+        console.warn('Webhook registration failed', res);
+      }
+    }).catch(e=>console.warn('Webhook reg error', e));
+  }
   // Kick connected status
   const kickTxt = '✓ Connected as @' + s.username;
   ['rc-kick-text','bot-kick-text'].forEach(id => {
