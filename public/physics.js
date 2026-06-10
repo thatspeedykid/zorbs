@@ -9,24 +9,41 @@ const ZPHYS = (() => {
   const bodies = new Map();   // name -> { body, collider }
   let BALL_R = 0.5;
 
+  function _importWithTimeout(url, ms){
+    return Promise.race([
+      import(/* @vite-ignore */ url),
+      new Promise((_,rej)=>setTimeout(()=>rej(new Error('import timeout: '+url)), ms))
+    ]);
+  }
+
   async function init(ballRadius) {
     BALL_R = ballRadius || 0.5;
-    try {
-      // rapier3d-compat: WASM inlined as base64, default export. +esm gives a clean module.
-      const mod = await import('https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.17.3/+esm');
-      RAPIER = mod.default || mod;
-      await RAPIER.init();
-      world = new RAPIER.World({ x: 0, y: -32.0, z: 0 }); // strong gravity = snappy marble feel
-      ready = true;
-      console.log('[ZPHYS] Rapier ready');
-      window._physOk = true;
-      return true;
-    } catch (e) {
-      console.warn('[ZPHYS] Rapier failed to load, using legacy physics:', e);
-      window._physError = (e && e.message) ? e.message : String(e);
-      ready = false;
-      return false;
+    console.log('[ZPHYS] init() called, attempting Rapier load...');
+    const CDNS = [
+      'https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.17.3/+esm',
+      'https://esm.sh/@dimforge/rapier3d-compat@0.17.3',
+      'https://unpkg.com/@dimforge/rapier3d-compat@0.17.3/rapier.es.js'
+    ];
+    for (const url of CDNS){
+      try {
+        console.log('[ZPHYS] trying', url);
+        const mod = await _importWithTimeout(url, 12000);
+        RAPIER = mod.default || mod;
+        if (!RAPIER || !RAPIER.init) throw new Error('module has no init (shape: '+Object.keys(mod).join(',')+')');
+        await RAPIER.init();
+        world = new RAPIER.World({ x: 0, y: -32.0, z: 0 });
+        ready = true;
+        console.log('[ZPHYS] ✅ Rapier ready via', url);
+        window._physOk = true;
+        return true;
+      } catch (e) {
+        console.warn('[ZPHYS] ❌ failed via', url, '-', (e&&e.message)||e);
+        window._physError = (e && e.message) ? e.message : String(e);
+      }
     }
+    console.warn('[ZPHYS] all CDNs failed, using legacy physics');
+    ready = false;
+    return false;
   }
 
   // Build a single static trimesh collider from the track floor+wall triangles.
