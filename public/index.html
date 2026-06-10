@@ -51,6 +51,8 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;}
 #mm{position:absolute;bottom:12px;right:12px;width:110px;height:110px;border-radius:50%;overflow:hidden;border:1px solid rgba(0,240,255,0.18);background:rgba(0,0,0,0.7);}
 #mmc{width:110px;height:110px;}
 #banner{position:absolute;top:45%;left:50%;transform:translate(-50%,-50%);font-size:34px;font-weight:900;letter-spacing:6px;color:#fff;text-shadow:0 0 30px #00f0ff;opacity:0;pointer-events:none;transition:opacity .3s;text-align:center;white-space:nowrap;}
+#banner.big{font-size:150px;letter-spacing:10px;color:#00f0ff;text-shadow:0 0 40px #00f0ff,0 0 90px #00f0ff,0 0 140px #ff00cc;animation:cdpop .85s ease-out;}
+@keyframes cdpop{0%{transform:translate(-50%,-50%) scale(1.7);opacity:0;}25%{opacity:1;}100%{transform:translate(-50%,-50%) scale(1);}}
 #kfeed{position:absolute;top:50px;right:12px;margin-top:160px;display:flex;flex-direction:column;align-items:flex-end;gap:2px;pointer-events:none;}
 .kf{font-size:11px;letter-spacing:1px;animation:kfa 2.5s forwards;}
 @keyframes kfa{0%{opacity:1;transform:translateY(0);}100%{opacity:0;transform:translateY(-16px);}}
@@ -99,7 +101,7 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;}
       <input id="dur" type="text" placeholder="2m / 5m / 90s" maxlength="6"/>
       <span id="sp-hint">blank=auto</span>
     </div>
-    <button id="btn-go" onclick="streamerStart()">▶ START RACE</button>
+    <button id="btn-go" onclick="(window.startWithCountdown||streamerStart)()">▶ START RACE</button>
     <button id="btn-auto" onclick="toggleAutoMode()" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.5);border-radius:5px;padding:6px 14px;font-size:10px;letter-spacing:2px;cursor:pointer;font-family:'Courier New',monospace;margin-top:6px;width:100%;">AUTO-START: OFF</button>
     <div id="btn-hide" onclick="hidePanel()">hide panel</div>
   </div>
@@ -528,15 +530,17 @@ function buildNarrowGate(cur){
   // Two walls jutting in from sides, gap in middle
   for(const side of [-1,1]){
     const wx=pos.x+right.x*side*TW_HALF*0.45, wz=pos.z+right.z*side*TW_HALF*0.45;
-    const barrier=new THREE.Mesh(new THREE.BoxGeometry(TW_HALF*0.5,1.8,0.4),
-      new THREE.MeshStandardMaterial({color:0xff4400,roughness:0.2,metalness:0.8,emissive:0xff2200,emissiveIntensity:0.5}));
+    // Cluster of menacing cones = actual spikes
+    const barrier=new THREE.Group();
+    const spikeMat=new THREE.MeshStandardMaterial({color:0xffaa00,roughness:0.25,metalness:0.7,emissive:0xff5500,emissiveIntensity:0.7});
+    for(let si=-1;si<=1;si++){
+      const cone=new THREE.Mesh(new THREE.ConeGeometry(0.34,1.9+Math.random()*0.5,6),spikeMat);
+      cone.position.set(si*0.55,0.95,0);
+      barrier.add(cone);
+    }
     barrier.position.set(wx,pos.y+0.9,wz); barrier.rotation.y=angle;
     scene.add(barrier); trackMeshes.push(barrier);
     gateObjs.push({x:wx,z:wz,y:pos.y,r:TW_HALF*0.32,mesh:barrier,baseY:pos.y+0.9,phase:Math.random()*Math.PI*2,speed:0.8+Math.random()*0.9});
-    const gl=new THREE.Mesh(new THREE.BoxGeometry(TW_HALF*0.5,0.1,0.45),
-      new THREE.MeshBasicMaterial({color:0xff6600}));
-    gl.position.set(wx,pos.y+1.85,wz); gl.rotation.y=angle;
-    scene.add(gl); trackMeshes.push(gl);
   }
 }
 
@@ -1354,8 +1358,12 @@ function showKO(msg,color){
   while(feed.children.length>5)feed.removeChild(feed.firstChild);
 }
 function showBanner(txt,dur){
-  const el=document.getElementById('banner'); el.textContent=txt; el.style.opacity='1';
-  setTimeout(()=>el.style.opacity='0',dur);
+  const el=document.getElementById('banner'); el.textContent=txt;
+  const isCd = txt.length<=2 || txt.startsWith('GO');
+  el.classList.toggle('big', isCd);
+  if(isCd){ el.classList.remove('big'); void el.offsetWidth; el.classList.add('big'); } // restart pop anim
+  el.style.opacity='1';
+  setTimeout(()=>{ el.style.opacity='0'; el.classList.remove('big'); },dur);
 }
 function hidePanel(){document.getElementById('sp').style.display='none';document.getElementById('btn-show').style.display='block';}
 function showPanel(){document.getElementById('sp').style.display='flex';document.getElementById('btn-show').style.display='none';}
@@ -1436,14 +1444,15 @@ function streamerStart(){
     // spread evenly: row along track, column across width
     const row = Math.floor(idx / 8);
     const col = idx % 8;
-    const spawnNodeIdx = Math.min(row * 2, Math.max(0, Math.floor(spawnLen*0.8)));
+    const spawnNodeIdx = Math.min(row * 2, 12); // stay on the spawn pad, behind the gate
     const spawnNode = pathNodes[Math.min(spawnNodeIdx, pathNodes.length-1)];
     const right = spawnNode ? perpRight(spawnNode.dir) : new THREE.Vector3(1,0,0);
     const lane  = (col/7)*2 - 1; // -1..+1
+    const laneW = TW_HALF - BALL_R - 0.3; // keep fully ON the pad
     z.pos.set(
-      spawnNode.pos.x + right.x*lane*(TW_HALF*2.2),
+      spawnNode.pos.x + right.x*lane*laneW,
       spawnNode.floorY + BALL_R + 0.3,
-      spawnNode.pos.z + right.z*lane*(TW_HALF*2.2)
+      spawnNode.pos.z + right.z*lane*laneW
     );
     z.vel.set(0,0,0); z.trailHistory=[]; z.nodeIdx=0; z.onGround=false;
     z.finished=false; z.disqualified=false; z.rank=0; z.boost=0;
@@ -1510,6 +1519,7 @@ function showEndLeaderboard(){
 }
 
 function resetRace(){
+  if(phase==='lobby') return; // already reset
   zorbs.forEach(z=>removeZorb(z)); zorbs.length=0;
   // Replay queued mid-race joins
   setTimeout(()=>{
@@ -1519,7 +1529,7 @@ function resetRace(){
   phase='lobby'; raceStartTime=null; raceDurSecs=null;
   document.getElementById('cnt').textContent='0 racers';
   // Auto-restart: if host, start new race after 60s (give time for end leaderboard)
-  if(window.IS_HOST){
+  if(window.IS_HOST && (window._isAutoPlayMode || window._streamerAuto)){
     setTimeout(()=>{
       if(phase==='lobby' && zorbs.length >= 2){
         showBanner('NEW RACE STARTING...',2000);
@@ -1657,6 +1667,7 @@ if(_isStreamer){
   window.ZORBS_BOTS_ENABLED = _settings.bots === true; // off by default, toggle in dashboard
 } else {
   // Auto-play mode - show join panel
+  window._isAutoPlayMode = true;
   document.getElementById('join-panel').style.display = 'block';
   const _settings2 = JSON.parse(localStorage.getItem('zorbs_settings')||'{}');
   window.ZORBS_BOTS_ENABLED = _settings2.bots === true; // off by default
@@ -1832,9 +1843,33 @@ setInterval(()=>{
   }
 }, 5000);
 
+// Start with a 30s on-screen countdown; auto-resets a finished race first
+window.startWithCountdown = function(dur){
+  if(typeof ZORBS_SESSION!=='undefined' && !window.IS_HOST) return;
+  if(phase==='racing'){
+    const allDone = zorbs.length>0 && zorbs.every(z=>z.finished||z.disqualified);
+    if(!allDone) return; // race genuinely in progress
+    resetRace();
+  }
+  if(window._startCd) clearInterval(window._startCd);
+  const endAt = Date.now()+30000;
+  const tick = () => {
+    const secs = Math.max(0, Math.ceil((endAt-Date.now())/1000));
+    if(window.showCountdown) showCountdown(secs);
+    if(typeof ZORBS_SESSION!=='undefined') ZORBS_SESSION.publishEvent('count',secs,0);
+    if(secs<=0){
+      clearInterval(window._startCd); window._startCd=null;
+      if(window.showCountdown) showCountdown(null);
+      document.getElementById('dur').value = dur||'';
+      streamerStart();
+    }
+  };
+  tick(); window._startCd=setInterval(tick,1000);
+};
+
 // Remote control from dashboard (streamer lobbies)
 window.handleRemoteCtl = (cmd, val) => {
-  if(cmd==='start' && window.IS_HOST){ document.getElementById('dur').value = val||''; streamerStart(); }
+  if(cmd==='start' && window.IS_HOST){ window.startWithCountdown(val); }
   if(cmd==='cam') setCam(val);
   if(cmd==='reset' && window.IS_HOST) resetRace();
 };
