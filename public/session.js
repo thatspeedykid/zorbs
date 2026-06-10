@@ -98,6 +98,13 @@ const ZORBS_SESSION = (() => {
         const el = document.getElementById('stxt');
         if (el) el.textContent = v.toUpperCase();
       }
+      if (t === 'leave') {
+        if(window.zorbs){
+          const i = window.zorbs.findIndex(z=>z.name===v);
+          if(i>=0){ if(window.removeZorb) removeZorb(window.zorbs[i]); window.zorbs.splice(i,1); }
+        }
+        return;
+      }
       if (t === 'count') {
         if (window.showCountdown) window.showCountdown(v >= 0 ? v : null);
         return;

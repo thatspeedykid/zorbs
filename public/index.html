@@ -532,7 +532,7 @@ function buildNarrowGate(cur){
       new THREE.MeshStandardMaterial({color:0xff4400,roughness:0.2,metalness:0.8,emissive:0xff2200,emissiveIntensity:0.5}));
     barrier.position.set(wx,pos.y+0.9,wz); barrier.rotation.y=angle;
     scene.add(barrier); trackMeshes.push(barrier);
-    gateObjs.push({x:wx,z:wz,y:pos.y,r:TW_HALF*0.32});
+    gateObjs.push({x:wx,z:wz,y:pos.y,r:TW_HALF*0.32,mesh:barrier,baseY:pos.y+0.9,phase:Math.random()*Math.PI*2,speed:0.8+Math.random()*0.9});
     const gl=new THREE.Mesh(new THREE.BoxGeometry(TW_HALF*0.5,0.1,0.45),
       new THREE.MeshBasicMaterial({color:0xff6600}));
     gl.position.set(wx,pos.y+1.85,wz); gl.rotation.y=angle;
@@ -865,6 +865,7 @@ function createZorb(name,isSub,col){
 
   return {
     name,isSub,color:col,nameLabel,mesh,ring,tLine,streaks,light,
+    speedF:0.93+Math.random()*0.14, wanderP:Math.random()*Math.PI*2,
     trailHistory:[],
     pos:new THREE.Vector3(sx,sy,sz),
     vel:new THREE.Vector3(0,0,0),
@@ -938,16 +939,21 @@ function stepPhysics(z,dt){
       z.onGround=false;
     }
 
-    // Micro jitter (feel)
-    if(z.onGround&&Math.random()<0.03){
-      z.vel.x+=(Math.random()-0.5)*0.5;
-      z.vel.z+=(Math.random()-0.5)*0.5;
+    // Marble personality: smooth lateral wander so balls don't train-line
+    if(z.onGround){
+      z.wanderP+=dt*(0.7+z.speedF*0.5);
+      const wob=Math.sin(z.wanderP)*1.6;
+      z.vel.x+=node.right.x*wob*dt;
+      z.vel.z+=node.right.z*wob*dt;
+      if(Math.random()<0.02){ z.vel.x+=(Math.random()-0.5)*0.9; z.vel.z+=(Math.random()-0.5)*0.9; }
     }
 
-    // Wall constraint - hard boundary + soft guide force near wall
+    // Wall constraint - only while ball is below wall top (1.6u).
+    // Hard knocks with enough height clear the wall = off the track = DQ.
     const toPos=new THREE.Vector3().subVectors(z.pos,node.pos);
     const lateral=toPos.dot(node.right);
-    if(Math.abs(lateral)>hw){
+    const overWall = z.pos.y > node.floorY + 1.6;
+    if(!overWall && Math.abs(lateral)>hw){
       const push=Math.sign(lateral)*(Math.abs(lateral)-hw);
       z.pos.x-=node.right.x*push;
       z.pos.z-=node.right.z*push;
@@ -965,7 +971,7 @@ function stepPhysics(z,dt){
 
     // ★ FORWARD PUSH — keeps balls fast and moving
     if(phase==='racing'){
-      const sf = z.speedMult;
+      const sf = z.speedMult * (z.speedF||1);
       const fwd = z.vel.x*node.dir.x + z.vel.z*node.dir.z;
       // Constant gentle push forward
       z.vel.x += node.dir.x * FORWARD_ACCEL * sf * dt;
@@ -1024,16 +1030,21 @@ function stepPhysics(z,dt){
     }
   }
 
-  // Narrow gate barriers - solid push-out (no zap, just a wall)
+  // SPIKE PILLARS - rise/fall; when up they strike balls hard (can knock you out)
   for(const g of gateObjs){
+    const up = Math.sin(g.phase) > 0; // raised half the cycle
+    if(!up) continue; // sunken into floor = safe to pass over
     const gdx=z.pos.x-g.x, gdz=z.pos.z-g.z;
     const gd=Math.sqrt(gdx*gdx+gdz*gdz);
     const minG=BALL_R+g.r;
-    if(gd<minG && gd>0.001 && Math.abs(z.pos.y-g.y)<2){
+    if(gd<minG && gd>0.001 && Math.abs(z.pos.y-g.y)<2.4){
       const nx=gdx/gd, nz=gdz/gd;
+      const rising = Math.cos(g.phase) > 0.3; // striking upward right now
+      const pow = rising ? 13+Math.random()*6 : 6;
       z.pos.x+=nx*(minG-gd+0.05); z.pos.z+=nz*(minG-gd+0.05);
-      const dot=z.vel.x*nx+z.vel.z*nz;
-      if(dot<0){ z.vel.x-=dot*nx*1.4; z.vel.z-=dot*nz*1.4; }
+      z.vel.x+=nx*pow; z.vel.z+=nz*pow;
+      if(rising){ z.vel.y=7+Math.random()*4; showKO('⚠ SPIKED: '+z.name,0xff8800); }
+      z.knockFlash=0.45;
     }
   }
 
@@ -1364,7 +1375,16 @@ function handleCmd(name,cmd,isSub){
   addChat(name,cmd,isSub);
   const raw=cmd.trim().toLowerCase();
   if(raw==='!play'){
-    if(zorbs.find(z=>z.name===name)||phase!=='lobby'||zorbs.length>=1000) return;
+    if(zorbs.find(z=>z.name===name)||zorbs.length>=1000) return;
+    if(phase!=='lobby'){
+      // Queue for next race instead of silently dropping
+      window._pendingJoins = window._pendingJoins||[];
+      if(!window._pendingJoins.find(p=>p.name===name)){
+        window._pendingJoins.push({name,isSub});
+        showKO('⏳ '+name+' joins next race',0x88aaff);
+      }
+      return;
+    }
     const c=ZCOLORS[zorbs.length%ZCOLORS.length];
     zorbs.push(createZorb(name,isSub,c));
     const dqCount=zorbs.filter(z=>z.disqualified).length; document.getElementById('cnt').textContent=zorbs.length+' racers'+(dqCount?' ('+dqCount+' DQ)':'');
@@ -1491,6 +1511,11 @@ function showEndLeaderboard(){
 
 function resetRace(){
   zorbs.forEach(z=>removeZorb(z)); zorbs.length=0;
+  // Replay queued mid-race joins
+  setTimeout(()=>{
+    (window._pendingJoins||[]).forEach(p=>handleCmd(p.name,'!play',p.isSub));
+    window._pendingJoins=[];
+  }, 500);
   phase='lobby'; raceStartTime=null; raceDurSecs=null;
   document.getElementById('cnt').textContent='0 racers';
   // Auto-restart: if host, start new race after 60s (give time for end leaderboard)
@@ -1708,7 +1733,12 @@ fetch('/api/config').then(r=>r.json()).then(cfg=>{
       }
     },
     onState: (state) => {
-      // Seed sync handled by explicit 'seed' event only - not state messages
+      // Host state is authoritative: if our track seed differs, rebuild to match
+      if(state._seed && state._seed !== window._currentSeed){
+        console.log('[ZORBS] Syncing track to host seed', state._seed);
+        window._currentSeed = state._seed;
+        buildCourseSeeded(null, state._seed);
+      }
       // We're a viewer - sync from host state
       if(state.phase && state.phase !== phase){
         phase = state.phase;
@@ -1868,6 +1898,12 @@ function _doJoin(name, isKick){
     return;
   }
   document.getElementById('join-panel').style.display='none';
+  // If we previously joined under a different name, remove that ball everywhere
+  if(window._myName && window._myName !== name){
+    const old = zorbs.find(z=>z.name===window._myName);
+    if(old){ removeZorb(old); zorbs.splice(zorbs.indexOf(old),1); }
+    if(typeof ZORBS_SESSION!=='undefined') ZORBS_SESSION.publishEvent('leave', window._myName, 0);
+  }
   // Save so they don't have to re-enter
   localStorage.setItem('zorbs_nick', name);
   localStorage.setItem('zorbs_issub', isKick?'1':'0');
@@ -1946,6 +1982,12 @@ function loop(ts){
 
   if(phase==='racing'){
     updateTimer();
+    // Animate spike pillars: sink/strike
+    gateObjs.forEach(g=>{
+      g.phase += g.speed*dt;
+      const t = Math.sin(g.phase);
+      if(g.mesh) g.mesh.position.y = g.baseY + (t>0 ? t*0.3 : t*2.4); // up a bit, sink deep
+    });
     // Only HOST runs physics - viewers get state via Ably
     if(window.IS_HOST){
       updateHammers(dt);
