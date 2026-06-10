@@ -74,8 +74,8 @@ const ZPHYSICS = (() => {
     trackBody = world.createRigidBody(bd);
     const cd = RAPIER.ColliderDesc
       .trimesh(colliderBuffers.positions, colliderBuffers.indices)
-      .setRestitution(0.18)
-      .setFriction(0.55);
+      .setRestitution(0.0)        // no bounce off the track surface = no hopping
+      .setFriction(0.8);          // grip so balls roll instead of skid
     world.createCollider(cd, trackBody);
   }
 
@@ -103,8 +103,8 @@ const ZPHYSICS = (() => {
       .setAngularDamping(0.5)
       .setCcdEnabled(true); // fast balls never tunnel through walls
     const body = world.createRigidBody(bd);
-    const cd = RAPIER.ColliderDesc.ball(BALL_R)
-      .setRestitution(0.35).setFriction(0.35).setDensity(1.2)
+    const cd = RAPIER.ColliderDesc.ball(BALL_R * 1.5)   // collide at RING radius, not core
+      .setRestitution(0.05).setFriction(0.6).setDensity(1.2)
       .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
     world.createCollider(cd, body);
 
@@ -190,7 +190,7 @@ const ZPHYSICS = (() => {
       const drive = DRIVE_FORCE * b.speedMul * (1 + b.boost);
       b.body.addForce({
         x: fx * drive + laneFx,
-        y: fy * drive * 0.3,            // light vertical assist; gravity does the rest
+        y: 0,                            // NO vertical drive - gravity keeps them planted
         z: fz * drive + laneFz,
       }, true);
       if (b.boost > 0) b.boost = Math.max(0, b.boost - dt * 0.8);
