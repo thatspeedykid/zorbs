@@ -441,30 +441,30 @@ function segRamp(cur, length, dropY, eL=0x00f0ff, eR=0xff00cc){
 }
 
 function segCurve(cur, angleDelta, radius, eL=0x00f0ff, eR=0xff00cc){
-  // Build curve as many tiny straight segments - each straight already works perfectly
+  // Accumulate points along the arc, then build ONE continuous smooth ribbon.
   const absA = Math.abs(angleDelta), arcLen = radius*absA;
-  const steps = Math.max(16, Math.ceil(arcLen/2));
+  const steps = Math.max(20, Math.ceil(arcLen/1.5));
   const stepAngle = angleDelta / steps;
   const segLen = arcLen / steps;
-  let c2 = cur;
+  const pts = [cur.pos.clone()];
+  let dir = cur.dir.clone();
+  let pos = cur.pos.clone();
   for(let i=0;i<steps;i++){
-    // Rotate the cursor direction by stepAngle
     const cos = Math.cos(stepAngle), sin = Math.sin(stepAngle);
-    const ndx = c2.dir.x*cos - c2.dir.z*sin;
-    const ndz = c2.dir.x*sin + c2.dir.z*cos;
-    const nextDir = new THREE.Vector3(ndx,0,ndz).normalize();
-    // Build one short straight from current pos in current direction
-    const end = c2.pos.clone().addScaledVector(c2.dir, segLen);
-    end.y = c2.pos.y;
-    // Extend slightly past end to overlap next segment and close gaps
-    const endExt = end.clone().addScaledVector(c2.dir, 0.3);
-    _buildTube([c2.pos.clone(), endExt], eL, eR);
-    const right = perpRight(c2.dir);
-    pathNodes.push({pos:end.clone(), dir:c2.dir.clone(), right:right.clone(), floorY:c2.pos.y, halfW:TW_HALF});
-    courseLength += segLen;
-    c2 = makeCursor(end.x, c2.pos.y, end.z, nextDir.x, nextDir.z);
+    const ndx = dir.x*cos - dir.z*sin;
+    const ndz = dir.x*sin + dir.z*cos;
+    dir = new THREE.Vector3(ndx,0,ndz).normalize();
+    pos = pos.clone().addScaledVector(dir, segLen); pos.y = cur.pos.y;
+    pts.push(pos.clone());
   }
-  return c2;
+  _buildTube(pts, eL, eR);
+  // pathNodes from each point (skip first - already added by previous seg)
+  for(let i=1;i<pts.length;i++){
+    const t = new THREE.Vector3().subVectors(pts[i], pts[i-1]).normalize();
+    pathNodes.push({pos:pts[i].clone(), dir:t.clone(), right:perpRight(t), floorY:pts[i].y, halfW:TW_HALF});
+  }
+  courseLength += arcLen;
+  return makeCursor(pos.x, cur.pos.y, pos.z, dir.x, dir.z);
 }
 
 // FORK: track splits into 2 parallel lanes (left/right or high/low), each with
@@ -490,29 +490,32 @@ function segFork(cur, eL, eR){
   let k2 = branchKinds[rnd(0,2)]; if(k2===k1) k2 = branchKinds[(branchKinds.indexOf(k1)+1)%3];
 
   function buildBranch(side, kind){
-    // Start offset to the side, run parallel, ease back to center at the end
-    let bc = makeCursor(
-      startPos.x + right.x*sep*side, startPos.y, startPos.z + right.z*sep*side,
-      dir.x, dir.z
-    );
-    const segs = 18, segLen = branchLen/segs;
-    for(let i=0;i<segs;i++){
+    const segs = 24;
+    const pts = [];
+    for(let i=0;i<=segs;i++){
       const t = i/segs;
-      // lateral offset: full at start/mid, eases to 0 at the very end to merge
-      const off = (t < 0.82) ? sep*side : sep*side*(1-(t-0.82)/0.18);
+      // smooth S-offset: ease out to the side, hold, ease back to center to merge
+      let offT;
+      if(t < 0.18) offT = t/0.18;               // diverge
+      else if(t > 0.82) offT = (1-t)/0.18;       // converge
+      else offT = 1;                              // hold parallel
+      const off = sep*side*offT;
       const cx = startPos.x + dir.x*(branchLen*t) + right.x*off;
       const cz = startPos.z + dir.z*(branchLen*t) + right.z*off;
       let cy = startPos.y;
-      if(kind==='drop') cy = startPos.y - Math.sin(t*Math.PI)*8;      // dips down
-      if(kind==='speed') cy = startPos.y + Math.sin(t*Math.PI)*1.5;    // slight crest, fast
-      const p = new THREE.Vector3(cx,cy,cz);
-      const pe = p.clone().addScaledVector(dir, segLen+0.3);
-      _buildTube([new THREE.Vector3(cx-dir.x*0.1,cy,cz-dir.z*0.1), pe], eL, eR);
-      pathNodes.push({pos:p.clone(), dir:dir.clone(), right:right.clone(), floorY:cy, halfW:TW_HALF, branch:side});
-      // Per-branch hazard flavor
-      if(kind==='rough' && i===9) buildBumpers(makeCursor(cx,cy,cz,dir.x,dir.z), 2);
-      if(kind==='speed' && i===6){ /* speed lane: drop a boost pad */ buildBoostPad(p, dir, cy); }
+      if(kind==='drop') cy = startPos.y - Math.sin(t*Math.PI)*6;
+      if(kind==='speed') cy = startPos.y + Math.sin(t*Math.PI)*1.2;
+      pts.push(new THREE.Vector3(cx,cy,cz));
     }
+    _buildTube(pts, eL, eR);
+    for(let i=1;i<pts.length;i++){
+      const tg = new THREE.Vector3().subVectors(pts[i],pts[i-1]).normalize();
+      pathNodes.push({pos:pts[i].clone(), dir:tg.clone(), right:perpRight(tg), floorY:pts[i].y, halfW:TW_HALF, branch:side});
+    }
+    // One hazard per branch, placed mid-lane
+    const midP = pts[Math.floor(segs*0.5)];
+    if(kind==='rough') buildBumpers(makeCursor(midP.x,midP.y,midP.z,dir.x,dir.z), 2);
+    if(kind==='speed') buildBoostPad(midP, dir, midP.y);
   }
   buildBranch(-1, k1);
   buildBranch(+1, k2);
@@ -526,26 +529,29 @@ function segFork(cur, eL, eR){
 // Helical descent - curve AND drop smoothly together (no jagged Y cut)
 function segCurveDrop(cur, angleDelta, radius, totalDrop, eL=0x00f0ff, eR=0xff00cc){
   const absA = Math.abs(angleDelta), arcLen = radius*absA;
-  const steps = Math.max(20, Math.ceil(arcLen/1.5));
+  const steps = Math.max(24, Math.ceil(arcLen/1.2));
   const stepAngle = angleDelta / steps;
   const segLen = arcLen / steps;
-  const dropPer = totalDrop / steps;
-  let c2 = cur;
+  const pts = [cur.pos.clone()];
+  let dir = cur.dir.clone();
+  let pos = cur.pos.clone();
+  const startY = cur.pos.y;
   for(let i=0;i<steps;i++){
     const cos = Math.cos(stepAngle), sin = Math.sin(stepAngle);
-    const ndx = c2.dir.x*cos - c2.dir.z*sin;
-    const ndz = c2.dir.x*sin + c2.dir.z*cos;
-    const nextDir = new THREE.Vector3(ndx,0,ndz).normalize();
-    const end = c2.pos.clone().addScaledVector(c2.dir, segLen);
-    end.y = c2.pos.y - dropPer; // continuous descent
-    const endExt = end.clone().addScaledVector(c2.dir, 0.3);
-    _buildTube([c2.pos.clone(), endExt], eL, eR);
-    const right = perpRight(c2.dir);
-    pathNodes.push({pos:end.clone(), dir:c2.dir.clone(), right:right.clone(), floorY:end.y, halfW:TW_HALF});
-    courseLength += segLen;
-    c2 = makeCursor(end.x, end.y, end.z, nextDir.x, nextDir.z);
+    const ndx = dir.x*cos - dir.z*sin;
+    const ndz = dir.x*sin + dir.z*cos;
+    dir = new THREE.Vector3(ndx,0,ndz).normalize();
+    pos = pos.clone().addScaledVector(dir, segLen);
+    pos.y = startY - totalDrop*((i+1)/steps); // smooth continuous descent
+    pts.push(pos.clone());
   }
-  return c2;
+  _buildTube(pts, eL, eR);
+  for(let i=1;i<pts.length;i++){
+    const t = new THREE.Vector3().subVectors(pts[i], pts[i-1]).normalize();
+    pathNodes.push({pos:pts[i].clone(), dir:t.clone(), right:perpRight(t), floorY:pts[i].y, halfW:TW_HALF});
+  }
+  courseLength += arcLen;
+  return makeCursor(pos.x, pos.y, pos.z, dir.x, dir.z);
 }
 
 // ── BOOST PAD ─────────────────────────────────────────
@@ -713,7 +719,7 @@ function buildFunnel(cur, len){
   const right=perpRight(cur.dir);
   const angle=Math.atan2(cur.dir.x,cur.dir.z);
   const wallMat=new THREE.MeshStandardMaterial({color:0x2a0a3a,roughness:0.2,metalness:0.85,
-    emissive:0xff00cc,emissiveIntensity:0.45});
+    emissive:0xff00cc,emissiveIntensity:0.2});
   for(const side of [-1,1]){
     const wall=new THREE.Mesh(new THREE.BoxGeometry(0.35,1.5,len*1.02),wallMat);
     const mid=cur.pos.clone().addScaledVector(cur.dir,len/2)
