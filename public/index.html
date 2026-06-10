@@ -1649,6 +1649,9 @@ if(_isStreamer){
     el.classList.toggle('urgent', secs<=5);
   };
   setInterval(()=>{
+    window._streamerAuto = localStorage.getItem('zorbs_streamer_auto') === '1';
+    const ab=document.getElementById('btn-auto');
+    if(ab){ ab.textContent='AUTO-START: '+(window._streamerAuto?'ON':'OFF'); ab.style.color=window._streamerAuto?'#00ff88':'rgba(255,255,255,0.5)'; }
     if(!window._streamerAuto || !window.IS_HOST) return;
     if(!window._hostSince || Date.now() - window._hostSince < 8000) return;
     if(phase!=='lobby'){ window._autoStartAt=null; window.showCountdown(null); return; }
@@ -1666,9 +1669,9 @@ if(_isStreamer){
   const _settings = JSON.parse(localStorage.getItem('zorbs_settings')||'{}');
   window.ZORBS_BOTS_ENABLED = _settings.bots === true; // off by default, toggle in dashboard
 } else {
-  // Auto-play mode - show join panel
-  window._isAutoPlayMode = true;
-  document.getElementById('join-panel').style.display = 'block';
+  // Auto-play mode - show join panel (OBS overlays are pure viewers: none of this)
+  window._isAutoPlayMode = !_isObs;
+  if(!_isObs) document.getElementById('join-panel').style.display = 'block';
   const _settings2 = JSON.parse(localStorage.getItem('zorbs_settings')||'{}');
   window.ZORBS_BOTS_ENABLED = _settings2.bots === true; // off by default
   // Auto-start: visible 30s countdown once 2+ players are in lobby (public lobby only)
@@ -1682,6 +1685,7 @@ if(_isStreamer){
   }
   window.showCountdown = showCountdown;
   setInterval(()=>{
+    if(!window._isAutoPlayMode) return; // OBS tabs never drive races
     if(!window.IS_HOST) return;
     if(!window._hostSince || Date.now() - window._hostSince < 8000) return;
     if(phase!=='lobby'){ window._autoStartAt=null; showCountdown(null); return; }
@@ -1866,6 +1870,39 @@ window.startWithCountdown = function(dur){
   };
   tick(); window._startCd=setInterval(tick,1000);
 };
+
+// ── BOT POOL: fill lobby to 20 with bots; real players replace them ──
+const BOT_TARGET = 20;
+function isBotName(n){ return MOCK_NAMES.includes(n); }
+setInterval(()=>{
+  if(!window.IS_HOST || phase!=='lobby') return;
+  const settings = JSON.parse(localStorage.getItem('zorbs_settings')||'{}');
+  const botsOn = settings.bots === true;
+  const bots = zorbs.filter(z=>z.isBot);
+  const real = zorbs.length - bots.length;
+  const want = botsOn ? Math.max(0, BOT_TARGET - real) : 0;
+  if(bots.length > want){
+    // Real players arrived (or bots disabled): retire extras
+    for(let i=0;i<bots.length-want;i++){
+      const b = bots[i];
+      removeZorb(b); zorbs.splice(zorbs.indexOf(b),1);
+      if(typeof ZORBS_SESSION!=='undefined') ZORBS_SESSION.publishEvent('leave', b.name, 0);
+    }
+    document.getElementById('cnt').textContent = zorbs.length+' racers';
+  } else if(bots.length < want){
+    // Top up one per tick (feels like people trickling in)
+    const free = MOCK_NAMES.filter(n=>!zorbs.find(z=>z.name===n));
+    if(free.length){
+      const name = free[Math.floor(Math.random()*free.length)];
+      handleCmd(name, '!play', Math.random()<0.3);
+      const nb = zorbs.find(z=>z.name===name);
+      if(nb){
+        nb.isBot = true;
+        if(typeof ZORBS_SESSION!=='undefined') ZORBS_SESSION.publishJoin(name, nb.isSub, nb.color);
+      }
+    }
+  }
+}, 1200);
 
 // Remote control from dashboard (streamer lobbies)
 window.handleRemoteCtl = (cmd, val) => {

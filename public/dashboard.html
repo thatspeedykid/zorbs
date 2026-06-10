@@ -276,7 +276,7 @@ body{background:#05050f;color:#fff;font-family:'Courier New',monospace;min-heigh
           <div class="card">
             <h3>RACE SETTINGS</h3>
             <div class="toggle-row"><div><div class="tl">Show Bots</div><div class="ts">Fill empty lobby with demo bots</div></div><label class="toggle"><input type="checkbox" id="tog-bots" checked><span class="tslider"></span></label></div>
-            <div class="toggle-row"><div><div class="tl">Auto Reset</div><div class="ts">Auto-start next race after finish</div></div><label class="toggle"><input type="checkbox" id="tog-autoreset"><span class="tslider"></span></label></div>
+            <div class="toggle-row"><div><div class="tl">Auto Restart</div><div class="ts">Auto-play mode: restart every race with a 30s countdown</div></div><label class="toggle"><input type="checkbox" id="tog-autoreset" onchange="localStorage.setItem('zorbs_streamer_auto', this.checked?'1':'0')"><span class="tslider"></span></label></div>
             <div class="toggle-row"><div><div class="tl">Elimination On</div><div class="ts">Balls that fall off get DQ'd</div></div><label class="toggle"><input type="checkbox" id="tog-elim" checked><span class="tslider"></span></label></div>
           </div>
         </div>
@@ -628,6 +628,8 @@ function saveSetting(key, val){
   localStorage.setItem('zorbs_settings', JSON.stringify(s));
 }
 function loadSettings(){
+  const ar = document.getElementById('tog-autoreset');
+  if(ar) ar.checked = localStorage.getItem('zorbs_streamer_auto') === '1';
   const s = JSON.parse(localStorage.getItem('zorbs_settings')||'{}');
   const togBots = document.getElementById('tog-bots');
   if(togBots) togBots.checked = s.bots !== false; // default on
