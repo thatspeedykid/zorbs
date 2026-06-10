@@ -283,7 +283,7 @@ let courseLength = 0; // approx units
 
 function clearCourse(){
   trackMeshes.forEach(m=>scene.remove(m)); trackMeshes=[];
-  hammers=[]; bumperObjs=[]; boostPads=[]; funnels=[]; blades=[]; windZones=[]; trapDoors=[]; gateObjs=[]; tubeZones=[]; funnelZones=[];
+  hammers=[]; bumperObjs=[]; boostPads=[]; funnels=[]; blades=[]; windZones=[]; trapDoors=[]; gateObjs=[]; tubeZones=[]; funnelZones=[]; forkZones=[];
   pathNodes=[]; courseLength=0;
 }
 function addMesh(m){ scene.add(m); trackMeshes.push(m); return m; }
@@ -432,6 +432,62 @@ function segCurve(cur, angleDelta, radius, eL=0x00f0ff, eR=0xff00cc){
   return c2;
 }
 
+// FORK: track splits into 2 parallel lanes (left/right or high/low), each with
+// its own short flavor, then merges back. Balls pick a side and commit.
+// Returns the cursor at the merge point. Deterministic (uses seeded rnd via Math.random).
+function segFork(cur, eL, eR){
+  const rnd=(a,b)=>a+Math.floor(Math.random()*(b-a+1));
+  const right = perpRight(cur.dir);
+  const sep = TW * 0.95;          // how far apart the two lanes sit
+  const branchLen = rnd(40, 64);  // length of each branch
+  const startPos = cur.pos.clone();
+  const dir = cur.dir.clone();
+
+  // Mark the split point so physics can nudge balls onto whichever side they're on
+  forkZones.push({
+    pos: startPos.clone(), dir: dir.clone(), right: right.clone(),
+    sep, len: branchLen, floorY: startPos.y, phase:'split'
+  });
+
+  // Build each branch as an offset parallel ribbon with a distinct hazard
+  const branchKinds = ['speed','rough','drop']; // pick 2 different flavors
+  const k1 = branchKinds[rnd(0,2)];
+  let k2 = branchKinds[rnd(0,2)]; if(k2===k1) k2 = branchKinds[(branchKinds.indexOf(k1)+1)%3];
+
+  function buildBranch(side, kind){
+    // Start offset to the side, run parallel, ease back to center at the end
+    let bc = makeCursor(
+      startPos.x + right.x*sep*side, startPos.y, startPos.z + right.z*sep*side,
+      dir.x, dir.z
+    );
+    const segs = 18, segLen = branchLen/segs;
+    for(let i=0;i<segs;i++){
+      const t = i/segs;
+      // lateral offset: full at start/mid, eases to 0 at the very end to merge
+      const off = (t < 0.82) ? sep*side : sep*side*(1-(t-0.82)/0.18);
+      const cx = startPos.x + dir.x*(branchLen*t) + right.x*off;
+      const cz = startPos.z + dir.z*(branchLen*t) + right.z*off;
+      let cy = startPos.y;
+      if(kind==='drop') cy = startPos.y - Math.sin(t*Math.PI)*8;      // dips down
+      if(kind==='speed') cy = startPos.y + Math.sin(t*Math.PI)*1.5;    // slight crest, fast
+      const p = new THREE.Vector3(cx,cy,cz);
+      const pe = p.clone().addScaledVector(dir, segLen+0.3);
+      _buildTube([new THREE.Vector3(cx-dir.x*0.1,cy,cz-dir.z*0.1), pe], eL, eR);
+      pathNodes.push({pos:p.clone(), dir:dir.clone(), right:right.clone(), floorY:cy, halfW:TW_HALF, branch:side});
+      // Per-branch hazard flavor
+      if(kind==='rough' && i===9) buildBumpers(makeCursor(cx,cy,cz,dir.x,dir.z), 2);
+      if(kind==='speed' && i===6){ /* speed lane: drop a boost pad */ buildBoostPad(p, dir, cy); }
+    }
+  }
+  buildBranch(-1, k1);
+  buildBranch(+1, k2);
+
+  // Merge point: continue from center, just past the branches
+  const mergePos = startPos.clone().addScaledVector(dir, branchLen);
+  forkZones.push({ pos: mergePos.clone(), dir: dir.clone(), phase:'merge' });
+  return makeCursor(mergePos.x, startPos.y, mergePos.z, dir.x, dir.z);
+}
+
 // Helical descent - curve AND drop smoothly together (no jagged Y cut)
 function segCurveDrop(cur, angleDelta, radius, totalDrop, eL=0x00f0ff, eR=0xff00cc){
   const absA = Math.abs(angleDelta), arcLen = radius*absA;
@@ -551,7 +607,7 @@ function buildWindZone(cur, length){
 }
 
 // NARROW GATE - track squeezes, forces bunching
-let gateObjs=[]; var tubeZones=[]; var funnelZones=[];
+let gateObjs=[]; var tubeZones=[]; var funnelZones=[]; var forkZones=[];
 function buildNarrowGate(cur){
   const pos=cur.pos.clone().addScaledVector(cur.dir,4);
   const right=perpRight(cur.dir);
@@ -773,6 +829,12 @@ function buildCourse(durSecs){
     }
     segPool.push(obstacleTypes[i]);
   }
+  // Sprinkle in 1-2 forks (branching paths) at random positions
+  const numForks = rnd(1,2);
+  for(let f=0; f<numForks; f++){
+    const insertAt = rnd(2, segPool.length-1);
+    segPool.splice(insertAt, 0, 'fork');
+  }
   // End with a couple track sections leading to finish
   segPool.push(trackStyles[rnd(0,trackStyles.length-1)],'straight_run');
   // Shuffle pool
@@ -866,6 +928,10 @@ function buildCourse(durSecs){
       cur = segStraight(cur, 10, eL, eR);
       buildHammers(cur, rnd(2,3));
       cur = segStraight(cur, 18, eL, eR);
+    } else if(type==='fork'){
+      cur = segStraight(cur, 6, eL, eR);
+      cur = segFork(cur, eL, eR);
+      cur = segStraight(cur, 8, eL, eR);
     }
   }
 
@@ -1124,6 +1190,24 @@ function stepPhysics(z,dt){
       z.vel.x+=nx*pow; z.vel.z+=nz*pow;
       if(rising){ z.vel.y=7+Math.random()*4; showKO('⚠ SPIKED: '+z.name,0xff8800); ZAUDIO.play('spike'); }
       z.knockFlash=0.45;
+    }
+  }
+
+  // Fork zones: at the split, commit the ball to whichever lane it's leaning toward
+  for(const fk of forkZones){
+    if(fk.phase!=='split') continue;
+    const toF=new THREE.Vector3().subVectors(z.pos, fk.pos);
+    const along=toF.dot(fk.dir);
+    if(along>-2 && along<fk.len*0.85){
+      const lat=toF.dot(fk.right);
+      // Pick side once (sticky) based on initial lean; then steer toward that lane center
+      if(z._forkSide===undefined || along<2) z._forkSide = lat>=0 ? 1 : -1;
+      const targetLat = fk.sep * z._forkSide * (along < fk.len*0.7 ? 1 : (1-(along-fk.len*0.7)/(fk.len*0.3)));
+      const err = targetLat - lat;
+      z.vel.x += fk.right.x*err*3.0*dt;
+      z.vel.z += fk.right.z*err*3.0*dt;
+    } else if(along>=fk.len*0.85){
+      z._forkSide = undefined; // released at merge
     }
   }
 
