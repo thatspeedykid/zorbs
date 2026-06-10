@@ -1148,7 +1148,8 @@ function stepPhysics(z,dt){
     // Hard knocks with enough height clear the wall = off the track = DQ.
     const toPos=new THREE.Vector3().subVectors(z.pos,node.pos);
     const lateral=toPos.dot(node.right);
-    const overWall = z.pos.y > node.floorY + 1.6;
+    // Only let a ball escape over the wall if it was genuinely launched (real height + rising)
+    const overWall = z.pos.y > node.floorY + 1.9 && z.vel.y > 1.5;
     if(!overWall && Math.abs(lateral)>hw){
       const push=Math.sign(lateral)*(Math.abs(lateral)-hw);
       z.pos.x-=node.right.x*push;
@@ -1262,6 +1263,14 @@ function stepPhysics(z,dt){
     }
   }
 
+  // Safety: clamp horizontal speed so collisions/scatter can't fling balls off-world
+  {
+    const vh = Math.hypot(z.vel.x, z.vel.z);
+    const VMAX = 42;
+    if(vh > VMAX){ const s=VMAX/vh; z.vel.x*=s; z.vel.z*=s; }
+    if(z.vel.y > 22) z.vel.y = 22;
+  }
+
   // Tube zones: squeeze to centerline, speed up, launch at exit
   for(const tz of tubeZones){
     const toZ=new THREE.Vector3().subVectors(z.pos,tz.start);
@@ -1364,17 +1373,19 @@ function ballCollide(){
         const dvx=a.vel.x-b.vel.x, dvy=a.vel.y-b.vel.y, dvz=a.vel.z-b.vel.z;
         const dot=dvx*nx+dvy*ny+dvz*nz;
         if(dot<0){
-          const imp=dot*0.85; // bouncier - marbles knock each other around
+          const e=0.6; const imp=dot*(1+e)*0.5; // stable elastic bounce
           a.vel.x-=imp*nx; a.vel.y-=imp*ny; a.vel.z-=imp*nz;
           b.vel.x+=imp*nx; b.vel.y+=imp*ny; b.vel.z+=imp*nz;
         }
         const ov=(minD-dist)*0.5+0.01;
         a.pos.x+=nx*ov; a.pos.y+=ny*ov; a.pos.z+=nz*ov;
         b.pos.x-=nx*ov; b.pos.y-=ny*ov; b.pos.z-=nz*ov;
-        // Tangential scatter: nudge perpendicular so clusters break apart sideways
-        const tx=-nz, tz=nx; const scat=(Math.random()-0.5)*1.2;
-        a.vel.x+=tx*scat; a.vel.z+=tz*scat;
-        b.vel.x-=tx*scat; b.vel.z-=tz*scat;
+        // Small tangential scatter ONLY on genuine impacts (keeps pack lively, not explosive)
+        if(dot<-2){
+          const tx=-nz, tz=nx; const scat=(Math.random()-0.5)*0.4;
+          a.vel.x+=tx*scat; a.vel.z+=tz*scat;
+          b.vel.x-=tx*scat; b.vel.z-=tz*scat;
+        }
       }
     }
   }
