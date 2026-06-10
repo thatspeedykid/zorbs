@@ -1267,7 +1267,7 @@ function stepPhysics(z,dt){
       z.streaks.forEach(s => s.visible = false);
       showKO('💀 ELIMINATED: '+z.name, 0xff2200); ZAUDIO.play('eliminated');
       const remaining = zorbs.filter(r => !r.finished);
-      if(remaining.length === 0 && zorbs.length > 0){ setTimeout(resetRace, 3000); }
+      if(remaining.length === 0 && zorbs.length > 0){ setTimeout(()=>resetRace(true), 3000); }
       return;
     }
   }
@@ -1852,8 +1852,18 @@ function showEndLeaderboard(){
   setTimeout(()=>{if(overlay.parentNode)overlay.parentNode.removeChild(overlay);clearInterval(scrollInt);},12000);
 }
 
-function resetRace(){
+function resetRace(force){
   if(phase==='lobby') return; // already reset
+  // Block accidental resets from a tab that just refreshed/elected (unless forced by
+  // an explicit control action or the race genuinely finished).
+  if(!force){
+    const justElected = !window._hostSince || (Date.now()-window._hostSince < 8000);
+    const allDone = zorbs.length>0 && zorbs.every(z=>z.finished||z.disqualified);
+    if(justElected && !allDone){
+      console.log('[ZORBS] Blocked reset: host too fresh + race ongoing');
+      return;
+    }
+  }
   zorbs.forEach(z=>removeZorb(z)); zorbs.length=0;
   // Replay queued mid-race joins
   setTimeout(()=>{
@@ -2058,8 +2068,11 @@ if(_isStreamer){
     if(window._startCd) return; // manual countdown owns the clock
     if(!window.IS_HOST) return;
     if(!window._hostSince || Date.now() - window._hostSince < 8000) return;
+    // If ANY tab reported a race in progress recently, we just refreshed into it - don't reset it
+    if(window._lastKnownPhase==='racing' && (Date.now()-(window._lastPhaseSeen||0) < 12000)){
+      return;
+    }
     if(phase!=='lobby'){ window._autoStartAt=null; showCountdown(null); return; }
-    window._lastKnownPhase='lobby'; // we ARE in lobby - clear any stale racing flag
     if(zorbs.length >= 2){
       if(!window._autoStartAt) window._autoStartAt = Date.now() + 30000; // 30s countdown
       const secs = Math.max(0, Math.ceil((window._autoStartAt - Date.now())/1000));
@@ -2225,7 +2238,7 @@ window.startWithCountdown = function(dur){
   if(phase==='racing'){
     const allDone = zorbs.length>0 && zorbs.every(z=>z.finished||z.disqualified);
     if(!allDone) return; // race genuinely in progress
-    resetRace();
+    resetRace(true);
   }
   if(window._startCd) clearInterval(window._startCd);
   window._autoStartAt = null; // cancel any auto-loop countdown
@@ -2291,7 +2304,7 @@ window.handleRemoteCtl = (cmd, val) => {
   }
   if(cmd==='start' && window.IS_HOST){ window.startWithCountdown(val); }
   if(cmd==='cam') setCam(val);
-  if(cmd==='reset' && window.IS_HOST) resetRace();
+  if(cmd==='reset' && window.IS_HOST) resetRace(true);
 };
 
 // Handle Kick OAuth return

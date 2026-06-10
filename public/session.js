@@ -95,6 +95,7 @@ const ZORBS_SESSION = (() => {
       if (t === 'phase' && window.phase !== undefined) {
         window.phase = v;
         window._lastKnownPhase = v;
+        window._lastPhaseSeen = Date.now();
         const el = document.getElementById('stxt');
         if (el) el.textContent = v.toUpperCase();
       }
@@ -112,7 +113,7 @@ const ZORBS_SESSION = (() => {
       if (t === 'winner') {
         if(window.showBanner) showBanner('🏆 WINNER: '+v, 4500);
         setTimeout(()=>{ if(window.showEndLeaderboard) showEndLeaderboard(); }, 4500);
-        setTimeout(()=>{ if(window.resetRace) resetRace(); }, 16000);
+        setTimeout(()=>{ if(window.resetRace) resetRace(true); }, 16000);
       }
       if (t === 'finish') {
         if(window.showKO) showKO('🏁 #'+c+': '+v, 0xffff00);
