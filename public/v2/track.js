@@ -56,6 +56,8 @@ const ZTRACK = (() => {
     let segLeft = 0;       // steps remaining in the current move
     let bank = 0;          // current banking angle
     let targetBank = 0;
+    let moveKind = 'straight', extraDrop = 0, funnelMin = 0, tunnel = false;
+    let funnelLen = 1, funnelPos = 0;
 
     const worldUp = v(0, 1, 0);
 
@@ -63,23 +65,42 @@ const ZTRACK = (() => {
       // start a new move when the current one runs out
       if (segLeft <= 0) {
         const r = rng();
-        if (r < 0.40) {
+        moveKind = 'straight'; extraDrop = 0; funnelMin = 0; tunnel = false;
+        if (r < 0.32) {
           // straight-ish run
           targetTurn = (rng() - 0.5) * 0.01;
           targetBank = 0;
           segLeft = 14 + Math.floor(rng() * 18);
-        } else if (r < 0.80) {
+        } else if (r < 0.62) {
           // sweeping turn (banked)
           const dir = rng() < 0.5 ? 1 : -1;
           const sharp = 0.018 + rng() * 0.040;
           targetTurn = dir * sharp;
-          targetBank = dir * Math.min(0.5, sharp * 9); // bank into the curve
+          targetBank = dir * Math.min(0.5, sharp * 9);
           segLeft = 16 + Math.floor(rng() * 22);
-        } else {
-          // steeper plunge (more downhill, mild wiggle)
-          targetTurn = (rng() - 0.5) * 0.03;
+        } else if (r < 0.74) {
+          // DROP: steep plunge straight down-ish, narrow & fast
+          moveKind = 'drop';
+          targetTurn = (rng() - 0.5) * 0.015;
           targetBank = 0;
-          segLeft = 10 + Math.floor(rng() * 12);
+          extraDrop = 1.4 + rng() * 1.2;   // much steeper descent
+          segLeft = 8 + Math.floor(rng() * 8);
+        } else if (r < 0.86) {
+          // FUNNEL: track squeezes narrow then opens back up (bunches the pack)
+          moveKind = 'funnel';
+          targetTurn = (rng() - 0.5) * 0.01;
+          targetBank = 0;
+          funnelMin = 0.42 + rng() * 0.12; // squeeze to ~45% width at the throat
+          segLeft = 18 + Math.floor(rng() * 10);
+          funnelLen = segLeft;
+        } else {
+          // TUNNEL: enclosed run with a ceiling (visual + keeps balls in)
+          moveKind = 'tunnel';
+          const dir = rng() < 0.5 ? 1 : -1;
+          targetTurn = dir * (rng() * 0.02);
+          targetBank = 0;
+          tunnel = true;
+          segLeft = 20 + Math.floor(rng() * 16);
         }
       }
 
@@ -93,8 +114,9 @@ const ZTRACK = (() => {
       const hz = heading.x * sinT + heading.z * cosT;
       heading = v(hx, heading.y, hz);
 
-      // enforce downhill: keep a downward component on y
-      heading.y += (-DROP_PER_STEP / STEP - heading.y) * 0.08;
+      // enforce downhill: keep a downward component on y (steeper during a DROP)
+      const dropTarget = -(DROP_PER_STEP * (1 + extraDrop)) / STEP;
+      heading.y += (dropTarget - heading.y) * 0.10;
       heading = norm(heading);
 
       // advance
@@ -105,10 +127,16 @@ const ZTRACK = (() => {
       // up vector for the ribbon, tilted by bank
       const up = norm(cross(right, heading));
 
-      // gentle width variation makes the course read as less uniform
-      const halfW = WIDTH * (0.9 + 0.18 * Math.sin(i * 0.06));
+      // width: gentle base variation; funnel squeezes to a throat then reopens
+      let widthFactor = 0.9 + 0.18 * Math.sin(i * 0.06);
+      if (moveKind === 'funnel') {
+        funnelPos = 1 - (segLeft / funnelLen);        // 0..1 across the funnel
+        const throat = 1 - Math.sin(funnelPos * Math.PI) * (1 - funnelMin); // V then back
+        widthFactor *= throat;
+      }
+      const halfW = WIDTH * widthFactor;
 
-      nodes.push({ pos, dir: heading, right, up, halfW, bank });
+      nodes.push({ pos, dir: heading, right, up, halfW, bank, kind: moveKind, tunnel });
       segLeft--;
     }
     return nodes;
@@ -122,6 +150,8 @@ const ZTRACK = (() => {
     const wallPos = [];
     const floorIdx = [];
     const wallIdx = [];
+    const roofPos = [];
+    const roofIdx = [];
 
     // For each node compute the left/right floor edge and the wall-top edge,
     // applying bank (tilt) so turns lean inward.
@@ -131,7 +161,9 @@ const ZTRACK = (() => {
       const rf = add(n.pos, scale(n.right, n.halfW));  // right floor
       const lw = add(lf, scale(bankUp, 1.5));          // left wall top
       const rw = add(rf, scale(bankUp, 1.5));          // right wall top
-      return { lf, rf, lw, rw };
+      const lc = add(lf, scale(bankUp, 3.2));          // left ceiling
+      const rc = add(rf, scale(bankUp, 3.2));          // right ceiling
+      return { lf, rf, lw, rw, lc, rc, tunnel: !!n.tunnel };
     }
     function applyBank(n) {
       // rotate the up vector around the heading by the bank angle
@@ -146,17 +178,20 @@ const ZTRACK = (() => {
     }
 
     let prev = null;
-    let vi = 0;     // floor vertex counter
-    let wvi = 0;    // wall vertex counter
+    let vi = 0, wvi = 0, rvi = 0;
     for (let i = 0; i < nodes.length; i++) {
       const cur = ring(nodes[i]);
       if (prev) {
-        // floor quad: prev.lf, prev.rf, cur.rf, cur.lf
         pushQuad(floorPos, floorIdx, prev.lf, prev.rf, cur.rf, cur.lf, vi); vi += 4;
-        // left wall quad: prev.lf, prev.lw, cur.lw, cur.lf
-        pushQuad(wallPos, wallIdx, prev.lf, prev.lw, cur.lw, cur.lf, wvi); wvi += 4;
-        // right wall quad: prev.rf, prev.rw, cur.rw, cur.rf
-        pushQuad(wallPos, wallIdx, prev.rf, prev.rw, cur.rw, cur.rf, wvi); wvi += 4;
+        // taller walls inside tunnels (use ceiling height as wall top there)
+        const pLW = prev.tunnel ? prev.lc : prev.lw, pRW = prev.tunnel ? prev.rc : prev.rw;
+        const cLW = cur.tunnel ? cur.lc : cur.lw,  cRW = cur.tunnel ? cur.rc : cur.rw;
+        pushQuad(wallPos, wallIdx, prev.lf, pLW, cLW, cur.lf, wvi); wvi += 4;
+        pushQuad(wallPos, wallIdx, prev.rf, pRW, cRW, cur.rf, wvi); wvi += 4;
+        // ceiling only where BOTH ends are tunnel
+        if (prev.tunnel && cur.tunnel) {
+          pushQuad(roofPos, roofIdx, prev.lc, prev.rc, cur.rc, cur.lc, rvi); rvi += 4;
+        }
       }
       prev = cur;
     }
@@ -164,6 +199,7 @@ const ZTRACK = (() => {
     return {
       floor: { positions: new Float32Array(floorPos), indices: new Uint32Array(floorIdx) },
       walls: { positions: new Float32Array(wallPos), indices: new Uint32Array(wallIdx) },
+      roof:  { positions: new Float32Array(roofPos), indices: new Uint32Array(roofIdx) },
     };
   }
 
@@ -178,7 +214,7 @@ const ZTRACK = (() => {
     const positions = [];
     const indices = [];
     let base = 0;
-    for (const part of [m.floor, m.walls]) {
+    for (const part of [m.floor, m.walls, m.roof]) {
       for (let k = 0; k < part.positions.length; k++) positions.push(part.positions[k]);
       for (let k = 0; k < part.indices.length; k++) indices.push(part.indices[k] + base);
       base += part.positions.length / 3;

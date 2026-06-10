@@ -22,9 +22,9 @@
 <div id="arm"><div class="box">▶ CLICK TO START</div></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="/v2/track.js?v=2c"></script>
-<script src="/v2/physics.js?v=2c"></script>
-<script src="/v2/cosmetics.js?v=2c"></script>
+<script src="/v2/track.js?v=2d"></script>
+<script src="/v2/physics.js?v=2d"></script>
+<script src="/v2/cosmetics.js?v=2d"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -87,6 +87,7 @@ function buildCourse(seed) {
   track = ZTRACK.generate(seed, 700);
   meshFrom(track.mesh.floor, FLOOR_MAT);
   meshFrom(track.mesh.walls, WALL_MAT);
+  if (track.mesh.roof && track.mesh.roof.indices.length) meshFrom(track.mesh.roof, WALL_MAT);
   // glowing edge rails along the centerline for that Tron read
   const railGeo = new THREE.BufferGeometry();
   const pts = [];
