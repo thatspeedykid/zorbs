@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZORBS v2 — engine test</title>
+<style>
+  html,body { margin:0; height:100%; background:#02050d; overflow:hidden; font-family:'Courier New',monospace; }
+  #c { display:block; width:100vw; height:100vh; }
+  #hud { position:fixed; top:10px; left:12px; color:#7fe9ff; font-size:12px; letter-spacing:1px; text-shadow:0 0 8px rgba(0,180,255,.5); z-index:10; }
+  #status { position:fixed; bottom:8px; left:8px; font-size:10px; font-family:monospace; padding:3px 8px; border-radius:4px; z-index:20; }
+  #arm { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(2,5,13,.85); z-index:50; cursor:pointer; }
+  #arm .box { color:#7fe9ff; border:1px solid rgba(0,200,255,.4); padding:18px 30px; border-radius:8px; letter-spacing:2px; font-size:14px; }
+  #leader { position:fixed; top:10px; right:12px; color:#fff; font-size:13px; text-align:right; z-index:10; text-shadow:0 0 8px rgba(255,255,255,.4); }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud">ZORBS v2 — engine test</div>
+<div id="leader"></div>
+<div id="status">booting…</div>
+<div id="arm"><div class="box">▶ CLICK TO START</div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="/v2/track.js"></script>
+<script src="/v2/physics.js"></script>
+<script src="/v2/cosmetics.js"></script>
+<script>
+// ---------------------------------------------------------------------------
+// ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
+// Host runs physics; this test page is always host. Multiplayer wiring comes next.
+// ---------------------------------------------------------------------------
+const BALL_R = 0.5;
+const statusEl = document.getElementById('status');
+const leaderEl = document.getElementById('leader');
+function setStatus(txt, ok) {
+  statusEl.textContent = txt;
+  statusEl.style.background = ok ? 'rgba(0,255,136,.15)' : 'rgba(255,90,90,.15)';
+  statusEl.style.color = ok ? '#00ff88' : '#ff7676';
+  statusEl.style.border = '1px solid ' + (ok ? 'rgba(0,255,136,.4)' : 'rgba(255,90,90,.4)');
+}
+
+// ---- renderer / scene ----
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
+renderer.setPixelRatio(Math.min(2, devicePixelRatio));
+renderer.setSize(innerWidth, innerHeight);
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x02050d, 0.006);
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 2000);
+
+addEventListener('resize', () => {
+  renderer.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+});
+
+// lights
+scene.add(new THREE.AmbientLight(0x335577, 0.8));
+const key = new THREE.DirectionalLight(0x88ccff, 1.1); key.position.set(20, 60, 10); scene.add(key);
+
+// gradient sky dome (always behind everything)
+(function sky(){
+  const g = new THREE.SphereGeometry(900, 24, 16);
+  const m = new THREE.ShaderMaterial({
+    side: THREE.BackSide, depthWrite:false, depthTest:false, fog:false,
+    uniforms:{}, vertexShader:`varying vec3 p; void main(){ p=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+    fragmentShader:`varying vec3 p; void main(){ float h=normalize(p).y*0.5+0.5; vec3 top=vec3(0.02,0.05,0.13); vec3 bot=vec3(0.0,0.10,0.18); gl_FragColor=vec4(mix(bot,top,h),1.0); }`
+  });
+  const mesh = new THREE.Mesh(g, m); mesh.renderOrder = -1000; scene.add(mesh);
+})();
+
+// ---- build the course ----
+let track = null, trackMeshes = [];
+const FLOOR_MAT = new THREE.MeshStandardMaterial({ color:0x16204a, metalness:0.7, roughness:0.35, side:THREE.DoubleSide, emissive:0x0a1430, emissiveIntensity:0.4 });
+const WALL_MAT  = new THREE.MeshStandardMaterial({ color:0x0a1a3a, metalness:0.6, roughness:0.3, transparent:true, opacity:0.65, side:THREE.DoubleSide, emissive:0x0066aa, emissiveIntensity:0.3 });
+
+function meshFrom(buffers, mat) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(buffers.positions, 3));
+  g.setIndex(new THREE.BufferAttribute(buffers.indices, 1));
+  g.computeVertexNormals();
+  const m = new THREE.Mesh(g, mat); scene.add(m); trackMeshes.push(m); return m;
+}
+
+function buildCourse(seed) {
+  trackMeshes.forEach(m => scene.remove(m)); trackMeshes = [];
+  track = ZTRACK.generate(seed, 700);
+  meshFrom(track.mesh.floor, FLOOR_MAT);
+  meshFrom(track.mesh.walls, WALL_MAT);
+  // glowing edge rails along the centerline for that Tron read
+  const railGeo = new THREE.BufferGeometry();
+  const pts = [];
+  for (const n of track.nodes) {
+    pts.push(n.pos.x - n.right.x*n.halfW, n.pos.y+0.05, n.pos.z - n.right.z*n.halfW);
+  }
+  railGeo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  const rail = new THREE.Line(railGeo, new THREE.LineBasicMaterial({ color:0x00e5ff }));
+  scene.add(rail); trackMeshes.push(rail);
+}
+
+// ---- balls (with cosmetic + spawn-anim hooks) ----
+const SPHERE_GEO = new THREE.SphereGeometry(BALL_R, 20, 16);
+const RING_GEO = new THREE.TorusGeometry(BALL_R*1.5, 0.05, 8, 24);
+const zorbs = new Map(); // id -> { mesh, ring, color, spawnT, spawnAnim, eliminated }
+
+const PALETTE = [0xff3366,0x33ddff,0xffcc00,0x66ff88,0xcc66ff,0xff8844,0x44ffdd,0xff66aa];
+let colorIdx = 0;
+
+function makeZorb(id, prefs, isSub) {
+  const cos = ZCOSMETICS.resolveForPlayer(prefs, isSub, []);
+  const color = (cos.skin.color != null) ? cos.skin.color : PALETTE[(colorIdx++) % PALETTE.length];
+  const mat = new THREE.MeshStandardMaterial({
+    color, metalness: cos.skin.metalness, roughness: cos.skin.roughness,
+    emissive: color, emissiveIntensity: cos.skin.emissive || 0.0,
+  });
+  const mesh = new THREE.Mesh(SPHERE_GEO, mat); scene.add(mesh);
+
+  let ring = null;
+  if (cos.ring.enabled) {
+    const rc = (cos.ring.color != null) ? cos.ring.color : color;
+    ring = new THREE.Mesh(RING_GEO, new THREE.MeshBasicMaterial({ color: rc, transparent:true, opacity:0.7 }));
+    ring.rotation.x = Math.PI/2; scene.add(ring);
+  }
+  // rim glow shell
+  const glow = new THREE.Mesh(SPHERE_GEO, new THREE.MeshBasicMaterial({ color, transparent:true, opacity:0.3, side:THREE.BackSide, blending:THREE.AdditiveBlending, depthWrite:false }));
+  glow.scale.setScalar(1.2); mesh.add(glow);
+
+  zorbs.set(id, {
+    mesh, ring, color,
+    spawnT: 0, spawnAnim: cos.spawn, ringSpin: cos.ring.spin || 2.0,
+    ringBob: Math.random()*Math.PI*2, eliminated:false, fallT:0,
+  });
+}
+
+// ---- game state ----
+let phase = 'idle';   // idle | spawning | racing | done
+let spawnQueue = [], spawnTimer = 0;
+let winner = null;
+
+function startRace(seed, names) {
+  buildCourse(seed);
+  ZPHYSICS.clearBalls();
+  zorbs.forEach(z => { scene.remove(z.mesh); if(z.ring) scene.remove(z.ring); });
+  zorbs.clear(); colorIdx = 0; winner = null;
+  // queue spawns at the start of the track, staggered for a nice entrance
+  spawnQueue = names.map((nm, i) => ({ id: nm.id, prefs: nm.prefs, isSub: nm.isSub, delay: i*0.12 }));
+  spawnTimer = 0;
+  phase = 'spawning';
+  leaderEl.textContent = '';
+}
+
+function spawnOne(item) {
+  makeZorb(item.id, item.prefs, item.isSub);
+  // spawn just above the start node so the drop/pop reads well
+  const s = track.start;
+  const lateral = (Math.random()-0.5) * track.start.halfW * 1.2;
+  const sx = s.pos.x + s.right.x*lateral, sz = s.pos.z + s.right.z*lateral;
+  ZPHYSICS.addBall(item.id, { x: sx, y: s.pos.y + 2.0, z: sz });
+}
+
+// ---- main loop ----
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min(0.05, (now - last)/1000); last = now;
+
+  if (phase === 'spawning') {
+    spawnTimer += dt;
+    while (spawnQueue.length && spawnTimer >= spawnQueue[0].delay) {
+      spawnOne(spawnQueue.shift());
+    }
+    if (!spawnQueue.length) phase = 'racing';
+  }
+
+  if (phase === 'racing' && ZPHYSICS.isReady()) {
+    ZPHYSICS.step(dt);
+    // eliminate fallers
+    const fallen = ZPHYSICS.checkFalls(12);
+    for (const id of fallen) {
+      const z = zorbs.get(id); if (z) z.eliminated = true;
+    }
+    // winner check: leader reached the final stretch
+    const lead = ZPHYSICS.leader();
+    if (lead != null) {
+      const snap = ZPHYSICS.snapshot()[lead];
+      if (snap && snap.hint >= track.nodes.length - 3 && !winner) {
+        winner = lead; phase = 'done';
+        leaderEl.innerHTML = '🏆 ' + lead;
+      } else if (snap) {
+        leaderEl.textContent = '1st: ' + lead;
+      }
+    }
+  }
+
+  // sync render meshes to physics + run spawn animations
+  const snap = ZPHYSICS.isReady() ? ZPHYSICS.snapshot() : {};
+  for (const [id, z] of zorbs) {
+    const s = snap[id];
+    if (s) {
+      z.mesh.position.set(s.x, s.y, s.z);
+    }
+    // spawn animation
+    if (z.spawnT < 1) {
+      z.spawnT = Math.min(1, z.spawnT + dt*1.8);
+      const a = z.spawnAnim.fn(z.spawnT);
+      z.mesh.scale.setScalar(a.scale != null ? a.scale : 1);
+      z.mesh.position.y += (a.yOffset || 0);
+      z.mesh.material.opacity = a.opacity != null ? a.opacity : 1;
+      z.mesh.material.transparent = a.opacity != null && a.opacity < 1;
+    } else {
+      z.mesh.scale.setScalar(1);
+    }
+    // rolling
+    if (s) z.mesh.rotation.x += dt * 4;
+    // ring follows, stays flat, spins on its own vertical axis
+    if (z.ring) {
+      z.ring.position.copy(z.mesh.position);
+      z.ring.rotation.x = Math.PI/2;
+      z.ringBob += dt * z.ringSpin;
+      z.ring.rotation.z = z.ringBob;
+      z.ring.visible = !z.eliminated;
+    }
+    // elimination: drop and fade
+    if (z.eliminated) {
+      z.fallT += dt;
+      z.mesh.position.y -= z.fallT * 6 * dt;
+      z.mesh.material.transparent = true;
+      z.mesh.material.opacity = Math.max(0, 1 - z.fallT*0.7);
+      if (z.fallT > 1.6) { scene.remove(z.mesh); if(z.ring) scene.remove(z.ring); zorbs.delete(id); }
+    }
+  }
+
+  updateCamera(dt);
+  renderer.render(scene, camera);
+  requestAnimationFrame(loop);
+}
+
+// ---- camera: follow the leader smoothly from behind & above ----
+const camTarget = new THREE.Vector3();
+function updateCamera(dt) {
+  let focus = null;
+  const lead = ZPHYSICS.isReady() ? ZPHYSICS.leader() : null;
+  if (lead && zorbs.has(lead)) focus = zorbs.get(lead).mesh.position;
+  else if (track) focus = new THREE.Vector3(track.start.pos.x, track.start.pos.y, track.start.pos.z);
+  if (!focus) return;
+  camTarget.lerp(focus, 0.08);
+  // place camera up the slope behind the focus
+  const back = track ? track.nodes[Math.max(0, ZPHYSICS.nearestNode(camTarget, 0))] : null;
+  const desired = new THREE.Vector3(camTarget.x, camTarget.y + 9, camTarget.z - 14);
+  camera.position.lerp(desired, 0.06);
+  camera.lookAt(camTarget.x, camTarget.y - 1, camTarget.z + 6);
+}
+
+// ---- boot ----
+async function boot() {
+  setStatus('loading physics…', false);
+  const ok = await ZPHYSICS.init(BALL_R);
+  if (!ok) { setStatus('LEGACY (physics failed: ' + ZPHYSICS.getError() + ')', false); return; }
+  setStatus('⬡ RAPIER READY', true);
+  // build a course immediately so there's something on screen
+  buildCourse(Math.floor(Math.random()*999999));
+  // give the physics the track collider
+  ZPHYSICS.setTrack(track.collider, track.nodes);
+  // demo: spawn a field of test balls and race
+  const names = [];
+  const demo = ['NightCrawl','PixelBolt','VoidStar','GhostRide','TurboDrift','CyberDash','NeonByte','PlasmaKing','OrbMaster','MarsScum','GlitchQ','HyperV'];
+  for (let i=0;i<demo.length;i++) names.push({ id: demo[i], prefs:{}, isSub: i%3===0 });
+  startRace(track.seed, names);
+}
+
+// audio-gesture gate (this is what was spamming the console before: we now ONLY
+// start anything audio-ish AFTER a real click, exactly once)
+document.getElementById('arm').addEventListener('click', () => {
+  document.getElementById('arm').remove();
+  boot();
+}, { once:true });
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
