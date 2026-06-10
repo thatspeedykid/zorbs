@@ -494,6 +494,7 @@ function initFromSession(s){
   // Load demo data (replace with real API later)
   loadDemoData(s);
   loadSettings();
+  getCtlChannel(()=>{}); // open ctl channel for live two-way toggle sync
 }
 
 function loadDemoData(s){
@@ -558,6 +559,12 @@ function getCtlChannel(cb){
     const ably = new Ably.Realtime({ key: cfg.ablyKey, clientId: 'dash_'+session.username });
     ably.connection.on('connected', ()=>{
       _ctlChannel = ably.channels.get('zorbs:ch:'+session.username);
+      // Reflect toggles changed from the game or another tab
+      _ctlChannel.subscribe('ctl', m => {
+        const {cmd, val} = m.data || {};
+        if(cmd==='bots'){ const t=document.getElementById('tog-bots'); if(t) t.checked=!!val; }
+        if(cmd==='auto'){ const t=document.getElementById('tog-autoreset'); if(t) t.checked=!!val; }
+      });
       cb(_ctlChannel);
     });
   });
