@@ -73,6 +73,8 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;}
       <button class="cb" id="btn-top" onclick="setCam('top')">TOP</button>
       <button class="cb" id="btn-auto" onclick="setCam('auto')">AUTO</button>
       <button class="cb" id="btn-free" onclick="setCam('free')">FREE</button>
+      <button class="cb" id="btn-music" onclick="const on=ZAUDIO.toggleMusic();this.textContent=on?'♪ ON':'♪ OFF';this.style.opacity=on?'1':'0.4';">♪ ON</button>
+      <button class="cb" id="btn-sfx" onclick="const on=ZAUDIO.toggleSfx();this.textContent=on?'🔊':'🔇';">🔊</button>
     </div>
   </div>
   <div id="info">
@@ -125,6 +127,7 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;}
 <script src="https://unpkg.com/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
 <script src="https://unpkg.com/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
 <script src="/session.js"></script>
+<script src="/audio.js"></script>
 <script>
 // Seeded random - replaces Math.random() for track generation only
 function mulberry32(seed){
@@ -1054,7 +1057,7 @@ function stepPhysics(z,dt){
       z.mesh.visible = false;
       if(z.tLine) z.tLine.visible = false;
       z.streaks.forEach(s => s.visible = false);
-      showKO('💀 ELIMINATED: '+z.name, 0xff2200);
+      showKO('💀 ELIMINATED: '+z.name, 0xff2200); ZAUDIO.play('eliminated');
       const remaining = zorbs.filter(r => !r.finished);
       if(remaining.length === 0 && zorbs.length > 0){ setTimeout(resetRace, 3000); }
       return;
@@ -1067,7 +1070,7 @@ function stepPhysics(z,dt){
     const fwdDist=toB.dot(bp.dir);
     const latDist=Math.abs(toB.dot(bp.right));
     if(fwdDist>-bp.halfLen&&fwdDist<bp.halfLen&&latDist<bp.halfW){
-      if(z.boost<=0.1){ z.boost=1.0; showKO('⚡ BOOST: '+z.name,0x00ff88); }
+      if(z.boost<=0.1){ z.boost=1.0; showKO('⚡ BOOST: '+z.name,0x00ff88); ZAUDIO.play('boost'); }
     }
   }
 
@@ -1086,7 +1089,7 @@ function stepPhysics(z,dt){
       z.vel.z=nz*power+(Math.random()-0.5)*8;
       z.vel.y=3+Math.random()*4;
       z.knockFlash=0.5;
-      showKO('⚡ ZAPPED: '+z.name,0x00ffff);
+      showKO('⚡ ZAPPED: '+z.name,0x00ffff); ZAUDIO.play('zap');
     }
   }
 
@@ -1103,7 +1106,7 @@ function stepPhysics(z,dt){
       const pow = rising ? 13+Math.random()*6 : 6;
       z.pos.x+=nx*(minG-gd+0.05); z.pos.z+=nz*(minG-gd+0.05);
       z.vel.x+=nx*pow; z.vel.z+=nz*pow;
-      if(rising){ z.vel.y=7+Math.random()*4; showKO('⚠ SPIKED: '+z.name,0xff8800); }
+      if(rising){ z.vel.y=7+Math.random()*4; showKO('⚠ SPIKED: '+z.name,0xff8800); ZAUDIO.play('spike'); }
       z.knockFlash=0.45;
     }
   }
@@ -1120,7 +1123,7 @@ function stepPhysics(z,dt){
       if(along>tz.len-2 && !z._tubeShot){
         z._tubeShot=true;
         z.vel.x+=tz.dir.x*14; z.vel.z+=tz.dir.z*14; z.vel.y+=2;
-        showKO('🚀 LAUNCHED: '+z.name,0x00f0ff);
+        showKO('🚀 LAUNCHED: '+z.name,0x00f0ff); ZAUDIO.play('launch');
         setTimeout(()=>{ z._tubeShot=false; },3000);
       }
     } else if(z._inTube){ z._inTube=false; }
@@ -1148,7 +1151,7 @@ function stepPhysics(z,dt){
         z._padCd=performance.now();
         z.vel.x+=bp.dir.x*16; z.vel.z+=bp.dir.z*16;
         z.knockFlash=0.25;
-        showKO('⚡ PAD BOOST: '+z.name,0x00ff88);
+        showKO('⚡ PAD BOOST: '+z.name,0x00ff88); ZAUDIO.play('pad');
       }
     }
   }
@@ -1161,7 +1164,7 @@ function stepPhysics(z,dt){
       const rank=zorbs.filter(r=>r.finished).length; z.rank=rank;
       if(window.IS_HOST){
         if(rank===1){
-          showBanner('🏆 WINNER: '+z.name,4500);
+          showBanner('🏆 WINNER: '+z.name,4500); ZAUDIO.play('finish');
           setTimeout(showEndLeaderboard,4500);
           setTimeout(resetRace,16000);
           // Broadcast winner to viewers
@@ -1236,7 +1239,7 @@ function updateHammers(dt){
       if(Math.sqrt(dx*dx+dy*dy+dz2*dz2)<BALL_R+1.4){
         const kick=(swing>0?1:-1)*(9+Math.random()*5);
         z.vel.x+=h.right.x*kick; z.vel.z+=h.right.z*kick; z.vel.y=3.5;
-        z.knockFlash=0.5; showKO('🔨 SMASHED: '+z.name,0xff4400);
+        z.knockFlash=0.5; showKO('🔨 SMASHED: '+z.name,0xff4400); ZAUDIO.play('smash');
       }
     });
   });
@@ -1450,6 +1453,10 @@ function showBanner(txt,dur){
   el.classList.toggle('big', isCd);
   if(isCd){ el.classList.remove('big'); void el.offsetWidth; el.classList.add('big'); } // restart pop anim
   el.style.opacity='1';
+  if(window.ZAUDIO){
+    if(txt.startsWith('GO')) ZAUDIO.play('go');
+    else if(isCd) ZAUDIO.play('countbeep');
+  }
   setTimeout(()=>{ el.style.opacity='0'; el.classList.remove('big'); },dur);
 }
 function hidePanel(){document.getElementById('sp').style.display='none';document.getElementById('btn-show').style.display='block';}
@@ -1698,6 +1705,10 @@ document.getElementById('cg').onclick=()=>{
 document.getElementById('ci').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('cg').click();});
 
 // ── MAIN LOOP ─────────────────────────────────────────
+// Arm audio on first interaction (autoplay policy)
+['click','keydown','touchstart'].forEach(ev=>
+  window.addEventListener(ev, ()=>{ if(window.ZAUDIO) ZAUDIO.arm(); }, {once:false}));
+
 // ── MODE DETECTION ────────────────────────────────────
 const _urlParams = new URLSearchParams(window.location.search);
 const _isStreamer = _urlParams.has('streamer') && !_urlParams.has('obs');
