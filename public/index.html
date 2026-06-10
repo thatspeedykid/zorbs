@@ -1163,7 +1163,20 @@ function stepPhysics(z,dt){
   if(node) z.nodeIdx=idx;
 
   if(node){
-    const floorY=node.floorY+BALL_R;
+    // Interpolate floor height between this node and the next so slopes are continuous
+    let baseFloorY = node.floorY;
+    const nxt = pathNodes[idx+1];
+    if(nxt){
+      const seg = new THREE.Vector3().subVectors(nxt.pos, node.pos);
+      const segLen2 = seg.x*seg.x + seg.z*seg.z;
+      if(segLen2 > 0.001){
+        const toBall = new THREE.Vector3(z.pos.x-node.pos.x, 0, z.pos.z-node.pos.z);
+        let t = (toBall.x*seg.x + toBall.z*seg.z)/segLen2;
+        t = Math.max(0, Math.min(1, t));
+        baseFloorY = node.floorY + (nxt.floorY - node.floorY)*t;
+      }
+    }
+    const floorY=baseFloorY+BALL_R;
     const hw=node.halfW-BALL_R-0.05;
 
     // Floor
@@ -1198,16 +1211,23 @@ function stepPhysics(z,dt){
       }
     }
 
-    // Wall constraint - only while ball is below wall top (1.6u).
-    // Hard knocks with enough height clear the wall = off the track = DQ.
-    const toPos=new THREE.Vector3().subVectors(z.pos,node.pos);
-    const lateral=toPos.dot(node.right);
-    // Only let a ball escape over the wall if it was genuinely launched (real height + rising)
-    const overWall = z.pos.y > node.floorY + 1.9 && z.vel.y > 1.5;
+    // Wall constraint. Compute right vector from the actual track heading toward the
+    // next node so it stays accurate through curves (stored per-point right can drift).
+    let cDir = node.dir;
+    if(nxt){
+      const d=new THREE.Vector3().subVectors(nxt.pos,node.pos); d.y=0;
+      if(d.lengthSq()>0.001) cDir=d.normalize();
+    }
+    const cRight = perpRight(cDir);
+    // Center point interpolated along the segment
+    const cx = node.pos.x + (nxt? (nxt.pos.x-node.pos.x): 0)*0;
+    const toPos=new THREE.Vector3(z.pos.x-node.pos.x, 0, z.pos.z-node.pos.z);
+    const lateral=toPos.dot(cRight);
+    const overWall = z.pos.y > baseFloorY + 1.9 && z.vel.y > 1.5;
     if(!overWall && Math.abs(lateral)>hw){
       const push=Math.sign(lateral)*(Math.abs(lateral)-hw);
-      z.pos.x-=node.right.x*push;
-      z.pos.z-=node.right.z*push;
+      z.pos.x-=cRight.x*push;
+      z.pos.z-=cRight.z*push;
       const vLat=z.vel.x*node.right.x+z.vel.z*node.right.z;
       if(Math.sign(vLat)===Math.sign(lateral)){
         z.vel.x-=vLat*node.right.x*(1+BOUNCE*0.5);
