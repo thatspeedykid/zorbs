@@ -1010,7 +1010,9 @@ function createZorb(name,isSub,col){
 
   return {
     name,isSub,color:col,nameLabel,mesh,ring,tLine,streaks,light,
-    speedF:0.93+Math.random()*0.14, wanderP:Math.random()*Math.PI*2,
+    speedF:0.88+Math.random()*0.24, wanderP:Math.random()*Math.PI*2,
+    wanderFreq:0.5+Math.random()*1.4, wanderAmp:2.5+Math.random()*3.5,
+    wanderP2:Math.random()*Math.PI*2,
     trailHistory:[],
     pos:new THREE.Vector3(sx,sy,sz),
     vel:new THREE.Vector3(0,0,0),
@@ -1084,13 +1086,24 @@ function stepPhysics(z,dt){
       z.onGround=false;
     }
 
-    // Marble personality: smooth lateral wander so balls don't train-line
+    // Marble personality: layered out-of-phase wander so the pack spreads
+    // across the track width instead of forming a conga line.
     if(z.onGround){
-      z.wanderP+=dt*(0.7+z.speedF*0.5);
-      const wob=Math.sin(z.wanderP)*1.6;
-      z.vel.x+=node.right.x*wob*dt;
-      z.vel.z+=node.right.z*wob*dt;
-      if(Math.random()<0.02){ z.vel.x+=(Math.random()-0.5)*0.9; z.vel.z+=(Math.random()-0.5)*0.9; }
+      z.wanderP  += dt*z.wanderFreq;
+      z.wanderP2 += dt*z.wanderFreq*0.6;
+      const wob = (Math.sin(z.wanderP) + Math.sin(z.wanderP2)*0.6) * z.wanderAmp;
+      z.vel.x += node.right.x*wob*dt;
+      z.vel.z += node.right.z*wob*dt;
+      // Frequent small random nudges = lively, marble-like jitter
+      if(Math.random()<0.08){
+        z.vel.x += (Math.random()-0.5)*2.0;
+        z.vel.z += (Math.random()-0.5)*2.0;
+      }
+      // Occasional bigger "bump off course correction" so leaders shuffle
+      if(Math.random()<0.012){
+        z.vel.x += node.right.x*(Math.random()-0.5)*7;
+        z.vel.z += node.right.z*(Math.random()-0.5)*7;
+      }
     }
 
     // Wall constraint - only while ball is below wall top (1.6u).
@@ -1313,13 +1326,17 @@ function ballCollide(){
         const dvx=a.vel.x-b.vel.x, dvy=a.vel.y-b.vel.y, dvz=a.vel.z-b.vel.z;
         const dot=dvx*nx+dvy*ny+dvz*nz;
         if(dot<0){
-          const imp=dot*0.22;
+          const imp=dot*0.85; // bouncier - marbles knock each other around
           a.vel.x-=imp*nx; a.vel.y-=imp*ny; a.vel.z-=imp*nz;
           b.vel.x+=imp*nx; b.vel.y+=imp*ny; b.vel.z+=imp*nz;
         }
         const ov=(minD-dist)*0.5+0.01;
         a.pos.x+=nx*ov; a.pos.y+=ny*ov; a.pos.z+=nz*ov;
         b.pos.x-=nx*ov; b.pos.y-=ny*ov; b.pos.z-=nz*ov;
+        // Tangential scatter: nudge perpendicular so clusters break apart sideways
+        const tx=-nz, tz=nx; const scat=(Math.random()-0.5)*1.2;
+        a.vel.x+=tx*scat; a.vel.z+=tz*scat;
+        b.vel.x-=tx*scat; b.vel.z-=tz*scat;
       }
     }
   }
