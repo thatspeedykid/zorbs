@@ -66,8 +66,8 @@ const ZAUDIO = (() => {
   const ARP   = [0,2,4,6, 4,2,0,2, 3,5,4,2, 5,4,2,0];
 
   function playStep() {
-    if (!ctx || !musicOn) return;
-    const t = ctx.currentTime;
+    if (!ctx || !musicOn || ctx.state !== 'running') return;
+    const t = ctx.currentTime + 0.02;
     // Kick on quarters
     if (step % 4 === 0) {
       const o=ctx.createOscillator(), g=ctx.createGain();
@@ -90,9 +90,11 @@ const ZAUDIO = (() => {
   }
 
   function startMusic() {
-    if (!ctx || loopTimer) return;
+    if (!ctx) return;
+    if (loopTimer) return;
     const bpm = 124, stepMs = (60000/bpm)/4;
     loopTimer = setInterval(playStep, stepMs);
+    console.log('[ZAUDIO] music loop started, ctx:', ctx.state);
   }
   function stopMusic() { if (loopTimer){ clearInterval(loopTimer); loopTimer=null; } }
 
@@ -101,12 +103,13 @@ const ZAUDIO = (() => {
     init();
     const go = () => {
       if (!ctx || ctx.state !== 'running') return;
-      if (!started) { started = true; if (musicOn) startMusic(); }
+      started = true;
+      if (musicOn && !loopTimer) startMusic();
     };
     resume().then(go).catch(go);
-    // Fallback: also try shortly after, in case the promise resolves oddly
-    setTimeout(go, 120);
-    setTimeout(go, 400);
+    setTimeout(go, 150);
+    setTimeout(go, 500);
+    setTimeout(go, 1200);
   }
   function play(name) { if(!ctx) init(); if (SFX[name]) { resume().then(()=>SFX[name]()).catch(()=>SFX[name]()); } }
   function toggleMusic() {
