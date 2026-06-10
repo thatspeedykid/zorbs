@@ -102,6 +102,7 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;}
       <span id="sp-hint">blank=auto</span>
     </div>
     <button id="btn-go" onclick="(window.startWithCountdown||streamerStart)()">▶ START RACE</button>
+    <button id="btn-bots" onclick="(function(){const s=JSON.parse(localStorage.getItem('zorbs_settings')||'{}');s.bots=!s.bots;localStorage.setItem('zorbs_settings',JSON.stringify(s));const b=document.getElementById('btn-bots');b.textContent='BOTS: '+(s.bots?'ON':'OFF');b.style.color=s.bots?'#00ff88':'rgba(255,255,255,0.5)';})()" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.5);border-radius:5px;padding:6px 14px;font-size:10px;letter-spacing:2px;cursor:pointer;font-family:'Courier New',monospace;margin-top:6px;width:100%;">BOTS: OFF</button>
     <button id="btn-auto" onclick="toggleAutoMode()" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.5);border-radius:5px;padding:6px 14px;font-size:10px;letter-spacing:2px;cursor:pointer;font-family:'Courier New',monospace;margin-top:6px;width:100%;">AUTO-START: OFF</button>
     <div id="btn-hide" onclick="hidePanel()">hide panel</div>
   </div>
@@ -1725,6 +1726,11 @@ if(_isStreamer){
     b.style.borderColor = window._streamerAuto ? '#00ff88' : 'rgba(255,255,255,0.15)';
   };
   if(window._streamerAuto){ window._streamerAuto = false; window.toggleAutoMode(); } // sync button UI
+  {
+    const s=JSON.parse(localStorage.getItem('zorbs_settings')||'{}');
+    const b=document.getElementById('btn-bots');
+    if(b && s.bots){ b.textContent='BOTS: ON'; b.style.color='#00ff88'; }
+  }
   // Streamer auto-start loop: 30s countdown when 2+ players, only if toggled on
   window._autoStartAt = null;
   window.showCountdown = function(secs){
