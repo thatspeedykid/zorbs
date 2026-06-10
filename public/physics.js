@@ -12,9 +12,9 @@ const ZPHYS = (() => {
   async function init(ballRadius) {
     BALL_R = ballRadius || 0.5;
     try {
-      // rapier3d-compat ships an ES module with the WASM inlined - works without a bundler
-      const mod = await import('https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.14.0/rapier.es.js');
-      RAPIER = mod;
+      // rapier3d-compat: WASM inlined as base64, default export. +esm gives a clean module.
+      const mod = await import('https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.14.0/+esm');
+      RAPIER = mod.default || mod;
       await RAPIER.init();
       world = new RAPIER.World({ x: 0, y: -32.0, z: 0 }); // strong gravity = snappy marble feel
       ready = true;
