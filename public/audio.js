@@ -12,7 +12,7 @@ const ZAUDIO = (() => {
     ctx = new AC();
     master = ctx.createGain();   master.gain.value = 0.6;  master.connect(ctx.destination);
     musicGain = ctx.createGain(); musicGain.gain.value = 0.32; musicGain.connect(master);
-    sfxGain = ctx.createGain();   sfxGain.gain.value = 0.55; sfxGain.connect(master);
+    sfxGain = ctx.createGain();   sfxGain.gain.value = 0.32; sfxGain.connect(master);
   }
 
   function resume() {
@@ -111,7 +111,17 @@ const ZAUDIO = (() => {
     setTimeout(go, 500);
     setTimeout(go, 1200);
   }
-  function play(name) { if(!ctx) init(); if (SFX[name]) { resume().then(()=>SFX[name]()).catch(()=>SFX[name]()); } }
+  let _lastSfx = 0, _sfxCount = 0, _sfxWindow = 0;
+  function play(name) {
+    if(!ctx) init();
+    if(!SFX[name]) return;
+    const now = performance.now();
+    // Rate-limit: at most 4 sfx per 250ms window (prevents pack-collision noise wall)
+    if(now - _sfxWindow > 250){ _sfxWindow = now; _sfxCount = 0; }
+    if(_sfxCount >= 4) return;
+    _sfxCount++;
+    resume().then(()=>SFX[name]()).catch(()=>SFX[name]());
+  }
   function toggleMusic() {
     musicOn = !musicOn;
     if (musicOn) startMusic(); else stopMusic();
