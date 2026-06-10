@@ -1105,6 +1105,7 @@ function createZorb(name,isSub,col){
     speedF:0.88+Math.random()*0.24, wanderP:Math.random()*Math.PI*2,
     wanderFreq:0.5+Math.random()*1.4, wanderAmp:2.5+Math.random()*3.5,
     wanderP2:Math.random()*Math.PI*2,
+    laneBias:(Math.random()-0.5)*1.6, // preferred lateral lane (spreads the pack)
     trailHistory:[],
     pos:new THREE.Vector3(sx,sy,sz),
     vel:new THREE.Vector3(0,0,0),
@@ -1243,15 +1244,31 @@ function stepPhysics(z,dt){
     // ★ FORWARD PUSH — keeps balls fast and moving
     if(phase==='racing'){
       const sf = z.speedMult * (z.speedF||1);
-      const fwd = z.vel.x*node.dir.x + z.vel.z*node.dir.z;
-      // Constant gentle push forward
-      z.vel.x += node.dir.x * FORWARD_ACCEL * sf * dt;
-      z.vel.z += node.dir.z * FORWARD_ACCEL * sf * dt;
-      // Strong kick if below minimum speed
+      // Drive along the ACTUAL track heading (toward the next node), so curves push
+      // the ball around the bend instead of into the inside wall.
+      let driveDir = node.dir;
+      const nd = pathNodes[idx+1];
+      if(nd){
+        const dd=new THREE.Vector3(nd.pos.x-node.pos.x,0,nd.pos.z-node.pos.z);
+        if(dd.lengthSq()>0.001) driveDir=dd.normalize();
+      }
+      const fwd = z.vel.x*driveDir.x + z.vel.z*driveDir.z;
+      z.vel.x += driveDir.x * FORWARD_ACCEL * sf * dt;
+      z.vel.z += driveDir.z * FORWARD_ACCEL * sf * dt;
       if(fwd < MIN_FWD * sf){
         const kick = (MIN_FWD*sf - fwd) * 18 * dt;
-        z.vel.x += node.dir.x * kick;
-        z.vel.z += node.dir.z * kick;
+        z.vel.x += driveDir.x * kick;
+        z.vel.z += driveDir.z * kick;
+      }
+      // Gentle re-centering so the pack doesn't funnel onto the inside of curves
+      // (each ball keeps its own offset via wander, this just prevents pile-ups).
+      {
+        const cr = perpRight(driveDir);
+        const off = (z.pos.x-node.pos.x)*cr.x + (z.pos.z-node.pos.z)*cr.z;
+        const targetOff = (z.laneBias||0) * (node.halfW-BALL_R-0.4);
+        const pull = (targetOff - off) * 1.0; // toward THIS ball's preferred lane
+        z.vel.x += cr.x*pull*dt;
+        z.vel.z += cr.z*pull*dt;
       }
     }
 
