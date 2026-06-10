@@ -60,6 +60,7 @@ const ZPHYSICS = (() => {
     if (!ok) { ready = false; return false; }
     // gravity points straight down; the track slope turns that into forward motion
     world = new RAPIER.World({ x: 0, y: -24, z: 0 });
+    world.timestep = 1/60;             // FIXED timestep = smooth, no jitter
     ready = true;
     return true;
   }
@@ -98,12 +99,13 @@ const ZPHYSICS = (() => {
     if (!ready || balls.has(id)) return;
     const bd = RAPIER.RigidBodyDesc.dynamic()
       .setTranslation(spawn.x, spawn.y, spawn.z)
-      .setLinearDamping(0.35)
-      .setAngularDamping(0.6)
+      .setLinearDamping(0.18)   // lower = balls keep momentum through contacts
+      .setAngularDamping(0.5)
       .setCcdEnabled(true); // fast balls never tunnel through walls
     const body = world.createRigidBody(bd);
     const cd = RAPIER.ColliderDesc.ball(BALL_R)
-      .setRestitution(0.45).setFriction(0.4).setDensity(1.0);
+      .setRestitution(0.35).setFriction(0.35).setDensity(1.2)
+      .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
     world.createCollider(cd, body);
 
     // deterministic-ish personality from the id hash
@@ -136,11 +138,36 @@ const ZPHYSICS = (() => {
   const LANE_PULL = 2.2;     // how strongly a ball seeks its preferred lane
   const MAX_SPEED = 26;
 
-  // Step the world once. dt is seconds. Applies drive BEFORE the physics solve.
-  function step(dt) {
+  // Fixed-timestep stepping with an accumulator. Call step(realDt) each frame;
+  // it runs 0..N fixed sub-steps so physics is deterministic and smooth.
+  let acc = 0;
+  const FIXED = 1/60;
+  function step(realDt) {
     if (!ready) return;
+    acc += Math.min(0.1, realDt);     // clamp to avoid spiral-of-death
+    let steps = 0;
+    while (acc >= FIXED && steps < 5) {
+      // snapshot prev positions for interpolation BEFORE we move
+      for (const [, b] of balls) {
+        const t = b.body.translation();
+        b.prev = b.cur || { x:t.x, y:t.y, z:t.z };
+      }
+      fixedStep(FIXED);
+      for (const [, b] of balls) {
+        const t = b.body.translation();
+        b.cur = { x:t.x, y:t.y, z:t.z };
+      }
+      acc -= FIXED; steps++;
+    }
+    // fraction toward the next step, for render interpolation
+    lastAlpha = acc / FIXED;
+  }
+  let lastAlpha = 0;
+
+  function fixedStep(dt) {
     for (const [, b] of balls) {
       if (!b.alive) continue;
+      b.body.resetForces(true);   // clear last step's drive so forces don't compound
       const t = b.body.translation();
       b.hint = nearestNode(t, b.hint);
       const n = nodes[b.hint];
@@ -158,14 +185,14 @@ const ZPHYSICS = (() => {
       const laneFx = r.x * latErr * LANE_PULL;
       const laneFz = r.z * latErr * LANE_PULL;
 
-      // total drive force: forward + gentle lane-seek + boost
+      // total drive: forward + gentle lane-seek + boost. Applied as a force each
+      // fixed step (consistent), and kept modest so ball-ball contacts still win.
       const drive = DRIVE_FORCE * b.speedMul * (1 + b.boost);
-      const impulse = {
-        x: (fx * drive + laneFx) * dt,
-        y: (fy * drive) * dt,
-        z: (fz * drive + laneFz) * dt,
-      };
-      b.body.applyImpulse(impulse, true);
+      b.body.addForce({
+        x: fx * drive + laneFx,
+        y: fy * drive * 0.3,            // light vertical assist; gravity does the rest
+        z: fz * drive + laneFz,
+      }, true);
       if (b.boost > 0) b.boost = Math.max(0, b.boost - dt * 0.8);
 
       // soft speed clamp on horizontal velocity so balls don't run away
@@ -180,12 +207,20 @@ const ZPHYSICS = (() => {
     world.step();
   }
 
-  // Read all ball states (for rendering and for broadcasting to viewers).
+  // Read all ball states with interpolation between fixed steps = buttery render.
   function snapshot() {
     const out = {};
+    const a = lastAlpha;
     for (const [id, b] of balls) {
-      const t = b.body.translation();
-      out[id] = { x: t.x, y: t.y, z: t.z, alive: b.alive, hint: b.hint };
+      let x, y, z;
+      if (b.prev && b.cur) {
+        x = b.prev.x + (b.cur.x - b.prev.x) * a;
+        y = b.prev.y + (b.cur.y - b.prev.y) * a;
+        z = b.prev.z + (b.cur.z - b.prev.z) * a;
+      } else {
+        const t = b.body.translation(); x=t.x; y=t.y; z=t.z;
+      }
+      out[id] = { x, y, z, alive: b.alive, hint: b.hint };
     }
     return out;
   }
