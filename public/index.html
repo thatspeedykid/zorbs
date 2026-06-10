@@ -137,6 +137,7 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;}
 <script src="/session.js"></script>
 <script src="/audio.js"></script>
 <script src="/skins.js"></script>
+<script src="/physics.js"></script>
 <script>
 // Seeded random - replaces Math.random() for track generation only
 function mulberry32(seed){
@@ -310,6 +311,8 @@ function drawSpeedLines(intensity){
 // ── SCENE OBJECTS ─────────────────────────────────────
 var pathNodes = [];
 let trackMeshes= [];
+var _colliderVerts = []; // flat xyz for Rapier trimesh
+var _colliderIdx = [];   // triangle indices
 let hammers=[], blades=[], windZones=[], trapDoors=[];
 let bumperObjs = [];
 let boostPads  = [];
@@ -322,6 +325,7 @@ function clearCourse(){
   trackMeshes.forEach(m=>scene.remove(m)); trackMeshes=[];
   hammers=[]; bumperObjs=[]; boostPads=[]; funnels=[]; blades=[]; windZones=[]; trapDoors=[]; gateObjs=[]; tubeZones=[]; funnelZones=[]; forkZones=[];
   pathNodes=[]; courseLength=0; if(typeof _glowRails!=='undefined') _glowRails.length=0;
+  _colliderVerts=[]; _colliderIdx=[];
 }
 function addMesh(m){ scene.add(m); trackMeshes.push(m); return m; }
 
@@ -446,7 +450,12 @@ function _buildTube(splinePtsIn, eL, eR){
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(verts,3));
     g.setIndex(idx); g.computeVertexNormals();
-    const m = new THREE.Mesh(g, mat); m.receiveShadow=true; return addMesh(m);
+    const m = new THREE.Mesh(g, mat); m.receiveShadow=true;
+    // Accumulate into the global collider buffer (vertex offset = current vert count/3)
+    const base = _colliderVerts.length/3;
+    for(let k=0;k<verts.length;k++) _colliderVerts.push(verts[k]);
+    for(let k=0;k<idx.length;k++) _colliderIdx.push(idx[k]+base);
+    return addMesh(m);
   }
   mkMesh(floorVerts, qIdx(N), _floorMat);
   mkMesh(wallLVerts, qIdx(N), _wallMat);
@@ -1264,6 +1273,7 @@ function createZorb(name,isSub,col){
 }
 
 function removeZorb(z){
+  if(window.ZPHYS && ZPHYS.isReady() && ZPHYS.hasBall(z.name)) ZPHYS.removeBall(z.name);
   if(z.nameLabel&&z.nameLabel.parentNode)z.nameLabel.parentNode.removeChild(z.nameLabel);
   scene.remove(z.mesh);
   if(z.ring) scene.remove(z.ring);
@@ -1273,6 +1283,67 @@ function removeZorb(z){
 }
 
 // ── PHYSICS ───────────────────────────────────────────
+// ── RAPIER PHYSICS STEP (host) ────────────────────────
+// Rapier handles all collision; we apply a forward DRIVE so balls always race forward.
+function stepPhysicsRapier(dt){
+  // Ensure each active ball has a Rapier body
+  for(const z of zorbs){
+    if(z.finished || z.disqualified){ if(ZPHYS.hasBall(z.name)) ZPHYS.removeBall(z.name); continue; }
+    if(!ZPHYS.hasBall(z.name)){
+      ZPHYS.addBall(z.name, z.pos.x, z.pos.y, z.pos.z);
+    }
+  }
+  // Apply forward drive + boost to each ball BEFORE stepping
+  for(const z of zorbs){
+    if(z.finished || z.disqualified) continue;
+    const {node,idx} = nearestNodeFromHint(z.pos, z.nodeIdx);
+    if(node){
+      z.nodeIdx = idx;
+      // Heading toward next node (smooth through curves)
+      let dx=node.dir.x, dz=node.dir.z;
+      const nx=pathNodes[idx+1];
+      if(nx){ const ddx=nx.pos.x-node.pos.x, ddz=nx.pos.z-node.pos.z; const l=Math.hypot(ddx,ddz)||1; dx=ddx/l; dz=ddz/l; }
+      const sf = (z.speedF||1);
+      // Drive force keeps the ball racing forward (this is the "never stall" part)
+      const driveForce = 0.9 * sf;
+      const maxSpd = z.boost>0.1 ? MAX_SPD*1.6 : MAX_SPD*0.9;
+      ZPHYS.drive(z.name, dx, dz, driveForce, maxSpd);
+      // Boost impulse
+      if(z.boost>0){
+        ZPHYS.impulse(z.name, dx*2.2*z.boost, 0, dz*2.2*z.boost);
+        z.boost=Math.max(0, z.boost-dt*0.7);
+      }
+      // Personality wander (lateral) so they don't conga-line
+      if(z.onGround!==false){
+        z.wanderP=(z.wanderP||0)+dt*(z.wanderFreq||1);
+        const cr=perpRight({x:dx,z:dz}); // perp of heading
+        const wob=Math.sin(z.wanderP)*(z.wanderAmp||3)*0.12;
+        ZPHYS.impulse(z.name, cr.x*wob, 0, cr.z*wob);
+      }
+    }
+  }
+  // Step the physics world
+  ZPHYS.step();
+  // Sync Rapier positions back into game balls + DQ if fallen off
+  for(const z of zorbs){
+    if(z.finished || z.disqualified) continue;
+    const p = ZPHYS.getPos(z.name);
+    if(!p) continue;
+    z.pos.set(p.x, p.y, p.z);
+    const v = ZPHYS.getVel(z.name);
+    if(v) z.vel.set(v.x, v.y, v.z);
+    // Fell off the world = eliminated
+    const {node} = nearestNodeFromHint(z.pos, z.nodeIdx);
+    if(node && z.pos.y < node.floorY - 12){
+      z.disqualified=true; z.mesh.visible=false;
+      if(z.ring) z.ring.visible=false; if(z.shadow) z.shadow.visible=false;
+      showKO('💀 ELIMINATED: '+z.name, 0xff2200);
+      if(window.ZAUDIO) ZAUDIO.play('eliminated');
+      ZPHYS.removeBall(z.name);
+    }
+  }
+}
+
 function stepPhysics(z,dt){
   if(z.finished || z.disqualified) return;
 
@@ -1588,6 +1659,7 @@ function stepPhysics(z,dt){
     const toFin=new THREE.Vector3().subVectors(FINISH_POS,z.pos); toFin.y=0;
     if(toFin.length()<4.5){
       z.finished=true; z.finishTime=performance.now();
+      if(window.ZPHYS && ZPHYS.isReady() && ZPHYS.hasBall(z.name)) ZPHYS.removeBall(z.name);
       const rank=zorbs.filter(r=>r.finished).length; z.rank=rank;
       if(window.IS_HOST){
         if(rank===1){
@@ -2063,6 +2135,7 @@ function showEndLeaderboard(){
 
 function resetRace(force){
   if(phase==='lobby') return; // already reset
+  if(window.ZPHYS && ZPHYS.isReady()) ZPHYS.clearBalls();
   // Block accidental resets from a tab that just refreshed/elected (unless forced by
   // an explicit control action or the race genuinely finished).
   if(!force){
@@ -2178,6 +2251,18 @@ window.ZLoad = (()=>{
   }
   return { set, finish };
 })();
+
+// Initialize Rapier physics (host-authoritative). Non-blocking; falls back to legacy.
+window._physReady = false;
+if(window.ZPHYS){
+  ZPHYS.init(BALL_R).then(ok=>{
+    window._physReady = ok;
+    if(ok && _colliderVerts.length>=9){
+      ZPHYS.setTrack(new Float32Array(_colliderVerts), new Uint32Array(_colliderIdx));
+      window._physTrackBuilt = true;
+    }
+  });
+}
 
 // Arm audio on first interaction (autoplay policy)
 ['click','keydown','touchstart'].forEach(ev=>
@@ -2315,6 +2400,11 @@ function initCourse(seed){
   window._currentSeed = seed;
   window._courseBuilt = true;
   buildCourseSeeded(null, seed);
+  // Rebuild the Rapier track collider for the new course
+  if(window.ZPHYS && ZPHYS.isReady() && _colliderVerts.length>=9){
+    ZPHYS.setTrack(new Float32Array(_colliderVerts), new Uint32Array(_colliderIdx));
+    window._physTrackBuilt = true;
+  }
   if(window.ZORBS_BOTS_ENABLED && window.IS_HOST) startMock();
 }
 
@@ -2690,8 +2780,13 @@ function loop(ts){
       updateBlades(dt);
       updateWindZones();
       updateTrapDoors(dt);
-      const SUB = zorbs.length > 200 ? 1 : zorbs.length > 50 ? 2 : 3;
-      for(let s=0;s<SUB;s++){zorbs.forEach(z=>stepPhysics(z,dt/SUB));ballCollide();}
+      const useRapier = window.ZPHYS && ZPHYS.isReady() && window._physTrackBuilt && window.IS_HOST;
+      if(useRapier){
+        stepPhysicsRapier(dt);
+      } else {
+        const SUB = zorbs.length > 200 ? 1 : zorbs.length > 50 ? 2 : 3;
+        for(let s=0;s<SUB;s++){zorbs.forEach(z=>stepPhysics(z,dt/SUB));ballCollide();}
+      }
     }
 
     // (random gusts removed)
