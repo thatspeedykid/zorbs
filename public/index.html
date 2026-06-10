@@ -571,17 +571,19 @@ function buildTube(cur, len){
     emissive:0x00f0ff,emissiveIntensity:0.25,transparent:true,opacity:0.42,side:THREE.DoubleSide});
   for(let i=0;i<=segs;i++){
     const p=cur.pos.clone().addScaledVector(cur.dir,(i/segs)*len);
-    const ring=new THREE.Mesh(new THREE.TorusGeometry(2.1,0.13,8,24),
+    const ring=new THREE.Mesh(new THREE.TorusGeometry(2.1,0.11,8,24),
       new THREE.MeshBasicMaterial({color:i%2?0x00f0ff:0xff00cc}));
-    ring.position.set(p.x,cur.pos.y+1.6,p.z);
+    ring.position.set(p.x,cur.pos.y+1.55,p.z);
     ring.rotation.y=Math.atan2(cur.dir.x,cur.dir.z);
     addMesh(ring);
   }
   const body=new THREE.Mesh(new THREE.CylinderGeometry(2.05,2.05,len,18,1,true),tubeMat);
   const mid=cur.pos.clone().addScaledVector(cur.dir,len/2);
-  body.position.set(mid.x,cur.pos.y+1.6,mid.z);
-  body.rotation.z=Math.PI/2;
-  body.rotation.y=Math.atan2(cur.dir.x,cur.dir.z);
+  body.position.set(mid.x,cur.pos.y+1.55,mid.z);
+  // Align the cylinder's long axis (local Y) to the track direction - euler order
+  // composes wrong here, quaternion is exact on any heading
+  body.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),
+    new THREE.Vector3(cur.dir.x,0,cur.dir.z).normalize());
   addMesh(body);
   tubeZones.push({start:cur.pos.clone(),dir:cur.dir.clone(),right,len,floorY:cur.pos.y});
 }
