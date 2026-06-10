@@ -191,7 +191,7 @@ scene.background = new THREE.Color(0x02030a);
 {
   const skyGeo = new THREE.SphereGeometry(700, 32, 16);
   const skyMat = new THREE.ShaderMaterial({
-    side: THREE.BackSide, depthWrite:false, fog:false,
+    side: THREE.BackSide, depthWrite:false, depthTest:false, fog:false,
     uniforms:{
       topColor:{value:new THREE.Color(0x02030a)},
       midColor:{value:new THREE.Color(0x0a1633)},
@@ -211,7 +211,9 @@ scene.background = new THREE.Color(0x02030a);
         gl_FragColor = vec4(col,1.0);
       }`
   });
-  scene.add(new THREE.Mesh(skyGeo, skyMat));
+  const skyMesh = new THREE.Mesh(skyGeo, skyMat);
+  skyMesh.renderOrder = -1000; // always painted first = always behind everything
+  scene.add(skyMesh);
 }
 const camera = new THREE.PerspectiveCamera(70,1,0.1,1200);
 // ── BLOOM COMPOSER (graceful fallback if CDN blocked) ──
@@ -495,6 +497,70 @@ function segRamp(cur, length, dropY, eL=0x00f0ff, eR=0xff00cc){
   return makeCursor(end.x, ey, end.z, cur.dir.x, cur.dir.z);
 }
 
+// WAVES: rolling sinusoidal bumps - balls get air on the crests
+function segWave(cur, length, eL=0x00f0ff, eR=0xff00cc){
+  const steps = Math.max(24, Math.ceil(length/1.2));
+  const waves = 2 + Math.floor(Math.random()*2);
+  const amp = 1.6 + Math.random()*1.4;
+  const pts=[];
+  for(let i=0;i<=steps;i++){
+    const t=i/steps;
+    const p=cur.pos.clone().addScaledVector(cur.dir, length*t);
+    p.y = cur.pos.y + Math.sin(t*Math.PI*2*waves)*amp*Math.sin(t*Math.PI); // fade in/out
+    pts.push(p);
+  }
+  _buildTube(pts, eL, eR);
+  for(let i=1;i<pts.length;i++){
+    const tg=new THREE.Vector3().subVectors(pts[i],pts[i-1]).normalize();
+    pathNodes.push({pos:pts[i].clone(), dir:tg.clone(), right:perpRight(tg), floorY:pts[i].y, halfW:TW_HALF});
+  }
+  courseLength += length;
+  const end=pts[pts.length-1];
+  return makeCursor(end.x, cur.pos.y, end.z, cur.dir.x, cur.dir.z);
+}
+
+// JUMP: ramp up -> GAP (no floor!) -> lower landing. Clear it or fall = DQ.
+function segJump(cur, eL=0x00f0ff, eR=0xff00cc){
+  const rampLen=10, gapLen=7+Math.random()*4, dropY=4;
+  // Ramp up
+  const rampPts=[];
+  for(let i=0;i<=8;i++){
+    const t=i/8;
+    const p=cur.pos.clone().addScaledVector(cur.dir, rampLen*t);
+    p.y=cur.pos.y + t*2.2; // launch lip
+    rampPts.push(p);
+  }
+  _buildTube(rampPts, eL, eR);
+  for(let i=1;i<rampPts.length;i++){
+    const tg=new THREE.Vector3().subVectors(rampPts[i],rampPts[i-1]).normalize();
+    pathNodes.push({pos:rampPts[i].clone(), dir:tg.clone(), right:perpRight(tg), floorY:rampPts[i].y, halfW:TW_HALF});
+  }
+  const lipPos = rampPts[rampPts.length-1];
+  // GAP nodes: no floor (physics skips clamp) - fall too far = eliminated
+  const gapSteps=4;
+  for(let i=1;i<=gapSteps;i++){
+    const p=lipPos.clone().addScaledVector(cur.dir, gapLen*(i/gapSteps));
+    p.y = lipPos.y;
+    pathNodes.push({pos:p, dir:cur.dir.clone(), right:perpRight(cur.dir), floorY:cur.pos.y-dropY, halfW:TW_HALF, gap:true});
+  }
+  // Landing pad, lower than takeoff
+  const landStart=lipPos.clone().addScaledVector(cur.dir, gapLen);
+  landStart.y = cur.pos.y - dropY;
+  const landLen=16;
+  const landPts=[];
+  for(let i=0;i<=8;i++){
+    landPts.push(landStart.clone().addScaledVector(cur.dir, landLen*(i/8)));
+  }
+  _buildTube(landPts, eL, eR);
+  for(let i=1;i<landPts.length;i++){
+    const tg=new THREE.Vector3().subVectors(landPts[i],landPts[i-1]).normalize();
+    pathNodes.push({pos:landPts[i].clone(), dir:tg.clone(), right:perpRight(tg), floorY:landPts[i].y, halfW:TW_HALF});
+  }
+  courseLength += rampLen+gapLen+landLen;
+  const end=landPts[landPts.length-1];
+  return makeCursor(end.x, landStart.y, end.z, cur.dir.x, cur.dir.z);
+}
+
 function segCurve(cur, angleDelta, radius, eL=0x00f0ff, eR=0xff00cc){
   // Accumulate points along the arc, then build ONE continuous smooth ribbon.
   const absA = Math.abs(angleDelta), arcLen = radius*absA;
@@ -528,58 +594,83 @@ function segCurve(cur, angleDelta, radius, eL=0x00f0ff, eR=0xff00cc){
 function segFork(cur, eL, eR){
   const rnd=(a,b)=>a+Math.floor(Math.random()*(b-a+1));
   const right = perpRight(cur.dir);
-  const sep = TW * 0.62;          // lane center offset from middle
-  const branchLen = rnd(36, 50);
+  const sep = TW * 0.72;            // lane center offset
+  const laneHW = TW_HALF*0.7;       // each lane's half width
+  const padLen = 10;                // widening entry/exit pads
+  const laneLen = rnd(30, 44);
   const startPos = cur.pos.clone();
   const dir = cur.dir.clone();
-  const segs = 28;
 
-  // ONE authoritative wide spine down the middle (physics uses this). We widen halfW
-  // so a ball can sit in either lane; a center divider wall keeps lanes separated.
-  const spinePts = [];
-  for(let i=0;i<=segs;i++){
-    const t=i/segs;
-    spinePts.push(startPos.clone().addScaledVector(dir, branchLen*t));
+  // ENTRY PAD: one ribbon widening from track width to full fork width
+  {
+    const pts=[]; const steps=8;
+    for(let i=0;i<=steps;i++){
+      pts.push(startPos.clone().addScaledVector(dir, padLen*(i/steps)));
+    }
+    _buildTubeWidth(pts, eL, eR, sep+laneHW); // wide pad (slight overdraw is fine, flat)
   }
-  for(let i=1;i<spinePts.length;i++){
-    const tg=new THREE.Vector3().subVectors(spinePts[i],spinePts[i-1]).normalize();
-    // wide enough to cover both lanes
-    pathNodes.push({pos:spinePts[i].clone(), dir:tg.clone(), right:perpRight(tg),
-      floorY:startPos.y, halfW:sep+TW_HALF*0.85, fork:true});
-  }
+  const laneStart = startPos.clone().addScaledVector(dir, padLen);
 
-  // Visual: build two lane ribbons (left/right) as offset parallels of the SAME straight dir
+  // TWO fully-separated parallel lanes (never near center = never overlap)
   const branchKinds=['speed','rough','drop'];
   const k1=branchKinds[rnd(0,2)];
   let k2=branchKinds[rnd(0,2)]; if(k2===k1) k2=branchKinds[(branchKinds.indexOf(k1)+1)%3];
-
   function buildLane(side, kind){
-    const pts=[];
-    for(let i=0;i<=segs;i++){
-      const t=i/segs;
-      let offT;
-      if(t<0.16) offT=t/0.16; else if(t>0.84) offT=(1-t)/0.16; else offT=1;
-      const off=sep*side*offT;
-      let cy=startPos.y;
-      if(kind==='drop') cy=startPos.y - Math.sin(t*Math.PI)*5;
-      if(kind==='speed') cy=startPos.y + Math.sin(t*Math.PI)*1.0;
-      const p=startPos.clone().addScaledVector(dir, branchLen*t).addScaledVector(right, off);
+    const pts=[]; const steps=20;
+    for(let i=0;i<=steps;i++){
+      const t=i/steps;
+      let cy=laneStart.y;
+      if(kind==='drop') cy=laneStart.y - Math.sin(t*Math.PI)*5;
+      if(kind==='speed') cy=laneStart.y + Math.sin(t*Math.PI)*1.0;
+      const p=laneStart.clone().addScaledVector(dir, laneLen*t).addScaledVector(right, sep*side);
       p.y=cy; pts.push(p);
     }
-    // Narrower lane ribbons so they read as two lanes, not overlapping full-width tracks
-    _buildTubeWidth(pts, eL, eR, TW_HALF*0.72);
-    const midP=pts[Math.floor(segs*0.5)];
+    _buildTubeWidth(pts, eL, eR, laneHW);
+    const midP=pts[Math.floor(steps*0.5)];
     if(kind==='rough') buildBumpers(makeCursor(midP.x,midP.y,midP.z,dir.x,dir.z), 2);
     if(kind==='speed') buildBoostPad(midP, dir, midP.y);
   }
   buildLane(-1,k1);
   buildLane(+1,k2);
 
-  // Physics zone: steer each ball toward whichever lane it leans, hold, release at merge
-  forkZones.push({pos:startPos.clone(), dir:dir.clone(), right:right.clone(),
-    sep, len:branchLen, floorY:startPos.y, phase:'split'});
+  // CENTER DIVIDER: glowing wall between the lanes so the split reads clearly
+  {
+    const wallLen = laneLen;
+    const mid = laneStart.clone().addScaledVector(dir, wallLen/2);
+    const divider=new THREE.Mesh(new THREE.BoxGeometry(0.3,1.6,wallLen),
+      new THREE.MeshStandardMaterial({color:0x0a1830,roughness:0.1,metalness:0.9,emissive:0x00e5ff,emissiveIntensity:0.5}));
+    divider.position.set(mid.x, laneStart.y+0.8, mid.z);
+    divider.rotation.y=Math.atan2(dir.x,dir.z);
+    addMesh(divider);
+  }
 
-  const mergePos=startPos.clone().addScaledVector(dir, branchLen);
+  const laneEnd = laneStart.clone().addScaledVector(dir, laneLen);
+
+  // EXIT PAD: widening merge back to track width
+  {
+    const pts=[]; const steps=8;
+    for(let i=0;i<=steps;i++){
+      pts.push(laneEnd.clone().addScaledVector(dir, padLen*(i/steps)));
+    }
+    _buildTubeWidth(pts, eL, eR, sep+laneHW);
+  }
+
+  // SINGLE physics spine through the whole fork (wide where lanes are)
+  const totalLen = padLen + laneLen + padLen;
+  const spineSteps = Math.ceil(totalLen/2);
+  for(let i=1;i<=spineSteps;i++){
+    const d = totalLen*(i/spineSteps);
+    const p = startPos.clone().addScaledVector(dir, d);
+    const inLanes = d>padLen && d<padLen+laneLen;
+    pathNodes.push({pos:p, dir:dir.clone(), right:right.clone(),
+      floorY:startPos.y, halfW: sep+laneHW-0.2, fork:true, divider:inLanes});
+  }
+
+  // Physics steer zone over the lane stretch
+  forkZones.push({pos:laneStart.clone(), dir:dir.clone(), right:right.clone(),
+    sep, len:laneLen, floorY:laneStart.y, phase:'split'});
+
+  const mergePos = startPos.clone().addScaledVector(dir, totalLen);
   return makeCursor(mergePos.x, startPos.y, mergePos.z, dir.x, dir.z);
 }
 
@@ -909,7 +1000,7 @@ function buildCourse(durSecs){
   // Build a random flowing map like a real marble track
   // Mix of: long sweeps, spirals, drops, S-bends, straights
   // Each race is totally different
-  const trackStyles = ['sweep_right','sweep_left','s_bend','spiral_drop','straight_run','ramp_straight'];
+  const trackStyles = ['sweep_right','sweep_left','s_bend','spiral_drop','straight_run','ramp_straight','waves','hairpin','jump'];
   const obstacleTypes = ['bumper_gauntlet','hammer_zone','blade_zone','wind_zone','narrow_gate','trap_door','tube_run','funnel_squeeze'];
   
   // Shuffle both
@@ -984,6 +1075,21 @@ function buildCourse(durSecs){
       cur = segCurveDrop(cur, dir*totalAngle, radius, totalDrop, eL, eR);
       cur = segStraight(cur, rnd(8,14), eL, eR, true); // exit boost
 
+    } else if(type==='waves'){
+      cur = segWave(cur, rnd(22,34), eL, eR);
+      cur = segStraight(cur, rnd(6,12), eL, eR);
+
+    } else if(type==='hairpin'){
+      // Tight 160-180° turn - total chaos in the pack
+      const hdir = Math.random()<0.5?1:-1;
+      cur = segStraight(cur, 6, eL, eR);
+      cur = segCurve(cur, hdir*(Math.PI*0.88+Math.random()*Math.PI*0.12), rnd(10,14), eL, eR);
+      cur = segStraight(cur, 8, eL, eR);
+
+    } else if(type==='jump'){
+      cur = segStraight(cur, 8, eL, eR, true); // boost into the jump
+      cur = segJump(cur, eL, eR);
+
     } else if(type==='ramp_straight'){
       // Drop down then long straight - feels like picking up speed
       const dropY = rnd(6,12), dropLen = rnd(16,26);
@@ -1043,7 +1149,7 @@ function buildCourse(durSecs){
   // Background grid
   const midX=(START_POS.x+cur.pos.x)/2;
   const midZ=(START_POS.z+cur.pos.z)/2;
-  const grid=new THREE.GridHelper(1200,200,0x00f0ff06,0x00f0ff03);
+  const grid=new THREE.GridHelper(640,110,0x00f0ff06,0x00f0ff03);
   grid.position.set(midX, cur.pos.y-12, midZ); addMesh(grid);
 
   START_POS.set(pathNodes[0].pos.x, pathNodes[0].pos.y+BALL_R+0.5, pathNodes[0].pos.z);
@@ -1072,6 +1178,24 @@ function createZorb(name,isSub,col){
   ring.rotation.x = Math.PI/2;     // lay flat = horizontal -O- ring around the ball
   mesh._skinPulse = skin && skin.pulse;
   scene.add(ring);                 // SIBLING, not child - ball roll won't tumble it
+  // Rim glow shell: slightly larger backside sphere, additive = edges catch light
+  let glow=null;
+  if(zorbs.length < 60){
+    glow=new THREE.Mesh(_SPHERE_GEO_HI, new THREE.MeshBasicMaterial({
+      color:ringCol, transparent:true, opacity:0.35,
+      side:THREE.BackSide, blending:THREE.AdditiveBlending, depthWrite:false
+    }));
+    glow.scale.setScalar(1.18);
+    mesh.add(glow);
+  }
+  // Contact shadow: flat dark disc that follows the ball on the floor
+  let shadow=null;
+  if(zorbs.length < 80){
+    shadow=new THREE.Mesh(new THREE.CircleGeometry(BALL_R*1.15, 12),
+      new THREE.MeshBasicMaterial({color:0x000000, transparent:true, opacity:0.4, depthWrite:false}));
+    shadow.rotation.x = -Math.PI/2;
+    scene.add(shadow);
+  }
   // Only add point lights for first 40 balls (perf)
   const light = zorbs.length < 40 ? new THREE.PointLight(col,isSub?2.0:1.1,10) : null;
   if(light) mesh.add(light);
@@ -1111,7 +1235,7 @@ function createZorb(name,isSub,col){
   document.getElementById('ui').appendChild(nameLabel);
 
   return {
-    name,isSub,color:col,nameLabel,mesh,ring,tLine,streaks,light,
+    name,isSub,color:col,nameLabel,mesh,ring,glow,shadow,tLine,streaks,light,
     speedF:0.88+Math.random()*0.24, wanderP:Math.random()*Math.PI*2,
     wanderFreq:0.5+Math.random()*1.4, wanderAmp:2.5+Math.random()*3.5,
     wanderP2:Math.random()*Math.PI*2,
@@ -1136,6 +1260,7 @@ function removeZorb(z){
   if(z.nameLabel&&z.nameLabel.parentNode)z.nameLabel.parentNode.removeChild(z.nameLabel);
   scene.remove(z.mesh);
   if(z.ring) scene.remove(z.ring);
+  if(z.shadow) scene.remove(z.shadow);
   if(z.tLine) scene.remove(z.tLine);
   z.streaks.forEach(s=>scene.remove(s));
 }
@@ -1191,8 +1316,8 @@ function stepPhysics(z,dt){
     const floorY=baseFloorY+BALL_R;
     const hw=node.halfW-BALL_R-0.05;
 
-    // Floor
-    if(z.pos.y<=floorY){
+    // Floor (gap nodes have no floor - you're airborne over the jump)
+    if(!node.gap && z.pos.y<=floorY){
       z.pos.y=floorY;
       if(z.vel.y<0) z.vel.y*=-BOUNCE;
       z.onGround=true;
@@ -1292,6 +1417,7 @@ function stepPhysics(z,dt){
       z.rank = dqRank;
       z.mesh.visible = false;
       if(z.ring) z.ring.visible = false;
+      if(z.shadow) z.shadow.visible = false;
       if(z.tLine) z.tLine.visible = false;
       z.streaks.forEach(s => s.visible = false);
       showKO('💀 ELIMINATED: '+z.name, 0xff2200); ZAUDIO.play('eliminated');
@@ -1345,6 +1471,20 @@ function stepPhysics(z,dt){
       z.vel.x+=nx*pow; z.vel.z+=nz*pow;
       if(rising){ z.vel.y=7+Math.random()*4; showKO('⚠ SPIKED: '+z.name,0xff8800); ZAUDIO.play('spike'); }
       z.knockFlash=0.45;
+    }
+  }
+
+  // Divider wall: inside a fork's lane stretch, balls cannot cross the center
+  if(node && node.divider){
+    const dRight = node.right;
+    const dLat = (z.pos.x-node.pos.x)*dRight.x + (z.pos.z-node.pos.z)*dRight.z;
+    const minClear = BALL_R + 0.25;
+    if(Math.abs(dLat) < minClear){
+      const side = dLat>=0?1:-1;
+      const push = (minClear - Math.abs(dLat))*side;
+      z.pos.x += dRight.x*push; z.pos.z += dRight.z*push;
+      const vd = z.vel.x*dRight.x + z.vel.z*dRight.z;
+      if(vd*side < 0){ z.vel.x -= dRight.x*vd; z.vel.z -= dRight.z*vd; }
     }
   }
 
@@ -1446,6 +1586,17 @@ function stepPhysics(z,dt){
   z.mesh.rotation.z+=z.vel.x/BALL_R*dt;
   z.knockFlash=Math.max(0,z.knockFlash-dt);
   z.mesh.material.emissiveIntensity=z.knockFlash>0?1.5:(z.boost>0.1?0.9:z.isSub?0.42:0.2);
+  // Contact shadow: sits on the floor under the ball, shrinks/fades when airborne
+  if(z.shadow){
+    const {node:sn}=nearestNodeFromHint(z.pos,z.nodeIdx);
+    const fy = sn? sn.floorY+0.03 : z.pos.y-BALL_R;
+    z.shadow.position.set(z.pos.x, fy, z.pos.z);
+    const h = Math.max(0, z.pos.y - (fy+BALL_R));
+    const k = Math.max(0.25, 1 - h*0.25);
+    z.shadow.scale.setScalar(k);
+    z.shadow.material.opacity = 0.4*k;
+    z.shadow.visible = z.mesh.visible;
+  }
   // Ring: stays horizontal (-O-), follows the ball, spins around its OWN vertical axis
   if(z.ring){
     z.ring.position.set(z.pos.x, z.pos.y, z.pos.z);

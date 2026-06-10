@@ -68,24 +68,64 @@ const ZAUDIO = (() => {
   function playStep() {
     if (!ctx || !musicOn || ctx.state !== 'running') return;
     const t = ctx.currentTime + 0.02;
-    // Kick on quarters
+    const bar = Math.floor(step/16);
+
+    // KICK on quarters + sidechain pump (the French-house breathe)
     if (step % 4 === 0) {
       const o=ctx.createOscillator(), g=ctx.createGain();
-      o.frequency.setValueAtTime(140,t); o.frequency.exponentialRampToValueAtTime(45,t+0.13);
-      g.gain.setValueAtTime(0.7,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.16);
-      o.connect(g); g.connect(musicGain); o.start(t); o.stop(t+0.16);
+      o.frequency.setValueAtTime(150,t); o.frequency.exponentialRampToValueAtTime(42,t+0.14);
+      g.gain.setValueAtTime(0.85,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.18);
+      o.connect(g); g.connect(musicGain); o.start(t); o.stop(t+0.18);
+      // pump: duck the music bus then swell back (sidechain feel)
+      musicGain.gain.cancelScheduledValues(t);
+      musicGain.gain.setValueAtTime(0.13, t);
+      musicGain.gain.linearRampToValueAtTime(0.34, t+0.20);
     }
-    // Bass
-    const bo=ctx.createOscillator(), bg=ctx.createGain();
-    bo.type='sawtooth'; bo.frequency.value=SCALE[BASS[step]]/2;
-    bg.gain.setValueAtTime(0.18,t); bg.gain.exponentialRampToValueAtTime(0.001,t+0.22);
-    const bf=ctx.createBiquadFilter(); bf.type='lowpass'; bf.frequency.value=600;
-    bo.connect(bf); bf.connect(bg); bg.connect(musicGain); bo.start(t); bo.stop(t+0.24);
-    // Arp lead
-    const ao=ctx.createOscillator(), ag=ctx.createGain();
-    ao.type='square'; ao.frequency.value=SCALE[ARP[step]]*2;
-    ag.gain.setValueAtTime(0.06,t); ag.gain.exponentialRampToValueAtTime(0.001,t+0.18);
-    ao.connect(ag); ag.connect(musicGain); ao.start(t); ao.stop(t+0.2);
+
+    // FILTER-SWEPT BASS - rolling 16ths, cutoff breathes across the bar
+    {
+      const bo=ctx.createOscillator(), bg=ctx.createGain();
+      bo.type='sawtooth'; bo.frequency.value=SCALE[BASS[step]]/2;
+      bg.gain.setValueAtTime(0.20,t); bg.gain.exponentialRampToValueAtTime(0.001,t+0.20);
+      const bf=ctx.createBiquadFilter(); bf.type='lowpass';
+      const sweep = 300 + 900*Math.abs(Math.sin((step/16)*Math.PI + bar*0.7));
+      bf.frequency.setValueAtTime(sweep, t); bf.Q.value = 6;
+      bo.connect(bf); bf.connect(bg); bg.connect(musicGain); bo.start(t); bo.stop(t+0.22);
+    }
+
+    // CHORD STABS on the off-beats (steps 4 & 12) - the da-funk shout
+    if (step === 4 || step === 12) {
+      const root = SCALE[[0,3,5,4][bar % 4]];
+      [1, 1.26, 1.5].forEach(ratio => {            // minor-ish triad
+        const so=ctx.createOscillator(), sg=ctx.createGain();
+        so.type='sawtooth'; so.frequency.value = root*2*ratio;
+        sg.gain.setValueAtTime(0.10,t); sg.gain.exponentialRampToValueAtTime(0.001,t+0.16);
+        const sf=ctx.createBiquadFilter(); sf.type='bandpass'; sf.frequency.value=1200; sf.Q.value=2;
+        so.connect(sf); sf.connect(sg); sg.connect(musicGain); so.start(t); so.stop(t+0.18);
+      });
+    }
+
+    // ARP shimmer - every other step, octave up
+    if (step % 2 === 0) {
+      const ao=ctx.createOscillator(), ag=ctx.createGain();
+      ao.type='square'; ao.frequency.value=SCALE[ARP[step]]*4;
+      ag.gain.setValueAtTime(0.035,t); ag.gain.exponentialRampToValueAtTime(0.001,t+0.12);
+      ao.connect(ag); ag.connect(musicGain); ao.start(t); ao.stop(t+0.14);
+    }
+
+    // HAT - offbeat tick
+    if (step % 4 === 2) {
+      const n=ctx.createBufferSource();
+      const buf=ctx.createBuffer(1, ctx.sampleRate*0.04, ctx.sampleRate);
+      const d=buf.getChannelData(0);
+      for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*(1-i/d.length);
+      n.buffer=buf;
+      const hf=ctx.createBiquadFilter(); hf.type='highpass'; hf.frequency.value=8000;
+      const hg=ctx.createGain(); hg.gain.value=0.12;
+      n.connect(hf); hf.connect(hg); hg.connect(musicGain);
+      n.start(t); n.stop(t+0.04);
+    }
+
     step = (step+1) % 16;
   }
 
