@@ -319,7 +319,7 @@ let courseLength = 0; // approx units
 function clearCourse(){
   trackMeshes.forEach(m=>scene.remove(m)); trackMeshes=[];
   hammers=[]; bumperObjs=[]; boostPads=[]; funnels=[]; blades=[]; windZones=[]; trapDoors=[]; gateObjs=[]; tubeZones=[]; funnelZones=[]; forkZones=[];
-  pathNodes=[]; courseLength=0;
+  pathNodes=[]; courseLength=0; if(typeof _glowRails!=='undefined') _glowRails.length=0;
 }
 function addMesh(m){ scene.add(m); trackMeshes.push(m); return m; }
 
@@ -331,8 +331,45 @@ function makeCursor(x,y,z,dx=0,dz=-1){
 }
 function perpRight(dir){ return new THREE.Vector3(dir.z,0,-dir.x); }
 
-const _floorMat = new THREE.MeshStandardMaterial({color:0x16163a,roughness:0.18,metalness:0.85,emissive:0x0a0a30,emissiveIntensity:0.45,side:THREE.DoubleSide});
-const _wallMat  = new THREE.MeshStandardMaterial({color:0x0a1020,roughness:0.3,metalness:0.7,side:THREE.DoubleSide});
+// Procedural energy-flow texture for the floor (scrolls to sell speed)
+const _floorCanvas = document.createElement('canvas');
+_floorCanvas.width = 128; _floorCanvas.height = 512;
+const _fctx = _floorCanvas.getContext('2d');
+function _paintFloorTex(){
+  const w=_floorCanvas.width, h=_floorCanvas.height;
+  _fctx.fillStyle='#0a0a26'; _fctx.fillRect(0,0,w,h);
+  // center energy lane
+  const grad=_fctx.createLinearGradient(0,0,w,0);
+  grad.addColorStop(0,'#0a0a26'); grad.addColorStop(0.5,'#1a1a55'); grad.addColorStop(1,'#0a0a26');
+  _fctx.fillStyle=grad; _fctx.fillRect(0,0,w,h);
+  // flowing horizontal energy bars
+  for(let i=0;i<8;i++){
+    const y=(i/8)*h;
+    const g2=_fctx.createLinearGradient(0,y,0,y+h/8);
+    g2.addColorStop(0,'rgba(0,240,255,0)');
+    g2.addColorStop(0.5,'rgba(0,240,255,0.18)');
+    g2.addColorStop(1,'rgba(0,240,255,0)');
+    _fctx.fillStyle=g2; _fctx.fillRect(0,y,w,h/16);
+  }
+  // edge accent lines
+  _fctx.fillStyle='rgba(255,0,204,0.25)';
+  _fctx.fillRect(6,0,2,h); _fctx.fillRect(w-8,0,2,h);
+}
+_paintFloorTex();
+var _glowRails = [];
+const _floorTex = new THREE.CanvasTexture(_floorCanvas);
+_floorTex.wrapS=_floorTex.wrapT=THREE.RepeatWrapping;
+_floorTex.repeat.set(1,4);
+const _floorMat = new THREE.MeshStandardMaterial({
+  color:0x20204a, roughness:0.22, metalness:0.8,
+  emissive:0xffffff, emissiveMap:_floorTex, emissiveIntensity:0.55,
+  map:_floorTex, side:THREE.DoubleSide
+});
+// Glassier, darker walls with a faint sheen
+const _wallMat  = new THREE.MeshStandardMaterial({
+  color:0x060912, roughness:0.08, metalness:0.95,
+  emissive:0x0a1428, emissiveIntensity:0.3, side:THREE.DoubleSide
+});
 
 // ── SEGMENT BUILDERS ──────────────────────────────────
 // Quad-strip mesh track builder.
@@ -399,10 +436,21 @@ function _buildTube(splinePts, eL, eR){
   mkMesh(wallLVerts, qIdx(N), _wallMat);
   mkMesh(wallRVerts, qIdx(N), _wallMat);
 
+  const glMat=new THREE.LineBasicMaterial({color:eL});
+  const grMat=new THREE.LineBasicMaterial({color:eR});
   const glg=new THREE.BufferGeometry().setFromPoints(glowLPts);
-  addMesh(new THREE.Line(glg,new THREE.LineBasicMaterial({color:eL})));
+  addMesh(new THREE.Line(glg,glMat));
   const grg=new THREE.BufferGeometry().setFromPoints(glowRPts);
-  addMesh(new THREE.Line(grg,new THREE.LineBasicMaterial({color:eR})));
+  addMesh(new THREE.Line(grg,grMat));
+  // Build solid glowing rail tubes on top of each edge (catches bloom, reads as neon)
+  for(const [pts,col] of [[glowLPts,eL],[glowRPts,eR]]){
+    if(pts.length<2) continue;
+    const railGeo=new THREE.BufferGeometry().setFromPoints(pts);
+    const railMat=new THREE.LineBasicMaterial({color:col,transparent:true,opacity:0.9});
+    const rail=new THREE.Line(railGeo,railMat);
+    rail.position.y=0.02; addMesh(rail);
+    _glowRails.push({mat:railMat, base:0.9, phase:Math.random()*Math.PI*2});
+  }
 }
 
 function segStraight(cur, length, eL=0x00f0ff, eR=0xff00cc, withBoost=false){
@@ -2380,6 +2428,11 @@ function loop(ts){
   requestAnimationFrame(loop);
   const dt=Math.min((ts-lastT)/1000,0.05); lastT=ts; frame++;
   if(frame===8 && window.ZLoad) ZLoad.finish();
+  if(_floorTex) _floorTex.offset.y = (_floorTex.offset.y - dt*0.6) % 1;
+  if(_glowRails.length){
+    const pt = ts*0.003;
+    for(const r of _glowRails) r.mat.opacity = r.base*0.6 + 0.4*Math.abs(Math.sin(pt + r.phase));
+  }
 
   if(phase==='racing'){
     updateTimer();
