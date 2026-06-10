@@ -279,7 +279,7 @@ let courseLength = 0; // approx units
 
 function clearCourse(){
   trackMeshes.forEach(m=>scene.remove(m)); trackMeshes=[];
-  hammers=[]; bumperObjs=[]; boostPads=[]; funnels=[]; blades=[]; windZones=[]; trapDoors=[]; gateObjs=[];
+  hammers=[]; bumperObjs=[]; boostPads=[]; funnels=[]; blades=[]; windZones=[]; trapDoors=[]; gateObjs=[]; tubeZones=[]; funnelZones=[];
   pathNodes=[]; courseLength=0;
 }
 function addMesh(m){ scene.add(m); trackMeshes.push(m); return m; }
@@ -513,7 +513,7 @@ function buildWindZone(cur, length){
     const strip=new THREE.Mesh(new THREE.BoxGeometry(0.15,0.06,length*0.8),
       new THREE.MeshBasicMaterial({color:windDir>0?0x00ffaa:0xffaa00}));
     strip.position.set(mid.x+right.x*t,cur.pos.y+0.03,mid.z+right.z*t);
-    strip.rotation.y=Math.atan2(cur.dir.x,-cur.dir.z);
+    strip.rotation.y=Math.atan2(cur.dir.x,cur.dir.z);
     scene.add(strip); trackMeshes.push(strip);
   }
   const end=cur.pos.clone().addScaledVector(cur.dir,length);
@@ -522,11 +522,11 @@ function buildWindZone(cur, length){
 }
 
 // NARROW GATE - track squeezes, forces bunching
-let gateObjs=[];
+let gateObjs=[]; var tubeZones=[]; var funnelZones=[];
 function buildNarrowGate(cur){
   const pos=cur.pos.clone().addScaledVector(cur.dir,4);
   const right=perpRight(cur.dir);
-  const angle=Math.atan2(cur.dir.x,-cur.dir.z);
+  const angle=Math.atan2(cur.dir.x,cur.dir.z);
   // Two walls jutting in from sides, gap in middle
   for(const side of [-1,1]){
     const wx=pos.x+right.x*side*TW_HALF*0.45, wz=pos.z+right.z*side*TW_HALF*0.45;
@@ -547,7 +547,7 @@ function buildNarrowGate(cur){
 // TRAP DOOR - section of floor randomly drops, balls fall through then respawn
 function buildTrapDoor(cur){
   const pos=cur.pos.clone().addScaledVector(cur.dir,5);
-  const angle=Math.atan2(cur.dir.x,-cur.dir.z);
+  const angle=Math.atan2(cur.dir.x,cur.dir.z);
   const door=new THREE.Mesh(new THREE.BoxGeometry(TW*0.85,0.3,4),
     new THREE.MeshStandardMaterial({color:0x331100,roughness:0.3,metalness:0.7,emissive:0x220800,emissiveIntensity:0.6}));
   door.position.set(pos.x,cur.pos.y-0.05,pos.z); door.rotation.y=angle;
@@ -557,8 +557,51 @@ function buildTrapDoor(cur){
     new THREE.MeshBasicMaterial({color:0xff8800}));
   warn.position.set(pos.x,cur.pos.y+0.18,pos.z); warn.rotation.y=angle;
   scene.add(warn); trackMeshes.push(warn);
-  trapDoors.push({mesh:door,warn,pos:pos.clone(),dir:cur.dir.clone(),
+  const tlight=new THREE.PointLight(0xff2200,0,7);
+  tlight.position.set(pos.x,cur.pos.y+1.2,pos.z); scene.add(tlight); trackMeshes.push(tlight);
+  trapDoors.push({mesh:door,warn,light:tlight,pos:pos.clone(),dir:cur.dir.clone(),
     open:false,timer:2+Math.random()*3,floorY:cur.pos.y,angle});
+}
+
+// TUBE RUN - neon pipe over the track; balls get squeezed to center + launched out
+function buildTube(cur, len){
+  const right=perpRight(cur.dir);
+  const segs=Math.ceil(len/2.5);
+  const tubeMat=new THREE.MeshStandardMaterial({color:0x0a2a4a,roughness:0.15,metalness:0.9,
+    emissive:0x00f0ff,emissiveIntensity:0.25,transparent:true,opacity:0.42,side:THREE.DoubleSide});
+  for(let i=0;i<=segs;i++){
+    const p=cur.pos.clone().addScaledVector(cur.dir,(i/segs)*len);
+    const ring=new THREE.Mesh(new THREE.TorusGeometry(2.1,0.13,8,24),
+      new THREE.MeshBasicMaterial({color:i%2?0x00f0ff:0xff00cc}));
+    ring.position.set(p.x,cur.pos.y+1.6,p.z);
+    ring.rotation.y=Math.atan2(cur.dir.x,cur.dir.z);
+    addMesh(ring);
+  }
+  const body=new THREE.Mesh(new THREE.CylinderGeometry(2.05,2.05,len,18,1,true),tubeMat);
+  const mid=cur.pos.clone().addScaledVector(cur.dir,len/2);
+  body.position.set(mid.x,cur.pos.y+1.6,mid.z);
+  body.rotation.z=Math.PI/2;
+  body.rotation.y=Math.atan2(cur.dir.x,cur.dir.z);
+  addMesh(body);
+  tubeZones.push({start:cur.pos.clone(),dir:cur.dir.clone(),right,len,floorY:cur.pos.y});
+}
+
+// FUNNEL - walls angle inward, squeezing the pack to the middle, then release
+function buildFunnel(cur, len){
+  const right=perpRight(cur.dir);
+  const angle=Math.atan2(cur.dir.x,cur.dir.z);
+  const wallMat=new THREE.MeshStandardMaterial({color:0x2a0a3a,roughness:0.2,metalness:0.85,
+    emissive:0xff00cc,emissiveIntensity:0.45});
+  for(const side of [-1,1]){
+    const wall=new THREE.Mesh(new THREE.BoxGeometry(0.35,1.5,len*1.02),wallMat);
+    const mid=cur.pos.clone().addScaledVector(cur.dir,len/2)
+      .addScaledVector(right,side*(TW_HALF*0.62));
+    wall.position.set(mid.x,cur.pos.y+0.75,mid.z);
+    // Angle inward: rotate around Y a bit toward center
+    wall.rotation.y=angle + side*0.16;
+    addMesh(wall);
+  }
+  funnelZones.push({start:cur.pos.clone(),dir:cur.dir.clone(),right,len,floorY:cur.pos.y});
 }
 
 // ── GATES ─────────────────────────────────────────────
@@ -658,7 +701,7 @@ function buildCourse(durSecs){
   }
   // Build wide spawn pad with walls
   const padMid=cur.pos.clone().addScaledVector(cur.dir,spawnPadLen/2);
-  const padRy=Math.atan2(cur.dir.x,-cur.dir.z);
+  const padRy=Math.atan2(cur.dir.x,cur.dir.z);
   const padFm=new THREE.Mesh(new THREE.BoxGeometry(TW,0.4,spawnPadLen),_floorMat);
   padFm.position.set(padMid.x,cur.pos.y-0.2,padMid.z); padFm.rotation.y=padRy;
   padFm.castShadow=padFm.receiveShadow=true; addMesh(padFm);
@@ -682,7 +725,7 @@ function buildCourse(durSecs){
   // Mix of: long sweeps, spirals, drops, S-bends, straights
   // Each race is totally different
   const trackStyles = ['sweep_right','sweep_left','s_bend','spiral_drop','straight_run','ramp_straight'];
-  const obstacleTypes = ['bumper_gauntlet','hammer_zone','blade_zone','wind_zone','narrow_gate','trap_door'];
+  const obstacleTypes = ['bumper_gauntlet','hammer_zone','blade_zone','wind_zone','narrow_gate','trap_door','tube_run','funnel_squeeze'];
   
   // Shuffle both
   function shuffleArr(a){for(let i=a.length-1;i>0;i--){const j=rnd(0,i);[a[i],a[j]]=[a[j],a[i]];} return a;}
@@ -787,6 +830,16 @@ function buildCourse(durSecs){
       cur = segStraight(cur, 8, eL, eR);
       buildTrapDoor(cur);
       cur = segStraight(cur, 12, eL, eR);
+    } else if(type==='tube_run'){
+      cur = segStraight(cur, 6, eL, eR);
+      const tlen = rnd(18,26);
+      buildTube(cur, tlen);
+      cur = segStraight(cur, tlen+8, eL, eR);
+    } else if(type==='funnel_squeeze'){
+      cur = segStraight(cur, 6, eL, eR);
+      const flen = rnd(14,20);
+      buildFunnel(cur, flen);
+      cur = segStraight(cur, flen+6, eL, eR);
     } else if(type==='hammer_zone'){
       cur = segStraight(cur, 10, eL, eR);
       buildHammers(cur, rnd(2,3));
@@ -1049,6 +1102,37 @@ function stepPhysics(z,dt){
       z.vel.x+=nx*pow; z.vel.z+=nz*pow;
       if(rising){ z.vel.y=7+Math.random()*4; showKO('⚠ SPIKED: '+z.name,0xff8800); }
       z.knockFlash=0.45;
+    }
+  }
+
+  // Tube zones: squeeze to centerline, speed up, launch at exit
+  for(const tz of tubeZones){
+    const toZ=new THREE.Vector3().subVectors(z.pos,tz.start);
+    const along=toZ.dot(tz.dir);
+    if(along>0 && along<tz.len){
+      const lat=toZ.dot(tz.right);
+      z.vel.x += -lat*tz.right.x*6*dt + tz.dir.x*10*dt;
+      z.vel.z += -lat*tz.right.z*6*dt + tz.dir.z*10*dt;
+      if(!z._inTube){ z._inTube=true; }
+      if(along>tz.len-2 && !z._tubeShot){
+        z._tubeShot=true;
+        z.vel.x+=tz.dir.x*14; z.vel.z+=tz.dir.z*14; z.vel.y+=2;
+        showKO('🚀 LAUNCHED: '+z.name,0x00f0ff);
+        setTimeout(()=>{ z._tubeShot=false; },3000);
+      }
+    } else if(z._inTube){ z._inTube=false; }
+  }
+
+  // Funnel zones: progressive squeeze toward center (pack collisions ahoy)
+  for(const fz of funnelZones){
+    const toF=new THREE.Vector3().subVectors(z.pos,fz.start);
+    const alongF=toF.dot(fz.dir);
+    if(alongF>0 && alongF<fz.len){
+      const prog=alongF/fz.len; // tighter the further in
+      const latF=toF.dot(fz.right);
+      const squeeze=(2.5+prog*6);
+      z.vel.x += -latF*fz.right.x*squeeze*dt;
+      z.vel.z += -latF*fz.right.z*squeeze*dt;
     }
   }
 
@@ -2032,11 +2116,24 @@ function updateWindZones(){
 function updateTrapDoors(dt){
   trapDoors.forEach(t=>{
     t.timer-=dt;
+    // WARNING PHASE: 1.2s before dropping, blink red + pulse the light
+    const aboutToDrop = !t.open && t.timer < 1.2;
+    if(t.warn){
+      if(aboutToDrop){
+        const blink = Math.sin(performance.now()*0.02) > 0;
+        t.warn.material.color.setHex(blink ? 0xff0000 : 0x550000);
+        if(t.light) t.light.intensity = blink ? 3.2 : 0.6;
+      } else if(!t.open){
+        t.warn.material.color.setHex(0xff8800);
+        if(t.light) t.light.intensity = 0;
+      }
+    }
     if(t.timer<=0){
       t.open=!t.open;
       t.timer=t.open?(1.2+Math.random()*1.5):(2+Math.random()*3);
       if(t.mesh) t.mesh.visible=!t.open;
       if(t.warn) t.warn.material.color.setHex(t.open?0xff0000:0xff8800);
+      if(t.light) t.light.intensity = t.open ? 2.2 : 0;
     }
     if(t.open){
       zorbs.forEach(z=>{
