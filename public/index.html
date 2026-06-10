@@ -383,12 +383,19 @@ function _buildTubeWidth(splinePts, eL, eR, halfW){
   TW_HALF_OVERRIDE = _saved;
 }
 var TW_HALF_OVERRIDE = null;
-function _buildTube(splinePts, eL, eR){
+function _buildTube(splinePtsIn, eL, eR){
   const _HW = (TW_HALF_OVERRIDE!=null) ? TW_HALF_OVERRIDE : TW_HALF;
-  // Build track from spline points as quad-strip meshes.
-  // For each consecutive pair of points, build one floor quad + two wall quads.
-  // Each quad is just 2 triangles - simple, no rotation bugs, no spikes.
-  if(splinePts.length < 2) return;
+  if(splinePtsIn.length < 2) return;
+  // Weld seams: extend both ends slightly along their tangent so consecutive
+  // ribbons overlap instead of leaving a wedge gap on curves.
+  const splinePts = splinePtsIn.map(p=>p.clone());
+  {
+    const n=splinePts.length;
+    const t0=new THREE.Vector3().subVectors(splinePts[1],splinePts[0]).normalize();
+    splinePts[0].addScaledVector(t0,-0.6); // back-extend start
+    const t1=new THREE.Vector3().subVectors(splinePts[n-1],splinePts[n-2]).normalize();
+    splinePts[n-1].addScaledVector(t1,0.6); // forward-extend end
+  }
 
   const floorVerts=[], wallLVerts=[], wallRVerts=[], glowLPts=[], glowRPts=[];
 
