@@ -1474,6 +1474,23 @@ function stepPhysics(z,dt){
     }
   }
 
+  // STUCK FAILSAFE: no node progress for 4s mid-race -> recenter + push forward.
+  if(phase==='racing' && !z.finished && !z.disqualified){
+    if(z._lastIdx===undefined || z.nodeIdx > z._lastIdx){
+      z._lastIdx = z.nodeIdx; z._stuckT = 0;
+    } else {
+      z._stuckT = (z._stuckT||0) + dt;
+      if(z._stuckT > 4){
+        const n = pathNodes[Math.min(z.nodeIdx+1, pathNodes.length-1)];
+        if(n){
+          z.pos.set(n.pos.x, n.floorY + BALL_R + 0.3, n.pos.z);
+          z.vel.set(n.dir.x*MIN_FWD*1.2, 0, n.dir.z*MIN_FWD*1.2);
+        }
+        z._stuckT = 0;
+      }
+    }
+  }
+
   // Divider wall: inside a fork's lane stretch, balls cannot cross the center
   if(node && node.divider){
     const dRight = node.right;

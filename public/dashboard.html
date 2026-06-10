@@ -679,7 +679,12 @@ window.addEventListener('load', ()=>{
   // Check saved session
   const saved = localStorage.getItem('zorbs_session');
   if(saved){
-    try{ initFromSession(JSON.parse(saved)); return; } catch(e){}
+    let s = null;
+    try{ s = JSON.parse(saved); } catch(e){ localStorage.removeItem('zorbs_session'); }
+    if(s && s.username){
+      try{ initFromSession(s); } catch(e){ console.error('[dash] init error (session kept):', e); }
+      return; // session is valid - never bounce to login because a widget failed
+    }
   }
 
   // Show login

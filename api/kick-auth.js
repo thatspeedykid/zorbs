@@ -24,13 +24,21 @@ export default async function handler(req, res) {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body,
     });
-    const tokenData = await tokenRes.json();
+    const tokenText = await tokenRes.text();
+    let tokenData = {};
+    try { tokenData = JSON.parse(tokenText); } catch(e) {
+      throw new Error('Kick token exchange failed (' + tokenRes.status + '): ' + tokenText.slice(0,120));
+    }
     if (!tokenData.access_token) throw new Error('No token: ' + JSON.stringify(tokenData));
 
     const userRes = await fetch('https://api.kick.com/public/v1/users', {
       headers: { 'Authorization': `Bearer ${tokenData.access_token}`, 'Client-Id': KICK_CLIENT_ID },
     });
-    const userData = await userRes.json();
+    const userText = await userRes.text();
+    let userData = {};
+    try { userData = JSON.parse(userText); } catch(e) {
+      throw new Error('Kick user lookup failed (' + userRes.status + '): ' + userText.slice(0,120));
+    }
     const user = userData.data?.[0] || userData;
     const username = (user.username || user.name || 'unknown').toLowerCase();
     const role = ADMIN_USERNAMES.includes(username) ? 'admin' : 'user';
