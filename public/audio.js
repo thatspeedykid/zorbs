@@ -15,7 +15,10 @@ const ZAUDIO = (() => {
     sfxGain = ctx.createGain();   sfxGain.gain.value = 0.55; sfxGain.connect(master);
   }
 
-  function resume() { if (ctx && ctx.state === 'suspended') ctx.resume(); }
+  function resume() {
+    if (ctx && ctx.state === 'suspended') return ctx.resume();
+    return Promise.resolve();
+  }
 
   // ── SFX: short synthesized blips ───────────────────────
   function blip(freq, dur, type='sine', vol=0.5, slideTo=null) {
@@ -96,13 +99,16 @@ const ZAUDIO = (() => {
   // Public API
   function arm() {
     init();
-    resume();
-    if (ctx && ctx.state === 'running' && !started) {
-      started = true;
-      if (musicOn) startMusic();
-    }
+    const go = () => {
+      if (!ctx || ctx.state !== 'running') return;
+      if (!started) { started = true; if (musicOn) startMusic(); }
+    };
+    resume().then(go).catch(go);
+    // Fallback: also try shortly after, in case the promise resolves oddly
+    setTimeout(go, 120);
+    setTimeout(go, 400);
   }
-  function play(name) { if (SFX[name]) { resume(); SFX[name](); } }
+  function play(name) { if(!ctx) init(); if (SFX[name]) { resume().then(()=>SFX[name]()).catch(()=>SFX[name]()); } }
   function toggleMusic() {
     musicOn = !musicOn;
     if (musicOn) startMusic(); else stopMusic();
