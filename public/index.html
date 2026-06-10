@@ -375,7 +375,14 @@ const _wallMat  = new THREE.MeshStandardMaterial({
 // Quad-strip mesh track builder.
 // This is the RIGHT way to do it - Three.js handles all the geometry.
 
+function _buildTubeWidth(splinePts, eL, eR, halfW){
+  const _saved = TW_HALF_OVERRIDE; TW_HALF_OVERRIDE = halfW;
+  _buildTube(splinePts, eL, eR);
+  TW_HALF_OVERRIDE = _saved;
+}
+var TW_HALF_OVERRIDE = null;
 function _buildTube(splinePts, eL, eR){
+  const _HW = (TW_HALF_OVERRIDE!=null) ? TW_HALF_OVERRIDE : TW_HALF;
   // Build track from spline points as quad-strip meshes.
   // For each consecutive pair of points, build one floor quad + two wall quads.
   // Each quad is just 2 triangles - simple, no rotation bugs, no spikes.
@@ -399,21 +406,21 @@ function _buildTube(splinePts, eL, eR){
 
     // Floor: left edge and right edge at floor level
     floorVerts.push(
-      p.x - rx*TW_HALF,  y,  p.z - rz*TW_HALF,
-      p.x + rx*TW_HALF,  y,  p.z + rz*TW_HALF
+      p.x - rx*_HW,  y,  p.z - rz*_HW,
+      p.x + rx*_HW,  y,  p.z + rz*_HW
     );
     // Left wall: two verts (bottom and top)
     wallLVerts.push(
-      p.x - rx*(TW_HALF+0.04),  y,      p.z - rz*(TW_HALF+0.04),
-      p.x - rx*(TW_HALF+0.04),  y+1.4,  p.z - rz*(TW_HALF+0.04)
+      p.x - rx*(_HW+0.04),  y,      p.z - rz*(_HW+0.04),
+      p.x - rx*(_HW+0.04),  y+1.4,  p.z - rz*(_HW+0.04)
     );
     // Right wall
     wallRVerts.push(
-      p.x + rx*(TW_HALF+0.04),  y,      p.z + rz*(TW_HALF+0.04),
-      p.x + rx*(TW_HALF+0.04),  y+1.4,  p.z + rz*(TW_HALF+0.04)
+      p.x + rx*(_HW+0.04),  y,      p.z + rz*(_HW+0.04),
+      p.x + rx*(_HW+0.04),  y+1.4,  p.z + rz*(_HW+0.04)
     );
-    glowLPts.push(new THREE.Vector3(p.x - rx*(TW_HALF+0.04), y+1.42, p.z - rz*(TW_HALF+0.04)));
-    glowRPts.push(new THREE.Vector3(p.x + rx*(TW_HALF+0.04), y+1.42, p.z + rz*(TW_HALF+0.04)));
+    glowLPts.push(new THREE.Vector3(p.x - rx*(_HW+0.04), y+1.42, p.z - rz*(_HW+0.04)));
+    glowRPts.push(new THREE.Vector3(p.x + rx*(_HW+0.04), y+1.42, p.z + rz*(_HW+0.04)));
   }
 
   // Build quad-strip indices
@@ -521,56 +528,58 @@ function segCurve(cur, angleDelta, radius, eL=0x00f0ff, eR=0xff00cc){
 function segFork(cur, eL, eR){
   const rnd=(a,b)=>a+Math.floor(Math.random()*(b-a+1));
   const right = perpRight(cur.dir);
-  const sep = TW * 0.95;          // how far apart the two lanes sit
-  const branchLen = rnd(40, 64);  // length of each branch
+  const sep = TW * 0.62;          // lane center offset from middle
+  const branchLen = rnd(36, 50);
   const startPos = cur.pos.clone();
   const dir = cur.dir.clone();
+  const segs = 28;
 
-  // Mark the split point so physics can nudge balls onto whichever side they're on
-  forkZones.push({
-    pos: startPos.clone(), dir: dir.clone(), right: right.clone(),
-    sep, len: branchLen, floorY: startPos.y, phase:'split'
-  });
+  // ONE authoritative wide spine down the middle (physics uses this). We widen halfW
+  // so a ball can sit in either lane; a center divider wall keeps lanes separated.
+  const spinePts = [];
+  for(let i=0;i<=segs;i++){
+    const t=i/segs;
+    spinePts.push(startPos.clone().addScaledVector(dir, branchLen*t));
+  }
+  for(let i=1;i<spinePts.length;i++){
+    const tg=new THREE.Vector3().subVectors(spinePts[i],spinePts[i-1]).normalize();
+    // wide enough to cover both lanes
+    pathNodes.push({pos:spinePts[i].clone(), dir:tg.clone(), right:perpRight(tg),
+      floorY:startPos.y, halfW:sep+TW_HALF*0.85, fork:true});
+  }
 
-  // Build each branch as an offset parallel ribbon with a distinct hazard
-  const branchKinds = ['speed','rough','drop']; // pick 2 different flavors
-  const k1 = branchKinds[rnd(0,2)];
-  let k2 = branchKinds[rnd(0,2)]; if(k2===k1) k2 = branchKinds[(branchKinds.indexOf(k1)+1)%3];
+  // Visual: build two lane ribbons (left/right) as offset parallels of the SAME straight dir
+  const branchKinds=['speed','rough','drop'];
+  const k1=branchKinds[rnd(0,2)];
+  let k2=branchKinds[rnd(0,2)]; if(k2===k1) k2=branchKinds[(branchKinds.indexOf(k1)+1)%3];
 
-  function buildBranch(side, kind){
-    const segs = 24;
-    const pts = [];
+  function buildLane(side, kind){
+    const pts=[];
     for(let i=0;i<=segs;i++){
-      const t = i/segs;
-      // smooth S-offset: ease out to the side, hold, ease back to center to merge
+      const t=i/segs;
       let offT;
-      if(t < 0.18) offT = t/0.18;               // diverge
-      else if(t > 0.82) offT = (1-t)/0.18;       // converge
-      else offT = 1;                              // hold parallel
-      const off = sep*side*offT;
-      const cx = startPos.x + dir.x*(branchLen*t) + right.x*off;
-      const cz = startPos.z + dir.z*(branchLen*t) + right.z*off;
-      let cy = startPos.y;
-      if(kind==='drop') cy = startPos.y - Math.sin(t*Math.PI)*6;
-      if(kind==='speed') cy = startPos.y + Math.sin(t*Math.PI)*1.2;
-      pts.push(new THREE.Vector3(cx,cy,cz));
+      if(t<0.16) offT=t/0.16; else if(t>0.84) offT=(1-t)/0.16; else offT=1;
+      const off=sep*side*offT;
+      let cy=startPos.y;
+      if(kind==='drop') cy=startPos.y - Math.sin(t*Math.PI)*5;
+      if(kind==='speed') cy=startPos.y + Math.sin(t*Math.PI)*1.0;
+      const p=startPos.clone().addScaledVector(dir, branchLen*t).addScaledVector(right, off);
+      p.y=cy; pts.push(p);
     }
-    _buildTube(pts, eL, eR);
-    for(let i=1;i<pts.length;i++){
-      const tg = new THREE.Vector3().subVectors(pts[i],pts[i-1]).normalize();
-      pathNodes.push({pos:pts[i].clone(), dir:tg.clone(), right:perpRight(tg), floorY:pts[i].y, halfW:TW_HALF, branch:side});
-    }
-    // One hazard per branch, placed mid-lane
-    const midP = pts[Math.floor(segs*0.5)];
+    // Narrower lane ribbons so they read as two lanes, not overlapping full-width tracks
+    _buildTubeWidth(pts, eL, eR, TW_HALF*0.72);
+    const midP=pts[Math.floor(segs*0.5)];
     if(kind==='rough') buildBumpers(makeCursor(midP.x,midP.y,midP.z,dir.x,dir.z), 2);
     if(kind==='speed') buildBoostPad(midP, dir, midP.y);
   }
-  buildBranch(-1, k1);
-  buildBranch(+1, k2);
+  buildLane(-1,k1);
+  buildLane(+1,k2);
 
-  // Merge point: continue from center, just past the branches
-  const mergePos = startPos.clone().addScaledVector(dir, branchLen);
-  forkZones.push({ pos: mergePos.clone(), dir: dir.clone(), phase:'merge' });
+  // Physics zone: steer each ball toward whichever lane it leans, hold, release at merge
+  forkZones.push({pos:startPos.clone(), dir:dir.clone(), right:right.clone(),
+    sep, len:branchLen, floorY:startPos.y, phase:'split'});
+
+  const mergePos=startPos.clone().addScaledVector(dir, branchLen);
   return makeCursor(mergePos.x, startPos.y, mergePos.z, dir.x, dir.z);
 }
 
@@ -1018,9 +1027,9 @@ function buildCourse(durSecs){
       buildHammers(cur, rnd(2,3));
       cur = segStraight(cur, 18, eL, eR);
     } else if(type==='fork'){
-      cur = segStraight(cur, 6, eL, eR);
+      cur = segStraight(cur, 12, eL, eR);  // straight run-in so the split aligns
       cur = segFork(cur, eL, eR);
-      cur = segStraight(cur, 8, eL, eR);
+      cur = segStraight(cur, 12, eL, eR);  // straight run-out after merge
     }
   }
 
@@ -1059,9 +1068,10 @@ function createZorb(name,isSub,col){
   mesh.castShadow = zorbs.length < 200;
   const ringCol = skin ? skin.ringColor : col;
   const ring=new THREE.Mesh(_RING_GEO,
-    new THREE.MeshBasicMaterial({color:ringCol,transparent:true,opacity:0.5}));
+    new THREE.MeshBasicMaterial({color:ringCol,transparent:true,opacity:0.6}));
+  ring.rotation.x = Math.PI/2;     // lay flat = horizontal -O- ring around the ball
   mesh._skinPulse = skin && skin.pulse;
-  mesh.add(ring);
+  scene.add(ring);                 // SIBLING, not child - ball roll won't tumble it
   // Only add point lights for first 40 balls (perf)
   const light = zorbs.length < 40 ? new THREE.PointLight(col,isSub?2.0:1.1,10) : null;
   if(light) mesh.add(light);
@@ -1125,6 +1135,7 @@ function createZorb(name,isSub,col){
 function removeZorb(z){
   if(z.nameLabel&&z.nameLabel.parentNode)z.nameLabel.parentNode.removeChild(z.nameLabel);
   scene.remove(z.mesh);
+  if(z.ring) scene.remove(z.ring);
   if(z.tLine) scene.remove(z.tLine);
   z.streaks.forEach(s=>scene.remove(s));
 }
@@ -1280,6 +1291,7 @@ function stepPhysics(z,dt){
       const dqRank = zorbs.filter(r => r.finished).length;
       z.rank = dqRank;
       z.mesh.visible = false;
+      if(z.ring) z.ring.visible = false;
       if(z.tLine) z.tLine.visible = false;
       z.streaks.forEach(s => s.visible = false);
       showKO('💀 ELIMINATED: '+z.name, 0xff2200); ZAUDIO.play('eliminated');
@@ -1336,21 +1348,21 @@ function stepPhysics(z,dt){
     }
   }
 
-  // Fork zones: at the split, commit the ball to whichever lane it's leaning toward
+  // Fork zones: commit each ball to a lane, steer to that lane center, release at merge
   for(const fk of forkZones){
-    if(fk.phase!=='split') continue;
     const toF=new THREE.Vector3().subVectors(z.pos, fk.pos);
     const along=toF.dot(fk.dir);
-    if(along>-2 && along<fk.len*0.85){
+    if(along>-1 && along<fk.len){
       const lat=toF.dot(fk.right);
-      // Pick side once (sticky) based on initial lean; then steer toward that lane center
-      if(z._forkSide===undefined || along<2) z._forkSide = lat>=0 ? 1 : -1;
-      const targetLat = fk.sep * z._forkSide * (along < fk.len*0.7 ? 1 : (1-(along-fk.len*0.7)/(fk.len*0.3)));
+      if(z._forkSide===undefined || along<3) z._forkSide = lat>=0 ? 1 : -1;
+      // target the chosen lane, ease back to center near the merge
+      const holdT = along < fk.len*0.84 ? 1 : Math.max(0,(fk.len-along)/(fk.len*0.16));
+      const targetLat = fk.sep * z._forkSide * holdT;
       const err = targetLat - lat;
-      z.vel.x += fk.right.x*err*3.0*dt;
-      z.vel.z += fk.right.z*err*3.0*dt;
-    } else if(along>=fk.len*0.85){
-      z._forkSide = undefined; // released at merge
+      z.vel.x += fk.right.x*err*4.0*dt;
+      z.vel.z += fk.right.z*err*4.0*dt;
+    } else if(along>=fk.len){
+      z._forkSide = undefined;
     }
   }
 
@@ -1434,8 +1446,13 @@ function stepPhysics(z,dt){
   z.mesh.rotation.z+=z.vel.x/BALL_R*dt;
   z.knockFlash=Math.max(0,z.knockFlash-dt);
   z.mesh.material.emissiveIntensity=z.knockFlash>0?1.5:(z.boost>0.1?0.9:z.isSub?0.42:0.2);
-  z.ringBob+=dt*2.5;
-  z.ring.rotation.x=Math.sin(z.ringBob)*0.15;
+  // Ring: stays horizontal (-O-), follows the ball, spins around its OWN vertical axis
+  if(z.ring){
+    z.ring.position.set(z.pos.x, z.pos.y, z.pos.z);
+    z.ring.rotation.x = Math.PI/2;          // locked flat (planet-ring style)
+    z.ringBob = (z.ringBob||0) + dt*2.2;
+    z.ring.rotation.z = z.ringBob;          // spin around vertical axis (after the x-tilt)
+  }
   // Scale ring/light with speed
   const spd=Math.sqrt(z.vel.x*z.vel.x+z.vel.z*z.vel.z);
   z.light.intensity = (z.isSub?2.0:1.2) * (1 + Math.min(spd/MAX_SPD,1)*0.8);
