@@ -61,6 +61,14 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;}
 </style>
 </head>
 <body>
+<div id="zloader" style="position:fixed;inset:0;z-index:9999;background:radial-gradient(ellipse at 50% 40%,#06142b 0%,#02030a 70%);display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Courier New',monospace;transition:opacity .6s ease;">
+  <div style="font-size:38px;font-weight:900;letter-spacing:12px;color:#00f0ff;text-shadow:0 0 24px #00f0ff,0 0 60px #0088ff;margin-bottom:6px;">ZORBS</div>
+  <div style="font-size:10px;letter-spacing:6px;color:rgba(0,240,255,0.4);margin-bottom:38px;">ON&nbsp;&nbsp;STREAM</div>
+  <div style="width:240px;height:3px;background:rgba(0,240,255,0.12);border-radius:3px;overflow:hidden;">
+    <div id="zload-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#00f0ff,#ff00cc);box-shadow:0 0 12px #00f0ff;transition:width .3s ease;"></div>
+  </div>
+  <div id="zload-txt" style="font-size:9px;letter-spacing:3px;color:rgba(255,255,255,0.3);margin-top:16px;">INITIALIZING TRACK…</div>
+</div>
 <div id="app">
 <canvas id="c"></canvas>
 <canvas id="speedline" style="position:absolute;top:0;left:0;pointer-events:none;"></canvas>
@@ -128,6 +136,7 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;}
 <script src="https://unpkg.com/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
 <script src="/session.js"></script>
 <script src="/audio.js"></script>
+<script src="/skins.js"></script>
 <script>
 // Seeded random - replaces Math.random() for track generation only
 function mulberry32(seed){
@@ -164,9 +173,9 @@ renderer.setPixelRatio(Math.min(devicePixelRatio,2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.3;
+renderer.toneMappingExposure = 1.12;
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x010115,0.0055);
+scene.fog = new THREE.FogExp2(0x06101f,0.0048);
 // Starfield
 {
   const starGeo = new THREE.BufferGeometry();
@@ -177,7 +186,33 @@ scene.fog = new THREE.FogExp2(0x010115,0.0055);
   starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starVerts,3));
   scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({color:0x8899ff,size:0.7,sizeAttenuation:true,transparent:true,opacity:0.7})));
 }
-scene.background = new THREE.Color(0x010115);
+scene.background = new THREE.Color(0x02030a);
+// Tron gradient skybox - deep blue-black up top, subtle cyan glow at horizon
+{
+  const skyGeo = new THREE.SphereGeometry(700, 32, 16);
+  const skyMat = new THREE.ShaderMaterial({
+    side: THREE.BackSide, depthWrite:false, fog:false,
+    uniforms:{
+      topColor:{value:new THREE.Color(0x02030a)},
+      midColor:{value:new THREE.Color(0x0a1633)},
+      horizonColor:{value:new THREE.Color(0x0e3a55)},
+    },
+    vertexShader:`varying vec3 vP; void main(){ vP=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
+    fragmentShader:`
+      varying vec3 vP; uniform vec3 topColor; uniform vec3 midColor; uniform vec3 horizonColor;
+      void main(){
+        float h = normalize(vP).y;          // -1..1
+        float t = smoothstep(-0.15, 0.5, h);
+        vec3 col = mix(horizonColor, midColor, smoothstep(-0.15,0.25,h));
+        col = mix(col, topColor, smoothstep(0.25,0.8,h));
+        // faint horizon band glow
+        float band = exp(-abs(h)*9.0)*0.35;
+        col += horizonColor*band;
+        gl_FragColor = vec4(col,1.0);
+      }`
+  });
+  scene.add(new THREE.Mesh(skyGeo, skyMat));
+}
 const camera = new THREE.PerspectiveCamera(70,1,0.1,1200);
 // ── BLOOM COMPOSER (graceful fallback if CDN blocked) ──
 let composer = null;
@@ -188,7 +223,7 @@ try {
     composer.setSize(innerWidth, innerHeight);
     composer.addPass(new THREE.RenderPass(scene, camera));
     const bloom = new THREE.UnrealBloomPass(
-      new THREE.Vector2(innerWidth, innerHeight), 0.55, 0.6, 0.82);
+      new THREE.Vector2(innerWidth, innerHeight), 0.85, 0.45, 0.78);
     composer.addPass(bloom);
   }
 } catch(e) { composer = null; }
@@ -202,15 +237,15 @@ function onResize(){
 onResize(); window.addEventListener('resize',onResize);
 
 // ── LIGHTING ─────────────────────────────────────────
-scene.add(new THREE.AmbientLight(0x223355,5));
-const sun=new THREE.DirectionalLight(0xaabbff,3);
+scene.add(new THREE.AmbientLight(0x0a1830,2.2));
+const sun=new THREE.DirectionalLight(0xcce6ff,2.4);
 sun.position.set(40,80,20); sun.castShadow=true;
 sun.shadow.mapSize.set(2048,2048);
 sun.shadow.camera.left=-300; sun.shadow.camera.right=300;
 sun.shadow.camera.top=300; sun.shadow.camera.bottom=-300;
 sun.shadow.camera.far=1000;
 scene.add(sun);
-const fill=new THREE.DirectionalLight(0xff00cc,0.7);
+const fill=new THREE.DirectionalLight(0x0088ff,0.6);
 fill.position.set(-40,20,-40); scene.add(fill);
 const pCyan=new THREE.PointLight(0x00f0ff,1.8,160); scene.add(pCyan);
 const pMagenta=new THREE.PointLight(0xff00cc,1.2,120); scene.add(pMagenta);
@@ -964,11 +999,14 @@ const _RING_GEO       = new THREE.TorusGeometry(BALL_R*1.42,0.055,6,20);
 function createZorb(name,isSub,col){
   // Use lower-poly sphere for normal users, higher for subs
   const useHi = isSub || zorbs.length < 50;
-  const mat=new THREE.MeshStandardMaterial({color:col,roughness:0.07,metalness:0.92,emissive:col,emissiveIntensity:isSub?0.5:0.2});
+  const skin = (typeof ZSKINS!=='undefined') ? ZSKINS.resolve(name, isSub).build({THREE,color:col,isSub,BALL_R}) : null;
+  const mat = skin ? skin.material : new THREE.MeshStandardMaterial({color:col,roughness:0.12,metalness:0.85,emissive:col,emissiveIntensity:isSub?0.45:0.22});
   const mesh=new THREE.Mesh(useHi?_SPHERE_GEO_HI:_SPHERE_GEO_LO, mat);
-  mesh.castShadow = zorbs.length < 200; // only first 200 cast shadows
+  mesh.castShadow = zorbs.length < 200;
+  const ringCol = skin ? skin.ringColor : col;
   const ring=new THREE.Mesh(_RING_GEO,
-    new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:0.5}));
+    new THREE.MeshBasicMaterial({color:ringCol,transparent:true,opacity:0.5}));
+  mesh._skinPulse = skin && skin.pulse;
   mesh.add(ring);
   // Only add point lights for first 40 balls (perf)
   const light = zorbs.length < 40 ? new THREE.PointLight(col,isSub?2.0:1.1,10) : null;
@@ -1822,10 +1860,26 @@ document.getElementById('cg').onclick=()=>{
 document.getElementById('ci').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('cg').click();});
 
 // ── MAIN LOOP ─────────────────────────────────────────
+// ── LOADING SCREEN ────────────────────────────────────
+window.ZLoad = (()=>{
+  const el=()=>document.getElementById('zloader');
+  const bar=()=>document.getElementById('zload-bar');
+  const txt=()=>document.getElementById('zload-txt');
+  let pct=0, done=false;
+  function set(p,msg){ pct=Math.min(100,p); if(bar())bar().style.width=pct+'%'; if(msg&&txt())txt().textContent=msg; }
+  function finish(){
+    if(done) return; done=true;
+    set(100,'GO');
+    setTimeout(()=>{ const e=el(); if(e){ e.style.opacity='0'; setTimeout(()=>e.remove(),650);} }, 350);
+  }
+  return { set, finish };
+})();
+
 // Arm audio on first interaction (autoplay policy)
 ['click','keydown','touchstart'].forEach(ev=>
   window.addEventListener(ev, ()=>{ if(window.ZAUDIO) ZAUDIO.arm(); }, {once:false}));
 
+if(window.ZLoad) ZLoad.set(20,'CONNECTING…');
 // ── MODE DETECTION ────────────────────────────────────
 const _urlParams = new URLSearchParams(window.location.search);
 const _isStreamer = _urlParams.has('streamer') && !_urlParams.has('obs');
@@ -1959,8 +2013,10 @@ function initCourse(seed){
 
 // All tabs use same hourly seed = identical map without needing Ably for this
 // Seed changes every hour so races feel fresh each session
+if(window.ZLoad) ZLoad.set(45,'BUILDING TRACK…');
 const _hourlySeed = Math.floor(Date.now() / 3600000);
 initCourse(_hourlySeed);
+if(window.ZLoad) ZLoad.set(75,'READY');
 
 
 // ── START SHARED SESSION ──────────────────────────────
@@ -2306,6 +2362,7 @@ let lastT=0;
 function loop(ts){
   requestAnimationFrame(loop);
   const dt=Math.min((ts-lastT)/1000,0.05); lastT=ts; frame++;
+  if(frame===8 && window.ZLoad) ZLoad.finish();
 
   if(phase==='racing'){
     updateTimer();
