@@ -229,6 +229,10 @@ const ZORBS_SESSION = (() => {
     if (ch) ch.publish('join', {name, isSub, color});
   }
 
+  function publishCtl(cmd, val) {
+    if (ch) ch.publish('ctl', {cmd, val});
+  }
+
   function publishEvent(type, val, color) {
     if (ch && isHost) ch.publish('ev', {t: type, v: val, c: color});
   }
@@ -240,5 +244,5 @@ const ZORBS_SESSION = (() => {
   function amHost()      { return isHost; }
   function isConnected() { return ably?.connection.state === 'connected'; }
 
-  return { init, setChannel, publishJoin, publishEvent, publishKickCmd, amHost, isConnected };
+  return { init, setChannel, publishJoin, publishEvent, publishCtl, publishKickCmd, amHost, isConnected };
 })();

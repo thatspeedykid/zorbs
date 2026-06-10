@@ -102,7 +102,7 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;}
       <span id="sp-hint">blank=auto</span>
     </div>
     <button id="btn-go" onclick="(window.startWithCountdown||streamerStart)()">▶ START RACE</button>
-    <button id="btn-bots" onclick="(function(){const s=JSON.parse(localStorage.getItem('zorbs_settings')||'{}');s.bots=!s.bots;localStorage.setItem('zorbs_settings',JSON.stringify(s));const b=document.getElementById('btn-bots');b.textContent='BOTS: '+(s.bots?'ON':'OFF');b.style.color=s.bots?'#00ff88':'rgba(255,255,255,0.5)';})()" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.5);border-radius:5px;padding:6px 14px;font-size:10px;letter-spacing:2px;cursor:pointer;font-family:'Courier New',monospace;margin-top:6px;width:100%;">BOTS: OFF</button>
+    <button id="btn-bots" onclick="(function(){window._botsOn=!window._botsOn;const s=JSON.parse(localStorage.getItem('zorbs_settings')||'{}');s.bots=window._botsOn;localStorage.setItem('zorbs_settings',JSON.stringify(s));const b=document.getElementById('btn-bots');b.textContent='BOTS: '+(window._botsOn?'ON':'OFF');b.style.color=window._botsOn?'#00ff88':'rgba(255,255,255,0.5)';if(typeof ZORBS_SESSION!=='undefined')ZORBS_SESSION.publishCtl('bots',window._botsOn);})()" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.5);border-radius:5px;padding:6px 14px;font-size:10px;letter-spacing:2px;cursor:pointer;font-family:'Courier New',monospace;margin-top:6px;width:100%;">BOTS: OFF</button>
     <button id="btn-auto" onclick="toggleAutoMode()" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.5);border-radius:5px;padding:6px 14px;font-size:10px;letter-spacing:2px;cursor:pointer;font-family:'Courier New',monospace;margin-top:6px;width:100%;">AUTO-START: OFF</button>
     <div id="btn-hide" onclick="hidePanel()">hide panel</div>
   </div>
@@ -1724,6 +1724,7 @@ if(_isStreamer){
     b.textContent = 'AUTO-START: ' + (window._streamerAuto ? 'ON' : 'OFF');
     b.style.color = window._streamerAuto ? '#00ff88' : 'rgba(255,255,255,0.5)';
     b.style.borderColor = window._streamerAuto ? '#00ff88' : 'rgba(255,255,255,0.15)';
+    if(typeof ZORBS_SESSION!=='undefined') ZORBS_SESSION.publishCtl('auto', window._streamerAuto);
   };
   if(window._streamerAuto){ window._streamerAuto = false; window.toggleAutoMode(); } // sync button UI
   {
@@ -1968,11 +1969,11 @@ window.startWithCountdown = function(dur){
 
 // ── BOT POOL: fill lobby to 20 with bots; real players replace them ──
 const BOT_TARGET = 20;
+window._botsOn = (JSON.parse(localStorage.getItem('zorbs_settings')||'{}').bots) === true;
 function isBotName(n){ return MOCK_NAMES.includes(n); }
 setInterval(()=>{
   if(!window.IS_HOST || phase!=='lobby') return;
-  const settings = JSON.parse(localStorage.getItem('zorbs_settings')||'{}');
-  const botsOn = settings.bots === true;
+  const botsOn = window._botsOn === true;
   const bots = zorbs.filter(z=>z.isBot);
   const real = zorbs.length - bots.length;
   const want = botsOn ? Math.max(0, BOT_TARGET - real) : 0;
@@ -2001,6 +2002,16 @@ setInterval(()=>{
 
 // Remote control from dashboard (streamer lobbies)
 window.handleRemoteCtl = (cmd, val) => {
+  if(cmd==='bots'){
+    window._botsOn = !!val;
+    const s=JSON.parse(localStorage.getItem('zorbs_settings')||'{}'); s.bots=!!val;
+    localStorage.setItem('zorbs_settings',JSON.stringify(s));
+    const b=document.getElementById('btn-bots');
+    if(b){ b.textContent='BOTS: '+(val?'ON':'OFF'); b.style.color=val?'#00ff88':'rgba(255,255,255,0.5)'; }
+  }
+  if(cmd==='auto'){
+    localStorage.setItem('zorbs_streamer_auto', val?'1':'0');
+  }
   if(cmd==='start' && window.IS_HOST){ window.startWithCountdown(val); }
   if(cmd==='cam') setCam(val);
   if(cmd==='reset' && window.IS_HOST) resetRace();

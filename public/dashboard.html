@@ -275,8 +275,8 @@ body{background:#05050f;color:#fff;font-family:'Courier New',monospace;min-heigh
           </div>
           <div class="card">
             <h3>RACE SETTINGS</h3>
-            <div class="toggle-row"><div><div class="tl">Show Bots</div><div class="ts">Fill empty lobby with demo bots</div></div><label class="toggle"><input type="checkbox" id="tog-bots" onchange="saveSetting('bots',this.checked)"><span class="tslider"></span></label></div>
-            <div class="toggle-row"><div><div class="tl">Auto Restart</div><div class="ts">Auto-play mode: restart every race with a 30s countdown</div></div><label class="toggle"><input type="checkbox" id="tog-autoreset" onchange="localStorage.setItem('zorbs_streamer_auto', this.checked?'1':'0')"><span class="tslider"></span></label></div>
+            <div class="toggle-row"><div><div class="tl">Show Bots</div><div class="ts">Fill empty lobby with demo bots</div></div><label class="toggle"><input type="checkbox" id="tog-bots" onchange="saveSetting('bots',this.checked); getCtlChannel(ch=>ch.publish('ctl',{cmd:'bots',val:this.checked}))"><span class="tslider"></span></label></div>
+            <div class="toggle-row"><div><div class="tl">Auto Restart</div><div class="ts">Auto-play mode: restart every race with a 30s countdown</div></div><label class="toggle"><input type="checkbox" id="tog-autoreset" onchange="localStorage.setItem('zorbs_streamer_auto', this.checked?'1':'0'); getCtlChannel(ch=>ch.publish('ctl',{cmd:'auto',val:this.checked}))"><span class="tslider"></span></label></div>
             <div class="toggle-row"><div><div class="tl">Elimination On</div><div class="ts">Balls that fall off get DQ'd</div></div><label class="toggle"><input type="checkbox" id="tog-elim" checked><span class="tslider"></span></label></div>
           </div>
         </div>
