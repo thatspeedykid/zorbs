@@ -25,5 +25,16 @@
       "destination": "https://www.playzorbs.xyz/$1",
       "permanent": true
     }
+  ],
+  "headers": [
+    {
+      "source": "/(session|audio|skins|physics).js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, must-revalidate"
+        }
+      ]
+    }
   ]
 }
