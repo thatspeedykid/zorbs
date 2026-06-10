@@ -2261,6 +2261,12 @@ if(window.ZPHYS){
       ZPHYS.setTrack(new Float32Array(_colliderVerts), new Uint32Array(_colliderIdx));
       window._physTrackBuilt = true;
     }
+    // On-screen physics status badge (so you don't need the console)
+    const badge=document.createElement('div');
+    badge.style.cssText='position:fixed;bottom:6px;left:6px;z-index:99999;font:10px monospace;letter-spacing:1px;padding:3px 7px;border-radius:4px;'+(ok?'background:rgba(0,255,136,0.15);color:#00ff88;border:1px solid rgba(0,255,136,0.4);':'background:rgba(255,80,80,0.15);color:#ff6666;border:1px solid rgba(255,80,80,0.4);');
+    badge.textContent = ok ? '⬡ RAPIER PHYSICS' : ('◇ LEGACY'+(window._physError?': '+window._physError.slice(0,40):''));
+    document.body.appendChild(badge);
+    setTimeout(()=>{ badge.style.transition='opacity 1s'; badge.style.opacity='0.25'; }, 6000);
   });
 }
 

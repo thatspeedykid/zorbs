@@ -13,15 +13,17 @@ const ZPHYS = (() => {
     BALL_R = ballRadius || 0.5;
     try {
       // rapier3d-compat: WASM inlined as base64, default export. +esm gives a clean module.
-      const mod = await import('https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.14.0/+esm');
+      const mod = await import('https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.17.3/+esm');
       RAPIER = mod.default || mod;
       await RAPIER.init();
       world = new RAPIER.World({ x: 0, y: -32.0, z: 0 }); // strong gravity = snappy marble feel
       ready = true;
       console.log('[ZPHYS] Rapier ready');
+      window._physOk = true;
       return true;
     } catch (e) {
       console.warn('[ZPHYS] Rapier failed to load, using legacy physics:', e);
+      window._physError = (e && e.message) ? e.message : String(e);
       ready = false;
       return false;
     }
