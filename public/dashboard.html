@@ -390,6 +390,25 @@ body{background:#05050f;color:#fff;font-family:'Courier New',monospace;min-heigh
             <div class="toggle-row"><div><div class="tl">New Registrations</div><div class="ts">Allow new Kick logins</div></div><label class="toggle"><input type="checkbox" checked><span class="tslider"></span></label></div>
             <div class="toggle-row"><div><div class="tl">Auto-Play Mode</div><div class="ts">playzorbs.xyz open sessions</div></div><label class="toggle"><input type="checkbox" checked><span class="tslider"></span></label></div>
           </div>
+          <div class="card" style="grid-column:1/-1;">
+            <h3>🌐 PUBLIC LOBBY CONTROL (playzorbs.xyz)</h3>
+            <p style="font-size:11px;color:rgba(255,255,255,0.4);margin:0 0 12px;">Admin-only controls for the MAIN public game. These broadcast to every player on playzorbs.xyz in real time.</p>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+              <button class="btn btn-green btn-big" onclick="publicCtl('start','')">▶ START PUBLIC RACE</button>
+              <button class="btn btn-red btn-big" onclick="publicCtl('reset')">■ RESET PUBLIC RACE</button>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+              <span style="font-size:9px;letter-spacing:2px;color:rgba(255,255,255,0.3);">CAMERA:</span>
+              <button class="btn btn-cyan" onclick="publicCtl('cam','follow')">FOLLOW</button>
+              <button class="btn btn-cyan" onclick="publicCtl('cam','wide')">WIDE</button>
+              <button class="btn btn-cyan" onclick="publicCtl('cam','top')">TOP</button>
+              <button class="btn btn-cyan" onclick="publicCtl('cam','auto')">AUTO</button>
+              <span style="font-size:9px;letter-spacing:2px;color:rgba(255,255,255,0.3);margin-left:12px;">BOTS:</span>
+              <button class="btn btn-cyan" onclick="publicCtl('bots',true)">ON</button>
+              <button class="btn btn-cyan" onclick="publicCtl('bots',false)">OFF</button>
+            </div>
+            <div id="public-ctl-status" style="font-size:10px;color:rgba(0,255,136,0.6);margin-top:10px;"></div>
+          </div>
         </div>
       </div>
 
@@ -547,6 +566,28 @@ function launchRace(){
   window.open(url, '_blank');
   document.getElementById('rc-dot').className = 'dot live';
   document.getElementById('rc-status').textContent = 'Lobby open';
+}
+
+// ── PUBLIC LOBBY CONTROL (admin only, targets zorbs:global-v1) ──
+let _publicChannel = null;
+function publicCtl(cmd, val){
+  if(!session || session.role !== 'admin'){ alert('Admin only'); return; }
+  const send = (ch) => {
+    ch.publish('ctl', {cmd, val});
+    const s=document.getElementById('public-ctl-status');
+    if(s) s.textContent = '✓ Sent "'+cmd+(val!==undefined&&val!==''?' = '+val:'')+'" to public lobby · '+new Date().toLocaleTimeString();
+  };
+  if(_publicChannel) return send(_publicChannel);
+  const load = () => fetch('/api/config').then(r=>r.json()).then(cfg=>{
+    if(!cfg.ablyKey){ alert('Realtime not configured'); return; }
+    const ably = new Ably.Realtime({ key: cfg.ablyKey, clientId: 'admin_'+session.username });
+    ably.connection.on('connected', ()=>{
+      _publicChannel = ably.channels.get('zorbs:global-v1'); // THE PUBLIC LOBBY
+      send(_publicChannel);
+    });
+  });
+  if(window.Ably) load();
+  else { const sc=document.createElement('script'); sc.src='https://cdn.ably.com/lib/ably.min-2.js'; sc.onload=load; document.head.appendChild(sc); }
 }
 
 // ── REMOTE CONTROL via Ably ────────────────────────────
