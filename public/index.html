@@ -1652,6 +1652,7 @@ if(_isStreamer){
     window._streamerAuto = localStorage.getItem('zorbs_streamer_auto') === '1';
     const ab=document.getElementById('btn-auto');
     if(ab){ ab.textContent='AUTO-START: '+(window._streamerAuto?'ON':'OFF'); ab.style.color=window._streamerAuto?'#00ff88':'rgba(255,255,255,0.5)'; }
+    if(window._startCd) return; // manual countdown in progress - don't compete
     if(!window._streamerAuto || !window.IS_HOST) return;
     if(!window._hostSince || Date.now() - window._hostSince < 8000) return;
     if(phase!=='lobby'){ window._autoStartAt=null; window.showCountdown(null); return; }
@@ -1686,6 +1687,7 @@ if(_isStreamer){
   window.showCountdown = showCountdown;
   setInterval(()=>{
     if(!window._isAutoPlayMode) return; // OBS tabs never drive races
+    if(window._startCd) return; // manual countdown owns the clock
     if(!window.IS_HOST) return;
     if(!window._hostSince || Date.now() - window._hostSince < 8000) return;
     if(phase!=='lobby'){ window._autoStartAt=null; showCountdown(null); return; }
@@ -1856,6 +1858,7 @@ window.startWithCountdown = function(dur){
     resetRace();
   }
   if(window._startCd) clearInterval(window._startCd);
+  window._autoStartAt = null; // cancel any auto-loop countdown
   const endAt = Date.now()+30000;
   const tick = () => {
     const secs = Math.max(0, Math.ceil((endAt-Date.now())/1000));
