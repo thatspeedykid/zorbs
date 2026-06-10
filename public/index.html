@@ -432,6 +432,31 @@ function segCurve(cur, angleDelta, radius, eL=0x00f0ff, eR=0xff00cc){
   return c2;
 }
 
+// Helical descent - curve AND drop smoothly together (no jagged Y cut)
+function segCurveDrop(cur, angleDelta, radius, totalDrop, eL=0x00f0ff, eR=0xff00cc){
+  const absA = Math.abs(angleDelta), arcLen = radius*absA;
+  const steps = Math.max(20, Math.ceil(arcLen/1.5));
+  const stepAngle = angleDelta / steps;
+  const segLen = arcLen / steps;
+  const dropPer = totalDrop / steps;
+  let c2 = cur;
+  for(let i=0;i<steps;i++){
+    const cos = Math.cos(stepAngle), sin = Math.sin(stepAngle);
+    const ndx = c2.dir.x*cos - c2.dir.z*sin;
+    const ndz = c2.dir.x*sin + c2.dir.z*cos;
+    const nextDir = new THREE.Vector3(ndx,0,ndz).normalize();
+    const end = c2.pos.clone().addScaledVector(c2.dir, segLen);
+    end.y = c2.pos.y - dropPer; // continuous descent
+    const endExt = end.clone().addScaledVector(c2.dir, 0.3);
+    _buildTube([c2.pos.clone(), endExt], eL, eR);
+    const right = perpRight(c2.dir);
+    pathNodes.push({pos:end.clone(), dir:c2.dir.clone(), right:right.clone(), floorY:end.y, halfW:TW_HALF});
+    courseLength += segLen;
+    c2 = makeCursor(end.x, end.y, end.z, nextDir.x, nextDir.z);
+  }
+  return c2;
+}
+
 // ── BOOST PAD ─────────────────────────────────────────
 function buildBoostPad(pos, dir, floorY){
   const right=perpRight(dir), angle=Math.atan2(dir.x,dir.z);
@@ -791,22 +816,13 @@ function buildCourse(durSecs){
       cur = segStraight(cur, rnd(8,16), eL, eR);
 
     } else if(type==='spiral_drop'){
-      // Spiral going down - multiple turns while dropping height
-      // Like the inner spiral in the drawing
-      const numTurns = rnd(2,4);
-      const angle = (Math.PI/3 + Math.random()*(Math.PI/4)); // 60-105 per turn
-      const radius = rnd(20,35);
+      // Smooth helical descent - curves and drops together, no jagged cuts
       const dir = Math.random()<0.5?1:-1;
-      const dropPerTurn = rnd(3,7);
-      for(let t=0;t<numTurns;t++){
-        const dropY = dropPerTurn;
-        // Curve + slight drop
-        const startY = cur.pos.y;
-        cur = segCurve(cur, dir*angle, radius, eL, eR);
-        // Manual Y drop after curve
-        cur = makeCursor(cur.pos.x, cur.pos.y-dropY, cur.pos.z, cur.dir.x, cur.dir.z);
-        cur = segStraight(cur, rnd(5,12), eL, eR);
-      }
+      const radius = rnd(16,26);
+      const totalAngle = (Math.PI*1.2 + Math.random()*Math.PI*1.3); // 1.2-2.5 turns worth
+      const totalDrop = rnd(10,20);
+      cur = segCurveDrop(cur, dir*totalAngle, radius, totalDrop, eL, eR);
+      cur = segStraight(cur, rnd(8,14), eL, eR, true); // exit boost
 
     } else if(type==='ramp_straight'){
       // Drop down then long straight - feels like picking up speed
