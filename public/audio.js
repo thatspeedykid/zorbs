@@ -95,10 +95,12 @@ const ZAUDIO = (() => {
 
   // Public API
   function arm() {
-    if (started) { resume(); return; }
-    started = true;
-    init(); resume();
-    if (musicOn) startMusic();
+    init();
+    resume();
+    if (ctx && ctx.state === 'running' && !started) {
+      started = true;
+      if (musicOn) startMusic();
+    }
   }
   function play(name) { if (SFX[name]) { resume(); SFX[name](); } }
   function toggleMusic() {
