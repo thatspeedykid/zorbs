@@ -83,6 +83,21 @@ const ZPHYSICS = (() => {
     world.createCollider(cd, trackBody);
   }
 
+  // Smooth floor height at a position: interpolate the centerline between the nearest
+  // node and the next, so the floor reads as a continuous ramp, not faceted triangles.
+  function smoothFloorY(pos, hint) {
+    if (!nodes) return pos.y;
+    const i = Math.max(0, Math.min(nodes.length - 2, hint));
+    const a = nodes[i], b = nodes[i + 1];
+    // parameter t = how far 'pos' is between node a and b along the track direction
+    const abx = b.pos.x - a.pos.x, abz = b.pos.z - a.pos.z;
+    const apx = pos.x - a.pos.x, apz = pos.z - a.pos.z;
+    const abLen2 = abx * abx + abz * abz || 1;
+    let t = (apx * abx + apz * abz) / abLen2;
+    t = Math.max(0, Math.min(1, t));
+    return a.pos.y + (b.pos.y - a.pos.y) * t; // interpolated centerline height
+  }
+
   // Find the nearest centerline node index to a position (search around a hint).
   function nearestNode(pos, hint) {
     if (!nodes) return 0;
@@ -187,6 +202,18 @@ const ZPHYSICS = (() => {
         y: 0,                            // NO vertical drive - gravity keeps them planted
         z: fz * drive + laneFz,
       }, true);
+
+      // SMOOTH-FLOOR CORRECTION: glue the ball to the interpolated centerline height
+      // so it glides over the faceted mesh instead of hopping on every triangle seam.
+      const tpos = b.body.translation();
+      const targetY = smoothFloorY(tpos, b.hint) + BALL_R * 1.5; // sit on smooth surface
+      const dy = targetY - tpos.y;
+      // only correct small deviations (so genuine big drops/launches still happen)
+      if (Math.abs(dy) < 1.2) {
+        b.body.setTranslation({ x: tpos.x, y: tpos.y + dy * 0.5, z: tpos.z }, true);
+        const lv = b.body.linvel();
+        if (lv.y < 0 && dy > -0.05) b.body.setLinvel({ x: lv.x, y: lv.y * 0.3, z: lv.z }, true);
+      }
       if (b.boost > 0) b.boost = Math.max(0, b.boost - dt * 0.8);
 
       // soft speed clamp on horizontal velocity so balls don't run away
