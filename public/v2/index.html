@@ -22,9 +22,9 @@
 <div id="arm"><div class="box">▶ CLICK TO START</div></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="/v2/track.js?v=2q"></script>
-<script src="/v2/physics.js?v=2q"></script>
-<script src="/v2/cosmetics.js?v=2q"></script>
+<script src="/v2/track.js?v=2r"></script>
+<script src="/v2/physics.js?v=2r"></script>
+<script src="/v2/cosmetics.js?v=2r"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -122,8 +122,8 @@ function buildCourse(seed) {
 }
 
 // ---- balls (with cosmetic + spawn-anim hooks) ----
-const SPHERE_GEO = new THREE.SphereGeometry(BALL_R, 20, 16);
-const RING_GEO = new THREE.TorusGeometry(BALL_R*1.5, 0.05, 8, 24);
+const SPHERE_GEO = new THREE.SphereGeometry(BALL_R, 32, 24);   // smoother ball
+const RING_GEO = new THREE.TorusGeometry(BALL_R*1.5, 0.05, 12, 48); // smoother ring
 const zorbs = new Map(); // id -> { mesh, ring, color, spawnT, spawnAnim, eliminated }
 
 const PALETTE = [0xff3366,0x33ddff,0xffcc00,0x66ff88,0xcc66ff,0xff8844,0x44ffdd,0xff66aa];
