@@ -42,9 +42,17 @@ const ZTRACK = (() => {
 
   // Build the centerline as an array of nodes:
   //   { pos, dir, right, up, halfW, bank }  — everything physics & mesh need.
-  function buildCenterline(seed, targetNodes) {
+  function buildCenterline(seed, targetNodes, ballCount) {
     const rng = mulberry32(seed);
     const nodes = [];
+    ballCount = ballCount || 20;
+
+    // START PLATFORM: flat, wide staging area sized to the field.
+    // Default sized for 20 balls; grows in length as the field grows.
+    // Rows of ~6 balls; platform fits ceil(balls/6) rows with breathing room.
+    const rows = Math.max(4, Math.ceil(ballCount / 6));
+    const platformNodes = Math.max(10, Math.min(60, 8 + rows * 2)); // length scales w/ field
+    const platformHalfW = Math.max(WIDTH, WIDTH * (0.6 + ballCount / 60)); // width scales too
 
     // start pointing forward (+z), slightly downhill
     let pos = v(0, 0, 0);
@@ -60,6 +68,17 @@ const ZTRACK = (() => {
     let funnelLen = 1, funnelPos = 0;
 
     const worldUp = v(0, 1, 0);
+
+    // lay the flat start platform (no descent, extra wide)
+    for (let i = 0; i < platformNodes; i++) {
+      pos = add(pos, scale(v(0,0,1), STEP)); // straight, flat, +z
+      const right = norm(cross(v(0,0,1), worldUp));
+      const up = v(0,1,0);
+      nodes.push({ pos: {x:pos.x,y:pos.y,z:pos.z}, dir: v(0,0,1), right, up,
+        halfW: platformHalfW, bank: 0, kind: 'platform', tunnel: false, isPlatform: true });
+    }
+    // after the platform, tip into the downhill
+    heading = norm(v(0, -0.18, 1));
 
     for (let i = 0; i < targetNodes; i++) {
       // start a new move when the current one runs out
@@ -223,13 +242,16 @@ const ZTRACK = (() => {
   }
 
   // Top-level: given a seed and a target length (seconds-ish), produce everything.
-  function generate(seed, lengthNodes = 700) {
-    const nodes = buildCenterline(seed, lengthNodes);
+  function generate(seed, lengthNodes = 700, ballCount = 20) {
+    const nodes = buildCenterline(seed, lengthNodes, ballCount);
     const mesh = buildMesh(nodes);
     const collider = buildColliderBuffers(nodes);
     const start = nodes[0];
     const finish = nodes[nodes.length - 1];
-    return { seed, nodes, mesh, collider, start, finish };
+    // the platform spans the leading isPlatform nodes
+    const platformEnd = nodes.findIndex(n => !n.isPlatform);
+    return { seed, nodes, mesh, collider, start, finish,
+      platform: { startIdx: 0, endIdx: platformEnd < 0 ? 0 : platformEnd } };
   }
 
   return { generate, buildCenterline, buildMesh, buildColliderBuffers, mulberry32 };

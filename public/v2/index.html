@@ -22,9 +22,9 @@
 <div id="arm"><div class="box">▶ CLICK TO START</div></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="/v2/track.js?v=2d"></script>
-<script src="/v2/physics.js?v=2d"></script>
-<script src="/v2/cosmetics.js?v=2d"></script>
+<script src="/v2/track.js?v=2e"></script>
+<script src="/v2/physics.js?v=2e"></script>
+<script src="/v2/cosmetics.js?v=2e"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -84,7 +84,7 @@ function meshFrom(buffers, mat) {
 
 function buildCourse(seed) {
   trackMeshes.forEach(m => scene.remove(m)); trackMeshes = [];
-  track = ZTRACK.generate(seed, 700);
+  track = ZTRACK.generate(seed, 700, _fieldSize || 20);
   meshFrom(track.mesh.floor, FLOOR_MAT);
   meshFrom(track.mesh.walls, WALL_MAT);
   if (track.mesh.roof && track.mesh.roof.indices.length) meshFrom(track.mesh.roof, WALL_MAT);
@@ -135,28 +135,41 @@ function makeZorb(id, prefs, isSub) {
 
 // ---- game state ----
 let phase = 'idle';   // idle | spawning | racing | done
+let _fieldSize = 20;
 let spawnQueue = [], spawnTimer = 0;
 let winner = null;
 
 function startRace(seed, names) {
+  _fieldSize = names.length;
   buildCourse(seed);
   ZPHYSICS.clearBalls();
   zorbs.forEach(z => { scene.remove(z.mesh); if(z.ring) scene.remove(z.ring); });
   zorbs.clear(); colorIdx = 0; winner = null;
   // queue spawns at the start of the track, staggered for a nice entrance
   spawnQueue = names.map((nm, i) => ({ id: nm.id, prefs: nm.prefs, isSub: nm.isSub, delay: i*0.12 }));
-  spawnTimer = 0;
+  spawnTimer = 0; _spawnIndex = 0;
   phase = 'spawning';
   leaderEl.textContent = '';
 }
 
+let _spawnIndex = 0;
 function spawnOne(item) {
   makeZorb(item.id, item.prefs, item.isSub);
-  // spawn just above the start node so the drop/pop reads well
-  const s = track.start;
-  const lateral = (Math.random()-0.5) * track.start.halfW * 1.2;
-  const sx = s.pos.x + s.right.x*lateral, sz = s.pos.z + s.right.z*lateral;
-  ZPHYSICS.addBall(item.id, { x: sx, y: s.pos.y + 2.0, z: sz });
+  // Place in a grid on the platform: rows across the width, columns down its length,
+  // starting near the BACK so nobody spawns past the front edge.
+  const plat = track.platform;
+  const perRow = 6;
+  const row = Math.floor(_spawnIndex / perRow);
+  const col = _spawnIndex % perRow;
+  _spawnIndex++;
+  // node near the back third of the platform for this row
+  const backNodeIdx = Math.max(1, Math.min(plat.endIdx - 2, 2 + row * 2));
+  const n = track.nodes[backNodeIdx];
+  // spread columns across the width
+  const lateral = ((col + 0.5) / perRow - 0.5) * n.halfW * 1.7;
+  const sx = n.pos.x + n.right.x * lateral;
+  const sz = n.pos.z + n.right.z * lateral;
+  ZPHYSICS.addBall(item.id, { x: sx, y: n.pos.y + 1.0, z: sz });
 }
 
 // ---- main loop ----
@@ -237,18 +250,37 @@ function loop(now) {
 
 // ---- camera: follow the leader smoothly from behind & above ----
 const camTarget = new THREE.Vector3();
+const camPos = new THREE.Vector3();
+const lookAt = new THREE.Vector3();
+let camLeadIdx = 0;
 function updateCamera(dt) {
-  let focus = null;
+  if (!track) return;
+  // Follow the leader's PROGRESS (a centerline node index), not the ball's jittery
+  // position. The node is smooth, so the camera is smooth.
   const lead = ZPHYSICS.isReady() ? ZPHYSICS.leader() : null;
-  if (lead && zorbs.has(lead)) focus = zorbs.get(lead).mesh.position;
-  else if (track) focus = new THREE.Vector3(track.start.pos.x, track.start.pos.y, track.start.pos.z);
-  if (!focus) return;
-  camTarget.lerp(focus, 0.08);
-  // place camera up the slope behind the focus
-  const back = track ? track.nodes[Math.max(0, ZPHYSICS.nearestNode(camTarget, 0))] : null;
-  const desired = new THREE.Vector3(camTarget.x, camTarget.y + 9, camTarget.z - 14);
-  camera.position.lerp(desired, 0.06);
-  camera.lookAt(camTarget.x, camTarget.y - 1, camTarget.z + 6);
+  let idx = camLeadIdx;
+  if (lead != null) {
+    const snap = ZPHYSICS.snapshot()[lead];
+    if (snap) idx = snap.hint;
+  }
+  // ease the camera's node index forward (never snaps backward hard)
+  camLeadIdx += (idx - camLeadIdx) * 0.05;
+  const ci = Math.max(0, Math.min(track.nodes.length - 1, Math.round(camLeadIdx)));
+  const node = track.nodes[ci];
+  const ahead = track.nodes[Math.min(track.nodes.length - 1, ci + 10)];
+
+  // desired camera: behind & above the leader node, along the track direction
+  const dir = node.dir;
+  const desired = new THREE.Vector3(
+    node.pos.x - dir.x * 14,
+    node.pos.y + 9,
+    node.pos.z - dir.z * 14
+  );
+  camPos.lerp(desired, 0.05);          // smooth position
+  camera.position.copy(camPos);
+  // look at a point ahead down the track (stable target)
+  lookAt.lerp(new THREE.Vector3(ahead.pos.x, ahead.pos.y - 1, ahead.pos.z), 0.08);
+  camera.lookAt(lookAt);
 }
 
 // ---- boot ----

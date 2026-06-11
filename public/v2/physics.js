@@ -61,6 +61,10 @@ const ZPHYSICS = (() => {
     // gravity points straight down; the track slope turns that into forward motion
     world = new RAPIER.World({ x: 0, y: -24, z: 0 });
     world.timestep = 1/60;             // FIXED timestep = smooth, no jitter
+    // more solver iterations = stable resting contacts (less micro-bounce)
+    if (world.integrationParameters) {
+      world.integrationParameters.numSolverIterations = 8;
+    }
     ready = true;
     return true;
   }
@@ -199,9 +203,13 @@ const ZPHYSICS = (() => {
       const v = b.body.linvel();
       const hs = Math.hypot(v.x, v.z);
       const cap = MAX_SPEED * (b.boost > 0 ? 1.5 : 1);
-      if (hs > cap) {
-        const s = cap / hs;
-        b.body.setLinvel({ x: v.x * s, y: v.y, z: v.z * s }, true);
+      let nvx = v.x, nvy = v.y, nvz = v.z;
+      if (hs > cap) { const s = cap / hs; nvx = v.x * s; nvz = v.z * s; }
+      // ANTI-BOUNCE: kill spurious upward velocity (balls going downhill shouldn't rise).
+      // Allows gentle settling but cancels the pop-up bounces off mesh edges.
+      if (nvy > 1.5) nvy = 1.5 * 0.3;
+      if (nvx !== v.x || nvy !== v.y || nvz !== v.z) {
+        b.body.setLinvel({ x: nvx, y: nvy, z: nvz }, true);
       }
     }
     world.step();
