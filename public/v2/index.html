@@ -29,10 +29,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=2y"></script>
-<script src="/v2/track.js?v=2y"></script>
-<script src="/v2/physics.js?v=2y"></script>
-<script src="/v2/cosmetics.js?v=2y"></script>
+<script src="/v2/forks.js?v=2z"></script>
+<script src="/v2/track.js?v=2z"></script>
+<script src="/v2/physics.js?v=2z"></script>
+<script src="/v2/cosmetics.js?v=2z"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -259,6 +259,7 @@ function makeZorb(id, prefs, isSub) {
   const cos = ZCOSMETICS.resolveForPlayer(prefs, isSub, []);
   const color = (cos.skin.color != null) ? cos.skin.color : PALETTE[(colorIdx++) % PALETTE.length];
   const accent = new THREE.Color(color);
+  const baseCol = new THREE.Color(color);
 
   // ---- skin material builder (procedural textures, no external assets) ----
   const core = new THREE.Mesh(SPHERE_GEO, buildCoreMaterial(cos.skin, baseCol, accent));
