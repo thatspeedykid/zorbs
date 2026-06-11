@@ -69,6 +69,12 @@ const ZTRACK = (() => {
     let targetBank = 0;
     let moveKind = 'straight', extraDrop = 0, funnelMin = 0, tunnel = false;
     let funnelLen = 1, funnelPos = 0, spiralTurn = 0, spiralLen = 1, spiralCooldown = 0;
+    // MIXER: one guaranteed spinning bowl-drum, forced in at ~38% through the course.
+    // It's a wide multi-loop funnel (reuses the proven spiral physics) that balls churn
+    // around and drain out the center of — gravity funnels everything down, so it can't
+    // trap. A spinning cage is rendered around it for the bingo-mixer look.
+    const mixerAt = Math.floor(targetNodes * 0.38);
+    let mixerDone = false;
 
     const worldUp = v(0, 1, 0);
 
@@ -86,6 +92,17 @@ const ZTRACK = (() => {
     for (let i = 0; i < targetNodes; i++) {
       // start a new move when the current one runs out
       if (segLeft <= 0) {
+        // FORCED MIXER: once we pass the trigger point, the next new move is the mixer.
+        if (!mixerDone && i >= mixerAt) {
+          moveKind = 'mixer'; extraDrop = 0.32; funnelMin = 0; tunnel = false;
+          const dir = rng() < 0.5 ? 1 : -1;
+          spiralTurn = dir * 0.13;        // tight coil = many loops
+          targetTurn = spiralTurn;
+          targetBank = dir * 0.45;
+          segLeft = 132;                  // ~2.5 full loops
+          spiralLen = segLeft;
+          mixerDone = true;
+        } else {
         const r = rng();
         moveKind = 'straight'; extraDrop = 0; funnelMin = 0; tunnel = false;
         // MORE RANDOM: wider value ranges + an added SPIRAL move. Probabilities retuned
@@ -147,10 +164,11 @@ const ZTRACK = (() => {
           targetBank = dir * Math.min(0.55, sharp * 9);
           segLeft = 14 + Math.floor(rng() * 24);
         }
+        }
       }
 
-      // hold the spiral's strong turn for its whole duration (don't ease it away)
-      if (moveKind === 'spiral') targetTurn = spiralTurn;
+      // hold the spiral/mixer's strong turn for its whole duration (don't ease it away)
+      if (moveKind === 'spiral' || moveKind === 'mixer') targetTurn = spiralTurn;
       if (spiralCooldown > 0) spiralCooldown--;
 
       // ease turn and bank toward their targets (smooth transitions)
@@ -189,6 +207,12 @@ const ZTRACK = (() => {
         const ramp = Math.min(1, sp/0.25, (1-sp)/0.25);  // 0 at ends, 1 in the middle
         const e = Math.max(0, ramp); const es = e*e*(3-2*e);
         widthFactor *= 1 + 0.45 * es;                    // up to +45% in the middle only
+      } else if (moveKind === 'mixer') {
+        // MIXER BOWL: much wider than a spiral (the drum interior), eased in/out.
+        const sp = 1 - (segLeft / spiralLen);
+        const ramp = Math.min(1, sp/0.2, (1-sp)/0.2);
+        const e = Math.max(0, ramp); const es = e*e*(3-2*e);
+        widthFactor *= 1 + 1.3 * es;                     // up to +130% = big bowl
       }
       const halfW = WIDTH * widthFactor;
 
@@ -293,6 +317,26 @@ const ZTRACK = (() => {
     const platformEnd = nodes.findIndex(n => !n.isPlatform);
     const platStart = platformEnd < 0 ? 0 : platformEnd;
 
+    // MIXER DESCRIPTOR: find the mixer nodes and compute the bowl center / radius / top
+    // & bottom Y so the renderer can place a spinning cage around it. The spiral coils
+    // around a center point; we approximate it as the midpoint of the node bounding box.
+    let mixer = null;
+    const mIdx = [];
+    for (let i = 0; i < nodes.length; i++) if (nodes[i].kind === 'mixer') mIdx.push(i);
+    if (mIdx.length > 4) {
+      let minX=1e9,maxX=-1e9,minZ=1e9,maxZ=-1e9,minY=1e9,maxY=-1e9;
+      for (const i of mIdx) { const p = nodes[i].pos;
+        minX=Math.min(minX,p.x); maxX=Math.max(maxX,p.x);
+        minZ=Math.min(minZ,p.z); maxZ=Math.max(maxZ,p.z);
+        minY=Math.min(minY,p.y); maxY=Math.max(maxY,p.y); }
+      mixer = {
+        cx: (minX+maxX)/2, cz: (minZ+maxZ)/2,
+        yTop: maxY, yBottom: minY,
+        radius: Math.max(maxX-minX, maxZ-minZ)/2 + WIDTH,
+        startIdx: mIdx[0], endIdx: mIdx[mIdx.length-1],
+      };
+    }
+
     // FORKS: build split routes as a post-pass (deterministic via the same seed stream)
     let forks = [], forkAtIdx = new Map();
     if (_ZFORK) {
@@ -337,7 +381,7 @@ const ZTRACK = (() => {
 
     const start = nodes[0];
     const finish = nodes[nodes.length - 1];
-    return { seed, nodes, mesh, collider, start, finish,
+    return { seed, nodes, mesh, collider, start, finish, mixer,
       platform: { startIdx: 0, endIdx: platStart },
       forks, forkAtIdx, branchMeshes, branchColliders };
   }

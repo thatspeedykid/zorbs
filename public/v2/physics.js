@@ -186,6 +186,7 @@ const ZPHYSICS = (() => {
       hint: 0,
       speedMul: 0.9 + rnd * 0.25,         // 0.90–1.15 target speed
       lane: (rnd - 0.5) * 1.4,            // preferred lateral offset, spreads the pack
+      churnPhase: rnd * 6.2832,           // deterministic mixer-churn phase (no Math.random!)
       boost: 0,
       alive: true,
     });
@@ -283,9 +284,21 @@ const ZPHYSICS = (() => {
       const r = n.right;
       const offX = t.x - n.pos.x, offZ = t.z - n.pos.z;
       const curLat = offX * r.x + offZ * r.z;           // current lateral position
-      const latErr = (b.lane - curLat);                 // toward preferred lane
-      const laneFx = r.x * latErr * LANE_PULL;
-      const laneFz = r.z * latErr * LANE_PULL;
+      // MIXER CHURN: inside the spinning bowl-drum, weaken the lane pull and push each
+      // ball toward a WIDE wandering lane that drifts over time, so the pack spreads
+      // across the whole bowl and tumbles instead of running single-file. The bowl still
+      // funnels everyone to the exit under gravity, so this can't trap anyone.
+      const inMixer = (n.kind === 'mixer');
+      let lanePull = LANE_PULL, targetLane = b.lane;
+      if (inMixer) {
+        b._churn = (b._churn != null ? b._churn : b.churnPhase);  // deterministic start
+        b._churn += dt * (1.5 + b.speedMul);            // each ball wanders at its own rate
+        targetLane = Math.sin(b._churn) * n.halfW * 0.55; // sweep across the bowl (kept off the very edge)
+        lanePull = LANE_PULL * 0.5;                       // looser so they drift, not snap
+      }
+      const latErr = (targetLane - curLat);             // toward preferred/churn lane
+      const laneFx = r.x * latErr * lanePull;
+      const laneFz = r.z * latErr * lanePull;
 
       // total drive: forward + gentle lane-seek + boost. Applied as a force each
       // fixed step (consistent), and kept modest so ball-ball contacts still win.

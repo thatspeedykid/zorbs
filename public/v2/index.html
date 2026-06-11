@@ -29,10 +29,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=3e"></script>
-<script src="/v2/track.js?v=3e"></script>
-<script src="/v2/physics.js?v=3e"></script>
-<script src="/v2/cosmetics.js?v=3e"></script>
+<script src="/v2/forks.js?v=3f"></script>
+<script src="/v2/track.js?v=3f"></script>
+<script src="/v2/physics.js?v=3f"></script>
+<script src="/v2/cosmetics.js?v=3f"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -43,7 +43,7 @@ const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '3e';
+const BUILD = '3f';
 console.log('[ZORBS] build', BUILD);
 const leaderEl = document.getElementById('leader');
 function setStatus(txt, ok) {
@@ -152,6 +152,7 @@ function buildEnvMap() {
 
 // ---- build the course ----
 let track = null, trackMeshes = [];
+let mixerCage = null;   // spinning bingo cage group (rotated each frame in the loop)
 // FUTURISTIC GRID FLOOR: a dark glossy panel with glowing cyan grid lines (Tron look
 // from the reference shots). The grid is a procedural canvas texture used as BOTH the
 // emissive map (lines glow + bloom) and a subtle base map. Brightened from before so
@@ -255,6 +256,34 @@ function buildCourse(seed) {
   }
   buildRail(-1, 0x00e5ff);   // left: cyan
   buildRail( 1, 0xff8800);   // right: orange
+
+  // SPINNING BINGO CAGE around the mixer bowl. A glowing wireframe sphere-drum that
+  // rotates every frame — the balls churn inside the bowl while this cage spins over
+  // them, selling the bingo-mixer look. Purely visual (the bowl geometry does the work).
+  mixerCage = null;
+  if (track.mixer) {
+    const mx = track.mixer;
+    const cageR = mx.radius * 1.15;
+    const cy = (mx.yTop + mx.yBottom) / 2;
+    const group = new THREE.Group();
+    group.position.set(mx.cx, cy, mx.cz);
+    // wireframe sphere = the cage bars
+    const sphere = new THREE.Mesh(
+      new THREE.SphereGeometry(cageR, 16, 12),
+      new THREE.MeshBasicMaterial({ color:0x33e0ff, wireframe:true, transparent:true, opacity:0.5, blending:THREE.AdditiveBlending, depthWrite:false })
+    );
+    group.add(sphere);
+    // two bright equator rings for extra readability + bloom
+    for (const tilt of [0, Math.PI/2]) {
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(cageR, 0.4, 8, 48),
+        new THREE.MeshBasicMaterial({ color:0xfff0a0, transparent:true, opacity:0.7, blending:THREE.AdditiveBlending, depthWrite:false })
+      );
+      ring.rotation.x = Math.PI/2; ring.rotation.y = tilt; group.add(ring);
+    }
+    scene.add(group); trackMeshes.push(group);
+    mixerCage = group;
+  }
 
   // NEON ARCH GATES spanning the track every ~70 nodes. archR = halfW so the two legs
   // of the half-torus land exactly on the left/right floor edges (they were at 1.3x =
@@ -564,6 +593,7 @@ function loop(now) {
   }
 
   updateCamera(dt);
+  if (mixerCage) { mixerCage.rotation.y += dt * 0.9; mixerCage.rotation.x += dt * 0.35; }
   if (composer) composer.render(); else renderer.render(scene, camera);
 }
 
