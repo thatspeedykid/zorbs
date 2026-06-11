@@ -22,10 +22,17 @@
 <div id="arm"><div class="box">▶ CLICK TO START</div></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="/v2/forks.js?v=2u"></script>
-<script src="/v2/track.js?v=2u"></script>
-<script src="/v2/physics.js?v=2u"></script>
-<script src="/v2/cosmetics.js?v=2u"></script>
+<!-- post-processing for the AAA glow pass (these attach to the THREE global) -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+<script src="/v2/forks.js?v=2v"></script>
+<script src="/v2/track.js?v=2v"></script>
+<script src="/v2/physics.js?v=2v"></script>
+<script src="/v2/cosmetics.js?v=2v"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -46,20 +53,61 @@ const canvas = document.getElementById('c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
 renderer.setPixelRatio(Math.min(2, devicePixelRatio));
 renderer.setSize(innerWidth, innerHeight);
+// FILMIC LOOK: ACES tone mapping + sRGB output. This is the single biggest "game
+// engine" upgrade — highlights roll off like a camera instead of clipping to white.
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputEncoding = THREE.sRGBEncoding;
 const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(0x02050d, 0.006);
 const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 2000);
 
+// BLOOM: everything bright (rails, rings, arches, energy bands) gets a real glow halo.
+// Guarded so the page still runs plain if a CDN script fails to load.
+let composer = null;
+if (THREE.EffectComposer && THREE.UnrealBloomPass) {
+  composer = new THREE.EffectComposer(renderer);
+  composer.addPass(new THREE.RenderPass(scene, camera));
+  const bloom = new THREE.UnrealBloomPass(
+    new THREE.Vector2(innerWidth, innerHeight),
+    0.9,    // strength
+    0.5,    // radius
+    0.6     // threshold — only genuinely bright stuff blooms
+  );
+  composer.addPass(bloom);
+}
+
 addEventListener('resize', () => {
   renderer.setSize(innerWidth, innerHeight);
+  if (composer) composer.setSize(innerWidth, innerHeight);
   camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
 });
 
-// lights
-scene.add(new THREE.AmbientLight(0x445577, 0.6));
-const key = new THREE.DirectionalLight(0xaaccff, 1.3); key.position.set(20, 60, 10); scene.add(key);
-const rim = new THREE.DirectionalLight(0xff66cc, 0.5); rim.position.set(-30, 20, -20); scene.add(rim);
-const fill = new THREE.DirectionalLight(0x00e5ff, 0.4); fill.position.set(0, 10, -40); scene.add(fill);
+// lights (slightly hotter than before — ACES tone mapping eats some brightness)
+scene.add(new THREE.AmbientLight(0x445577, 0.75));
+const key = new THREE.DirectionalLight(0xaaccff, 1.6); key.position.set(20, 60, 10); scene.add(key);
+const rim = new THREE.DirectionalLight(0xff66cc, 0.6); rim.position.set(-30, 20, -20); scene.add(rim);
+const fill = new THREE.DirectionalLight(0x00e5ff, 0.5); fill.position.set(0, 10, -40); scene.add(fill);
+
+// STARFIELD: a sphere of additive points behind everything — instant depth + scale.
+(function stars(){
+  const COUNT = 1400;
+  const pos = new Float32Array(COUNT * 3);
+  for (let i = 0; i < COUNT; i++) {
+    // random direction, pushed out near the sky dome
+    const u = Math.random()*2-1, th = Math.random()*Math.PI*2;
+    const r = 650 + Math.random()*200;
+    const s = Math.sqrt(1-u*u);
+    pos[i*3]   = s*Math.cos(th)*r;
+    pos[i*3+1] = Math.abs(u)*r*0.9 + 20;      // keep stars above the horizon
+    pos[i*3+2] = s*Math.sin(th)*r;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const m = new THREE.PointsMaterial({ color:0x99ccff, size:2.2, sizeAttenuation:false,
+    transparent:true, opacity:0.85, blending:THREE.AdditiveBlending, depthWrite:false, fog:false });
+  const pts = new THREE.Points(g, m); pts.renderOrder = -999; scene.add(pts);
+})();
 // Environment map: render the gradient sky to a cube so metal balls reflect it (sci-fi sheen)
 let _envMap = null;
 function buildEnvMap() {
@@ -137,22 +185,27 @@ function buildCourse(seed) {
       if (bm.mesh.roof && bm.mesh.roof.indices.length) meshFrom(bm.mesh.roof, ROOF_MAT);
     }
   }
-  // glowing edge rails along the centerline for that Tron read
-  const railGeo = new THREE.BufferGeometry();
-  const pts = [];
-  for (const n of track.nodes) {
-    pts.push(n.pos.x - n.right.x*n.halfW, n.pos.y+0.05, n.pos.z - n.right.z*n.halfW);
+  // GLOWING TUBE RAILS along both track edges. The old rails were 1-pixel lines —
+  // tubes have real thickness, catch the bloom pass, and read as the Tron light-edge
+  // from any distance. Sampled every 4th node to keep the geometry cheap.
+  function buildRail(side, color) {
+    const pts = [];
+    for (let i = 0; i < track.nodes.length; i += 4) {
+      const n = track.nodes[i];
+      pts.push(new THREE.Vector3(
+        n.pos.x + n.right.x * n.halfW * side,
+        n.pos.y + 0.12,
+        n.pos.z + n.right.z * n.halfW * side
+      ));
+    }
+    const curve = new THREE.CatmullRomCurve3(pts);
+    const geo = new THREE.TubeGeometry(curve, pts.length * 2, 0.11, 6, false);
+    const mat = new THREE.MeshBasicMaterial({ color });   // unlit = full brightness = blooms
+    const mesh = new THREE.Mesh(geo, mat);
+    scene.add(mesh); trackMeshes.push(mesh);
   }
-  railGeo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
-  const rail = new THREE.Line(railGeo, new THREE.LineBasicMaterial({ color:0x00e5ff }));
-  scene.add(rail); trackMeshes.push(rail);
-  // right-side rail too
-  const railGeo2 = new THREE.BufferGeometry();
-  const pts2 = [];
-  for (const n of track.nodes) pts2.push(n.pos.x + n.right.x*n.halfW, n.pos.y+0.05, n.pos.z + n.right.z*n.halfW);
-  railGeo2.setAttribute('position', new THREE.Float32BufferAttribute(pts2, 3));
-  const rail2 = new THREE.Line(railGeo2, new THREE.LineBasicMaterial({ color:0xff8800 }));
-  scene.add(rail2); trackMeshes.push(rail2);
+  buildRail(-1, 0x00e5ff);   // left: cyan
+  buildRail( 1, 0xff8800);   // right: orange
 
   // NEON ARCH GATES spanning the track every ~70 nodes
   for (let i = track.platform.endIdx + 40; i < track.nodes.length - 10; i += 70) {
@@ -161,7 +214,7 @@ function buildCourse(seed) {
     const arch = new THREE.Mesh(
       new THREE.TorusGeometry(archR, 0.25, 10, 32, Math.PI),  // half torus = arch
       new THREE.MeshStandardMaterial({ color:0x0a2a4a, metalness:0.8, roughness:0.3,
-        emissive:0x00e5ff, emissiveIntensity:0.8 })
+        emissive:0x00e5ff, emissiveIntensity:2.2 })   // hot enough to bloom
     );
     arch.position.set(n.pos.x, n.pos.y, n.pos.z);
     // The half-torus arcs over the top half of its local XY plane. We want that plane to
@@ -360,7 +413,7 @@ function loop(now) {
   }
 
   updateCamera(dt);
-  renderer.render(scene, camera);
+  if (composer) composer.render(); else renderer.render(scene, camera);
 }
 
 // ---- camera: follow the leader smoothly from behind & above ----

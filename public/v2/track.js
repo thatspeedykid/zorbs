@@ -260,12 +260,21 @@ const ZTRACK = (() => {
       forks = built.forks; forkAtIdx = built.forkAtIdx;
     }
 
-    // Build mesh for the main path, then add each branch's ribbon.
+    // Build mesh for the main path, then add each fork's geometry.
+    // lanesOnly forks (v2.1) live INSIDE the widened main corridor, so the main mesh
+    // already covers their floor and outer walls — they only contribute the DIVIDER
+    // wall. (Legacy ribbon-style forks would build full branch meshes.)
     const mesh = buildMesh(nodes);
     const branchMeshes = [];
     for (const f of forks) {
-      for (const bid in f.branches) {
-        branchMeshes.push({ branchId: bid, mesh: buildMesh(f.branches[bid]) });
+      if (f.lanesOnly) {
+        const empty = { positions: new Float32Array(0), indices: new Uint32Array(0) };
+        branchMeshes.push({ branchId: f.id + '_divider',
+          mesh: { floor: empty, walls: f.divider, roof: empty } });
+      } else {
+        for (const bid in f.branches) {
+          branchMeshes.push({ branchId: bid, mesh: buildMesh(f.branches[bid]) });
+        }
       }
     }
 

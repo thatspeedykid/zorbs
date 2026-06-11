@@ -62,6 +62,8 @@ const ZPHYSICS = (() => {
     if (!ok) { ready = false; return false; }
     // gravity points straight down; the track slope turns that into forward motion
     world = new RAPIER.World({ x: 0, y: -26, z: 0 });
+    balls.clear();        // stale bodies belong to a previous world — removing them
+    trackBody = null;     // from a new world crashes the wasm. Fresh world, fresh refs.
     world.timestep = 1/60;             // FIXED timestep = smooth, no jitter
     // more solver iterations = stable resting contacts (less micro-bounce)
     if (world.integrationParameters) {
@@ -84,8 +86,10 @@ const ZPHYSICS = (() => {
     const bd = RAPIER.RigidBodyDesc.fixed();
     trackBody = world.createRigidBody(bd);
     const mk = (buf) => {
+      // friction 0.8 -> 0.3: high wall friction was scrubbing speed off any ball that
+      // touched a wall, helping pile-ups stall. Walls should redirect, not brake.
       const cd = RAPIER.ColliderDesc.trimesh(buf.positions, buf.indices)
-        .setRestitution(0.0).setFriction(0.8);
+        .setRestitution(0.0).setFriction(0.3);
       world.createCollider(cd, trackBody);
     };
     mk(colliderBuffers);
@@ -135,6 +139,23 @@ const ZPHYSICS = (() => {
     let best = hint || 0, bestD = Infinity;
     const lo = Math.max(0, (hint || 0) - 8);
     const hi = Math.min(N.length - 1, (hint || 0) + 24);
+    for (let i = lo; i <= hi; i++) {
+      const n = N[i].pos;
+      const dx = n.x - pos.x, dy = n.y - pos.y, dz = n.z - pos.z;
+      const d = dx * dx + dy * dy + dz * dz;
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    return best;
+  }
+
+  // Wide-window search for when we genuinely don't know where the ball is (rejoin,
+  // de-localization recovery). Same as nearestNode but with a caller-chosen radius.
+  function nearestNodeWide(pos, center, radius, nodeArr) {
+    const N = nodeArr || nodes;
+    if (!N) return 0;
+    let best = Math.max(0, Math.min(N.length - 1, center || 0)), bestD = Infinity;
+    const lo = Math.max(0, (center || 0) - radius);
+    const hi = Math.min(N.length - 1, (center || 0) + radius);
     for (let i = lo; i <= hi; i++) {
       const n = N[i].pos;
       const dx = n.x - pos.x, dy = n.y - pos.y, dz = n.z - pos.z;
@@ -223,11 +244,29 @@ const ZPHYSICS = (() => {
       const curNodes = ballNodes(b);
       b.hint = nearestNode(t, b.hint, curNodes);
 
+      // DE-LOCALIZATION GUARD: if the ball is impossibly far from the node it thinks
+      // it's at (knocked way back, bad rejoin, anything), the small hint window can
+      // never recover. Detect it and do one wide re-search to re-localize.
+      {
+        const hn = curNodes[Math.min(b.hint, curNodes.length - 1)];
+        const ddx = t.x - hn.pos.x, ddy = t.y - hn.pos.y, ddz = t.z - hn.pos.z;
+        const lim = Math.max(20, hn.halfW * 5);
+        if (ddx*ddx + ddy*ddy + ddz*ddz > lim*lim) {
+          b.hint = nearestNodeWide(t, b.hint, 300, curNodes);
+        }
+      }
+
       // REJOIN: if following a branch that rejoins and we've hit its end, return to main.
       if (b.branch && b.branchFork && b.branchFork.rejoin && b.hint >= curNodes.length - 2) {
-        // find nearest main node past the split to resume on
+        // THE OLD BUG: this searched main from node 0 with a tiny window, so a ball
+        // rejoining at main node ~450 got hint≈24, snapped to the wrong floor height,
+        // and was lost forever. Now: search a wide window around the KNOWN merge index
+        // the fork generator recorded for this branch.
+        const guess = (b.branchFork.rejoinIdx && b.branchFork.rejoinIdx[b.branch] != null)
+          ? b.branchFork.rejoinIdx[b.branch]
+          : b.branchFork.splitIdx + curNodes.length;
         b.branch = null; b.branchFork = null;
-        b.hint = nearestNode(t, 0, nodes);
+        b.hint = nearestNodeWide(t, guess, 80, nodes);
       }
 
       const N = ballNodes(b);
@@ -264,9 +303,21 @@ const ZPHYSICS = (() => {
       const floorY = smoothFloorY(tpos, b.hint, N) + BALL_R * 1.5;
       const gap = floorY - tpos.y;          // >0 means ball is below the surface
       const lv = b.body.linvel();
+      // THE FLOOR ENDS AT THE TRACK EDGE. The analytic floor is infinite math — without
+      // this check a ball knocked sideways past the edge kept gliding on an invisible
+      // floor and ground against the OUTSIDE of the wall forever (the stuck-ball bug),
+      // and "falls = elimination" could never trigger. On the track: smooth floor. Past
+      // the edge: nothing under you — gravity takes over, checkFalls() eliminates you.
+      // Platform is exempt (wide flat staging area, always supported).
+      const edgeMargin = BALL_R * 1.6;      // a ball can hang slightly over the lip
+      // On fork lanes the floor spans the whole widened corridor (n.corridorHalfW,
+      // measured from the MAIN centerline) — only the divider separates lanes.
+      const onSurface = n.isPlatform || (n.corridorHalfW != null
+        ? Math.abs(curLat + n.laneOff) <= n.corridorHalfW + edgeMargin
+        : Math.abs(curLat) <= n.halfW + edgeMargin);
       // GROUNDED = at or below the surface (within a small band). When grounded, rest the
       // ball ON the surface with zero vertical velocity. No gap-chasing = no vibration.
-      if (gap > -0.35) {                     // touching or pressed into floor
+      if (onSurface && gap > -0.35) {        // touching or pressed into floor
         b._grounded = true;
         // place on the surface
         b.body.setTranslation({ x: tpos.x, y: floorY, z: tpos.z }, true);
@@ -280,9 +331,29 @@ const ZPHYSICS = (() => {
         b.body.setLinvel({ x: lv.x, y: slopeVy, z: lv.z }, true);
       } else {
         b._grounded = false;
-        // genuinely airborne (knocked up / off a drop) - gravity brings it down
+        // genuinely airborne (knocked up / off a drop / past the edge) - gravity wins
       }
       if (b.boost > 0) b.boost = Math.max(0, b.boost - dt * 0.8);
+
+      // STUCK WATCHDOG: a live, grounded ball crawling below walking pace for several
+      // seconds is wedged (pile-up jam, wall pin, funnel throat). Give it a firm shove
+      // forward along the track plus a nudge back toward the centerline. Safety net for
+      // any jam we haven't predicted — players should never see a permanently dead ball.
+      const hs0 = Math.hypot(lv.x, lv.z);
+      if (b._grounded && hs0 < 0.6) {
+        b._stuckT = (b._stuckT || 0) + dt;
+        if (b._stuckT > 2.5) {
+          b._stuckT = 0;
+          const m = b.body.mass() || 1;
+          b.body.applyImpulse({
+            x: (fx - r.x * Math.sign(curLat) * 0.4) * m * 5,
+            y: 0.0,
+            z: (fz - r.z * Math.sign(curLat) * 0.4) * m * 5,
+          }, true);
+        }
+      } else {
+        b._stuckT = 0;
+      }
 
       // horizontal speed clamp so balls don't run away (vertical handled by floor logic)
       const v = b.body.linvel();

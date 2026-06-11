@@ -7,6 +7,7 @@
     "start": "npx serve public"
   },
   "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.19.3",
     "serve": "^14.2.1"
   }
 }

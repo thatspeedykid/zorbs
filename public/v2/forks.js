@@ -31,9 +31,15 @@ const ZFORK = (() => {
     let pos = v(startPose.pos.x, startPose.pos.y, startPose.pos.z);
     let heading = norm(v(startPose.dir.x, startPose.dir.y, startPose.dir.z));
     const right0 = norm(cross(heading, worldUp));
+    const rootHalfW = startPose.halfW;   // start as wide as the main track...
 
     for (let i = 0; i < steps; i++) {
       const t = i / steps;
+      // ...and taper down to the lane width over the first 30% (a clean Y mouth).
+      // Without this, a ball at the split was instantly "outside" the narrow lane
+      // and the floor edge-check would drop it.
+      const taper = Math.min(1, t / 0.3);
+      const hw = rootHalfW + (halfW - rootHalfW) * (taper * taper * (3 - 2 * taper));
       // ease the lateral drift in then straighten (smooth S to the side)
       const driftEase = Math.sin(Math.min(1, t * 1.6) * Math.PI * 0.5); // 0..1 ease-out
       const lateralStep = (sideOffset / steps) * (driftEase * 1.8);
@@ -45,46 +51,92 @@ const ZFORK = (() => {
       const right = norm(cross(heading, worldUp));
       const up = norm(cross(right, heading));
       nodes.push({ pos: v(pos.x,pos.y,pos.z), dir: v(heading.x,heading.y,heading.z),
-        right, up, halfW, bank: 0, kind: kind || 'branch', tunnel: false, branchId });
+        right, up, halfW: hw, bank: 0, kind: kind || 'branch', tunnel: false, branchId });
     }
     return nodes;
   }
 
   // Create one fork rooted at mainNodes[splitIdx]. Returns the fork descriptor.
   // rng = seeded function from track.js so forks are deterministic.
+  //
+  // ARCHITECTURE (v2.1): a fork is a SPLIT SECTION OF THE MAIN CORRIDOR, not a
+  // separate ribbon flying off sideways. The old approach built branches that drifted
+  // out of the main corridor — their walls crossed at the Y mouth (balls jammed into
+  // the wedge) and they passed straight through the main track's wall collider
+  // (balls ground against it forever). Both were stuck-ball bugs seen on stream.
+  // Now: the main corridor WIDENS over the fork region, a DIVIDER WALL rises down
+  // the middle, and the two lanes are offset copies of the main centerline. Walls
+  // can never cross, balls can never leave the corridor, and the lanes merge back
+  // perfectly because they ARE the main path. Flavor variety (steep shortcuts etc.)
+  // returns with the obstacle pass — lanes carry the obstacle flag already.
   function makeFork(mainNodes, splitIdx, rng, forkId, rejoin) {
-    const root = mainNodes[splitIdx];
     const flavor = ['risk','equal','obstacle'][Math.floor(rng()*3)];
+    const steps = 46 + Math.floor(rng() * 22);
+    const end = Math.min(mainNodes.length - 5, splitIdx + steps);
+    const len = end - splitIdx;
+    const WIDEN = 1.7;          // corridor grows to 1.7x width at the heart of the split
+    const obstacleLane = flavor === 'obstacle' ? (rng() < 0.5 ? 'A' : 'B') : null;
 
-    // branch lengths/feel depend on flavor
-    let aSteps, bSteps, aDrop, bDrop, aHalf, bHalf, aObstacle = false, bObstacle = false;
-    const baseHalf = root.halfW * 0.62;   // each lane narrower than the main track
-    if (flavor === 'risk') {
-      // A = short + steep + narrow (risky shortcut); B = long + gentle + wide (safe)
-      aSteps = 28 + Math.floor(rng()*10); aDrop = 0.55; aHalf = baseHalf*0.85;
-      bSteps = aSteps + 18 + Math.floor(rng()*14); bDrop = 0.28; bHalf = baseHalf*1.1;
-    } else if (flavor === 'obstacle') {
-      // A = clear; B = obstacle-laden (flagged for the obstacle pass)
-      aSteps = 34 + Math.floor(rng()*12); aDrop = 0.36; aHalf = baseHalf;
-      bSteps = aSteps; bDrop = 0.36; bHalf = baseHalf; bObstacle = true;
-    } else {
-      // equal-ish variety
-      aSteps = 32 + Math.floor(rng()*12); aDrop = 0.34; aHalf = baseHalf;
-      bSteps = aSteps + Math.floor((rng()-0.5)*8); bDrop = 0.34; bHalf = baseHalf;
+    const branchA = [], branchB = [];
+    const divPos = [], divIdx = [];
+    let divBase = 0;
+    let prevDivTop = null, prevDivBot = null;
+    const DIV_H = 1.5;
+
+    for (let k = 0; k <= len; k++) {
+      const m = mainNodes[splitIdx + k];
+      const t = k / len;
+      // ramp 0→1 over the first 30%, hold, then 1→0 over the last 30% (smooth split + merge)
+      const rampIn = Math.min(1, t / 0.3), rampOut = Math.min(1, (1 - t) / 0.3);
+      const e0 = Math.min(rampIn, rampOut);
+      const ease = e0 * e0 * (3 - 2 * e0);   // smoothstep
+
+      // WIDEN the main corridor itself (forks run before the mesh/collider build, so
+      // the widened walls and floor are generated automatically — no separate ribbon)
+      if (m._baseHalfW == null) m._baseHalfW = m.halfW;
+      m.halfW = m._baseHalfW * (1 + (WIDEN - 1) * ease);
+
+      // lane centerlines: offset copies of the main node, easing apart and back
+      const off = m.halfW * 0.5 * ease;
+      const laneHW = (m.halfW * 0.5 - 0.25) * ease + m._baseHalfW * (1 - ease);
+      const mk = (sign, bid, obst) => ({
+        pos: v(m.pos.x + m.right.x * off * sign, m.pos.y, m.pos.z + m.right.z * off * sign),
+        dir: v(m.dir.x, m.dir.y, m.dir.z),
+        right: v(m.right.x, m.right.y, m.right.z),
+        up: v(m.up.x, m.up.y, m.up.z),
+        halfW: laneHW, bank: m.bank, kind: 'fork', tunnel: false,
+        branchId: bid, obstacle: obst,
+        // FLOOR SUPPORT IS THE WHOLE WIDENED CORRIDOR, not just this lane. During the
+        // split/merge the lane centerline sweeps sideways faster than lane-pull can
+        // drag a ball, so checking support against the lane alone wrongly dropped
+        // balls mid-merge. The real floor spans the corridor — record it.
+        laneOff: off * sign,        // this lane's offset from the main centerline
+        corridorHalfW: m.halfW,     // widened corridor half-width at this node
+      });
+      branchA.push(mk(-1, forkId+'_A', obstacleLane === 'A'));
+      branchB.push(mk( 1, forkId+'_B', obstacleLane === 'B'));
+
+      // DIVIDER WALL down the main centerline wherever the lanes are meaningfully split
+      if (ease > 0.2) {
+        const bot = v(m.pos.x, m.pos.y, m.pos.z);
+        const top = v(m.pos.x, m.pos.y + DIV_H * Math.min(1, ease * 1.6), m.pos.z);
+        if (prevDivBot) {
+          divPos.push(prevDivBot.x, prevDivBot.y, prevDivBot.z,
+                      prevDivTop.x, prevDivTop.y, prevDivTop.z,
+                      top.x, top.y, top.z,
+                      bot.x, bot.y, bot.z);
+          divIdx.push(divBase, divBase+1, divBase+2, divBase, divBase+2, divBase+3);
+          divBase += 4;
+        }
+        prevDivBot = bot; prevDivTop = top;
+      } else { prevDivBot = prevDivTop = null; }
     }
 
-    const branchA = buildBranch(root, { steps:aSteps, sideOffset:-root.halfW*1.3,
-      dropRate:aDrop, halfW:aHalf, branchId: forkId+'_A', kind:'fork' });
-    const branchB = buildBranch(root, { steps:bSteps, sideOffset: root.halfW*1.3,
-      dropRate:bDrop, halfW:bHalf, branchId: forkId+'_B', kind:'fork' });
-
-    branchA.forEach(n => n.obstacle = aObstacle);
-    branchB.forEach(n => n.obstacle = bObstacle);
-
     return {
-      id: forkId, splitIdx, flavor, rejoin,
+      id: forkId, splitIdx, flavor, rejoin: true, lanesOnly: true,
       branches: { [forkId+'_A']: branchA, [forkId+'_B']: branchB },
-      // where branches end (for rejoin: bridge back to main; for split: separate finishes)
+      rejoinIdx: { [forkId+'_A']: end, [forkId+'_B']: end },
+      divider: { positions: new Float32Array(divPos), indices: new Uint32Array(divIdx) },
       endA: branchA[branchA.length-1],
       endB: branchB[branchB.length-1],
     };
@@ -100,7 +152,11 @@ const ZFORK = (() => {
     let n = 0;
     while (i < mainNodes.length - 140) {
       if (rng() < 0.6) {
-        const rejoin = rng() < 0.6;        // 60% rejoin, 40% separate finish
+        // ALL forks rejoin for now. "Separate finish" branches were only ~30-60 nodes
+        // long and dead-ended in midair — balls reached the end and sat there forever
+        // (one of the stuck-ball bugs). Real separate finishes need geometry that runs
+        // all the way to the end of the course; until that's built, rejoin everything.
+        const rejoin = true;
         const fork = makeFork(mainNodes, i, rng, 'fork'+(n++), rejoin);
         forks.push(fork);
         forkAtIdx.set(i, fork);
