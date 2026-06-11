@@ -158,19 +158,13 @@ const ZPHYSICS = (() => {
 
   // Fixed-timestep stepping with an accumulator. Call step(realDt) each frame;
   // it runs 0..N fixed sub-steps so physics is deterministic and smooth.
-  let acc = 0;
-  const FIXED = 1/60;
   function step(realDt) {
     if (!ready) return;
-    acc += Math.min(0.1, realDt);     // clamp to avoid spiral-of-death
-    let steps = 0;
-    while (acc >= FIXED && steps < 5) {
-      fixedStep(FIXED);
-      acc -= FIXED; steps++;
-    }
-    // if the frame was shorter than one fixed step, still step once so motion is
-    // continuous (slight time variance, but no stutter and no desync)
-    if (steps === 0) { fixedStep(FIXED); acc = 0; }
+    // ONE step per frame at the real frame time (clamped). Simulation time advances
+    // exactly with render time => no temporal aliasing => smooth at any refresh rate.
+    const dt = Math.max(0.002, Math.min(0.033, realDt));
+    world.timestep = dt;
+    fixedStep(dt);
   }
 
   function fixedStep(dt) {
@@ -212,15 +206,21 @@ const ZPHYSICS = (() => {
       const lv = b.body.linvel();
       // GROUNDED = at or below the surface (within a small band). When grounded, rest the
       // ball ON the surface with zero vertical velocity. No gap-chasing = no vibration.
-      if (gap > -0.25) {                     // touching or pressed into floor
+      if (gap > -0.35) {                     // touching or pressed into floor
         b._grounded = true;
-        // place exactly on the surface (small, one-time correction, not velocity-chased)
+        // place on the surface
         b.body.setTranslation({ x: tpos.x, y: floorY, z: tpos.z }, true);
-        // resting contact: zero vertical velocity (downward gravity AND any upward pop)
-        b.body.setLinvel({ x: lv.x, y: 0, z: lv.z }, true);
+        // SLOPE-FOLLOWING vertical velocity: look at where the floor is one step ahead
+        // along the ball's actual motion, and descend at exactly that rate. The ball
+        // rides the slope like a rail - it never separates, never flickers airborne.
+        const aheadX = tpos.x + lv.x * dt;
+        const aheadZ = tpos.z + lv.z * dt;
+        const floorAhead = smoothFloorY({ x: aheadX, y: tpos.y, z: aheadZ }, b.hint) + BALL_R * 1.5;
+        const slopeVy = (floorAhead - floorY) / dt;   // feed-forward, not feedback
+        b.body.setLinvel({ x: lv.x, y: slopeVy, z: lv.z }, true);
       } else {
         b._grounded = false;
-        // airborne above the floor (off a drop / knocked up) - let gravity bring it down
+        // genuinely airborne (knocked up / off a drop) - gravity brings it down
       }
       if (b.boost > 0) b.boost = Math.max(0, b.boost - dt * 0.8);
 
