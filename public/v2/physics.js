@@ -59,7 +59,7 @@ const ZPHYSICS = (() => {
     const ok = await load();
     if (!ok) { ready = false; return false; }
     // gravity points straight down; the track slope turns that into forward motion
-    world = new RAPIER.World({ x: 0, y: -30, z: 0 });
+    world = new RAPIER.World({ x: 0, y: -26, z: 0 });
     world.timestep = 1/60;             // FIXED timestep = smooth, no jitter
     // more solver iterations = stable resting contacts (less micro-bounce)
     if (world.integrationParameters) {
@@ -208,19 +208,20 @@ const ZPHYSICS = (() => {
       // velocity to close that gap smoothly this step. Clamp upward pop so it can't hop.
       const tpos = b.body.translation();
       const floorY = smoothFloorY(tpos, b.hint) + BALL_R * 1.5;
-      const gap = floorY - tpos.y;          // >0 means ball is below surface (needs to rise)
+      const gap = floorY - tpos.y;          // >0 means ball is below the surface
       const lv = b.body.linvel();
-      b._grounded = Math.abs(gap) < 0.4;
-      if (b._grounded) {
-        // glue to surface: vertical velocity = exactly what's needed to reach floorY,
-        // no overshoot. This is smooth and never teleports.
-        const needV = gap / dt;             // velocity to land exactly on the floor
-        b.body.setLinvel({ x: lv.x, y: needV, z: lv.z }, true);
-      } else if (gap > 0) {
-        // ball is well below (shouldn't happen) - rise gently
-        b.body.setLinvel({ x: lv.x, y: Math.min(gap / dt, 8), z: lv.z }, true);
+      // GROUNDED = at or below the surface (within a small band). When grounded, rest the
+      // ball ON the surface with zero vertical velocity. No gap-chasing = no vibration.
+      if (gap > -0.25) {                     // touching or pressed into floor
+        b._grounded = true;
+        // place exactly on the surface (small, one-time correction, not velocity-chased)
+        b.body.setTranslation({ x: tpos.x, y: floorY, z: tpos.z }, true);
+        // resting contact: zero vertical velocity (downward gravity AND any upward pop)
+        b.body.setLinvel({ x: lv.x, y: 0, z: lv.z }, true);
+      } else {
+        b._grounded = false;
+        // airborne above the floor (off a drop / knocked up) - let gravity bring it down
       }
-      // if airborne ABOVE the floor (gap<0), leave it - gravity brings it down naturally
       if (b.boost > 0) b.boost = Math.max(0, b.boost - dt * 0.8);
 
       // horizontal speed clamp so balls don't run away (vertical handled by floor logic)
