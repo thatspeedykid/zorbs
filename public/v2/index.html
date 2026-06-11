@@ -29,10 +29,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=3c"></script>
-<script src="/v2/track.js?v=3c"></script>
-<script src="/v2/physics.js?v=3c"></script>
-<script src="/v2/cosmetics.js?v=3c"></script>
+<script src="/v2/forks.js?v=3d"></script>
+<script src="/v2/track.js?v=3d"></script>
+<script src="/v2/physics.js?v=3d"></script>
+<script src="/v2/cosmetics.js?v=3d"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -43,7 +43,7 @@ const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '3c';
+const BUILD = '3d';
 console.log('[ZORBS] build', BUILD);
 const leaderEl = document.getElementById('leader');
 function setStatus(txt, ok) {
@@ -64,7 +64,9 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.15;
 renderer.outputEncoding = THREE.sRGBEncoding;
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x02050d, 0.006);
+// fog softened: density 0.006 with a near-BLACK color was fading everything beyond
+// ~100 units to black — a major contributor to the 'black track'. Deep blue + gentle.
+scene.fog = new THREE.FogExp2(0x0a2040, 0.0018);
 const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 2000);
 
 // BLOOM: everything bright (rails, rings, arches, energy bands) gets a real glow halo.
@@ -154,8 +156,10 @@ let track = null, trackMeshes = [];
 // from the reference shots). The grid is a procedural canvas texture used as BOTH the
 // emissive map (lines glow + bloom) and a subtle base map. Brightened from before so
 // the floor NEVER renders near-black: lighter base, real emissive floor, moderate metal.
+let _gridCanvas = null;
 function gridTexture() {
   const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d');
+  _gridCanvas = c;
   // PANEL BACKGROUND must be clearly visible — a near-black panel (my earlier bug) made
   // the whole floor read black, since this drives both the base color and the emissive.
   const g = x.createLinearGradient(0,0,0,128);
@@ -171,16 +175,13 @@ function gridTexture() {
   return t;
 }
 const _gridTex = gridTexture(), _gridEmis = gridTexture();
-const FLOOR_MAT = new THREE.MeshStandardMaterial({
-  // FAILSAFE BRIGHTNESS: the floor is now driven primarily by EMISSION (the lit-panel
-  // look), not by lights or reflections. Why: ACES tone mapping crushes dark tones and
-  // metalness kills diffuse, so if the env reflection fails for ANY reason a half-metal
-  // dark floor renders pure black (the recurring bug). Emissive doesn't care about
-  // lights, env, or camera angle — this floor shows up no matter what.
-  color:0xbfd0ff, map:_gridTex, metalness:0.25, roughness:0.45, side:THREE.DoubleSide,
-  emissive:0xffffff, emissiveMap:_gridEmis, emissiveIntensity:0.85, envMapIntensity:0.7
-});
-const WALL_MAT  = new THREE.MeshStandardMaterial({ color:0x12244e, metalness:0.4, roughness:0.4, transparent:true, opacity:0.55, side:THREE.DoubleSide, emissive:0x0088dd, emissiveIntensity:0.4 });
+// FLOOR IS NOW UNLIT (MeshBasicMaterial). Evidence from build 3c screenshot: every
+// UNLIT material (rails, rings, trails) renders correctly while every LIT material
+// (floor, walls, ball cores) renders near-black. Unlit = texture color straight to
+// screen — immune to lights, env maps, and ACES shadow-crushing. If THIS still shows
+// black, the texture/UVs are broken and the on-screen diagnostic will prove it.
+const FLOOR_MAT = new THREE.MeshBasicMaterial({ map:_gridTex, side:THREE.DoubleSide });
+const WALL_MAT  = new THREE.MeshStandardMaterial({ color:0x12244e, metalness:0.2, roughness:0.5, transparent:true, opacity:0.55, side:THREE.DoubleSide, emissive:0x1099ee, emissiveIntensity:0.8 });
 const ROOF_MAT  = new THREE.MeshStandardMaterial({ color:0x0a1a3a, metalness:0.6, roughness:0.3, transparent:true, opacity:0.28, side:THREE.DoubleSide, emissive:0x0066aa, emissiveIntensity:0.25, depthWrite:false });
 
 function meshFrom(buffers, mat, weld) {
@@ -219,10 +220,11 @@ function weldVertices(geo) {
 function buildCourse(seed) {
   trackMeshes.forEach(m => scene.remove(m)); trackMeshes = [];
   // wire the (now-built) env map into the glossy floor/wall so they reflect the sky+rails
-  if (_envMap) { FLOOR_MAT.envMap = _envMap; WALL_MAT.envMap = _envMap; ROOF_MAT.envMap = _envMap;
-    FLOOR_MAT.needsUpdate = WALL_MAT.needsUpdate = ROOF_MAT.needsUpdate = true; }
+  if (_envMap) { WALL_MAT.envMap = _envMap; ROOF_MAT.envMap = _envMap;
+    WALL_MAT.needsUpdate = ROOF_MAT.needsUpdate = true; }
   track = ZTRACK.generate(seed, 1100, _fieldSize || 20);
-  meshFrom(track.mesh.floor, FLOOR_MAT, true);   // weld = smooth-shaded ramp
+  const floorMesh = meshFrom(track.mesh.floor, FLOOR_MAT, true);   // weld = smooth-shaded ramp
+  showDiag(floorMesh);
   meshFrom(track.mesh.walls, WALL_MAT);
   if (track.mesh.roof && track.mesh.roof.indices.length) meshFrom(track.mesh.roof, ROOF_MAT);
   // draw each fork branch ribbon
@@ -311,7 +313,10 @@ function makeZorb(id, prefs, isSub) {
   // MOTION TRAIL: a short fading streak of the ball's recent positions, in its color,
   // additive so it blooms into a speed-light. Faster ball = longer visible streak.
   const TRAIL_LEN = 14;
+  // prefilled at first physics sync (see loop) — a zero-filled buffer drew giant lines
+  // from each ball to the world origin (the huge red streak across the screen).
   const trailPos = new Float32Array(TRAIL_LEN * 3);
+  trailPos._unset = true;
   const trailGeo = new THREE.BufferGeometry();
   trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPos, 3));
   const trail = new THREE.Line(trailGeo, new THREE.LineBasicMaterial({
@@ -411,6 +416,34 @@ function buildCoreMaterial(skin, baseCol, accent) {
   if (THREE.MeshPhysicalMaterial) { params.clearcoat = 0.6; params.clearcoatRoughness = 0.15;
     return new THREE.MeshPhysicalMaterial(params); }
   return new THREE.MeshStandardMaterial(params);
+}
+
+// ---- TEMP DIAGNOSTIC (build 3d): on-screen ground truth for the black-floor hunt.
+// Shows the actual grid texture canvas (if you can see the grid image bottom-right,
+// the texture is fine), the floor mesh's runtime state, and any JS errors. Will be
+// removed once the floor is confirmed working.
+const _errLog = [];
+window.addEventListener('error', e => { _errLog.push(e.message); const el = document.getElementById('diagerr'); if (el) el.textContent = _errLog.slice(-3).join('\n'); });
+function showDiag(floorMesh) {
+  let d = document.getElementById('zdiag');
+  if (!d) { d = document.createElement('div'); d.id = 'zdiag';
+    d.style.cssText = 'position:fixed;bottom:8px;right:8px;z-index:99;background:rgba(0,0,0,.75);color:#9fefff;font:11px monospace;padding:8px;border:1px solid #2af;border-radius:6px;max-width:220px;';
+    document.body.appendChild(d); }
+  d.innerHTML = '';
+  if (_gridCanvas) { const img = new Image(); img.src = _gridCanvas.toDataURL(); img.style.cssText = 'width:96px;height:96px;display:block;margin-bottom:4px;'; d.appendChild(img); }
+  const pre = document.createElement('pre'); pre.style.margin = '0';
+  pre.textContent = [
+    'diag build ' + BUILD,
+    'floor: ' + floorMesh.material.type,
+    'map: ' + (floorMesh.material.map ? 'yes' : 'NO'),
+    'uv attr: ' + (floorMesh.geometry.attributes.uv ? 'yes' : 'NO'),
+    'verts: ' + floorMesh.geometry.attributes.position.count,
+    'fog: ' + (scene.fog ? scene.fog.density : 'none'),
+  ].join('\n');
+  d.appendChild(pre);
+  const err = document.createElement('pre'); err.id = 'diagerr'; err.style.cssText = 'margin:4px 0 0;color:#ff8080;white-space:pre-wrap;';
+  err.textContent = _errLog.slice(-3).join('\n');
+  d.appendChild(err);
 }
 
 // ---- game state ----
@@ -526,6 +559,7 @@ function loop(now) {
       }
       // MOTION TRAIL: shift positions back one slot, write current at the head.
       const tp = z.trailPos, n = z.trailLen;
+      if (tp._unset) { for (let k=0;k<n;k++){ tp[k*3]=s.x; tp[k*3+1]=s.y; tp[k*3+2]=s.z; } tp._unset = false; }
       for (let k = n - 1; k > 0; k--) {
         tp[k*3] = tp[(k-1)*3]; tp[k*3+1] = tp[(k-1)*3+1]; tp[k*3+2] = tp[(k-1)*3+2];
       }
