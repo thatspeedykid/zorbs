@@ -68,7 +68,7 @@ const ZTRACK = (() => {
     let bank = 0;          // current banking angle
     let targetBank = 0;
     let moveKind = 'straight', extraDrop = 0, funnelMin = 0, tunnel = false;
-    let funnelLen = 1, funnelPos = 0, spiralTurn = 0;
+    let funnelLen = 1, funnelPos = 0, spiralTurn = 0, spiralLen = 1, spiralCooldown = 0;
 
     const worldUp = v(0, 1, 0);
 
@@ -117,31 +117,41 @@ const ZTRACK = (() => {
           funnelMin = 0.38 + rng() * 0.16;
           segLeft = 16 + Math.floor(rng() * 14);
           funnelLen = segLeft;
-        } else if (r < 0.83) {
-          // SPIRAL DROP-FUNNEL: the science-museum coin vortex. Occasional feature, not
-          // the whole map — kept rare (~5%) and shorter (~1–1.5 loops) so courses stay
-          // varied. The centerline coils into a descending helix with a steep inward
-          // bank so balls ride the wall and spiral down before the track continues.
+        } else if (r < 0.80 && spiralCooldown <= 0) {
+          // SPIRAL DROP-FUNNEL — now RARE (cooldown prevents clustering) and gentler so
+          // it doesn't create a catch-lip. The bump at spiral start/end was a hard step
+          // in width (x1.6 applied instantly) and bank; both are eased now (see below).
           moveKind = 'spiral';
           const dir = rng() < 0.5 ? 1 : -1;
-          spiralTurn = dir * (0.10 + rng() * 0.03);
+          spiralTurn = dir * (0.09 + rng() * 0.025);
           targetTurn = spiralTurn;
-          targetBank = dir * 0.6;
-          extraDrop = 0.5 + rng() * 0.3;
-          segLeft = 44 + Math.floor(rng() * 30);        // ~1–1.5 loops
-        } else {
-          // TUNNEL: enclosed run with a ceiling
+          targetBank = dir * 0.4;                       // gentler (was 0.6) — less catch
+          extraDrop = 0.45 + rng() * 0.25;
+          segLeft = 40 + Math.floor(rng() * 22);
+          spiralLen = segLeft;
+          spiralCooldown = 220;                         // no another spiral for ~220 nodes
+        } else if (r < 0.86) {
+          // TUNNEL: enclosed run with a ceiling (capped so it doesn't dominate)
           moveKind = 'tunnel';
           const dir = rng() < 0.5 ? 1 : -1;
           targetTurn = dir * (rng() * 0.025);
           targetBank = 0;
           tunnel = true;
-          segLeft = 18 + Math.floor(rng() * 20);
+          segLeft = 16 + Math.floor(rng() * 16);
+        } else {
+          // leftover (incl. spiral slot when on cooldown) -> a sweeping banked turn,
+          // keeping courses varied instead of defaulting to more tunnels.
+          const dir = rng() < 0.5 ? 1 : -1;
+          const sharp = 0.02 + rng() * 0.05;
+          targetTurn = dir * sharp;
+          targetBank = dir * Math.min(0.55, sharp * 9);
+          segLeft = 14 + Math.floor(rng() * 24);
         }
       }
 
       // hold the spiral's strong turn for its whole duration (don't ease it away)
       if (moveKind === 'spiral') targetTurn = spiralTurn;
+      if (spiralCooldown > 0) spiralCooldown--;
 
       // ease turn and bank toward their targets (smooth transitions)
       turn += (targetTurn - turn) * 0.12;
@@ -173,7 +183,12 @@ const ZTRACK = (() => {
         const throat = 1 - Math.sin(funnelPos * Math.PI) * (1 - funnelMin); // V then back
         widthFactor *= throat;
       } else if (moveKind === 'spiral') {
-        widthFactor *= 1.6;   // a wide bowl so balls have room to circle the wall
+        // EASE the bowl width in over the first 25% and out over the last 25% so there
+        // is no hard step (the 'bump' you saw). smoothstep on both ends.
+        const sp = 1 - (segLeft / spiralLen);            // 0..1 through the spiral
+        const ramp = Math.min(1, sp/0.25, (1-sp)/0.25);  // 0 at ends, 1 in the middle
+        const e = Math.max(0, ramp); const es = e*e*(3-2*e);
+        widthFactor *= 1 + 0.45 * es;                    // up to +45% in the middle only
       }
       const halfW = WIDTH * widthFactor;
 

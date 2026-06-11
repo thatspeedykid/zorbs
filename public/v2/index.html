@@ -29,10 +29,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=3d"></script>
-<script src="/v2/track.js?v=3d"></script>
-<script src="/v2/physics.js?v=3d"></script>
-<script src="/v2/cosmetics.js?v=3d"></script>
+<script src="/v2/forks.js?v=3e"></script>
+<script src="/v2/track.js?v=3e"></script>
+<script src="/v2/physics.js?v=3e"></script>
+<script src="/v2/cosmetics.js?v=3e"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -43,7 +43,7 @@ const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '3d';
+const BUILD = '3e';
 console.log('[ZORBS] build', BUILD);
 const leaderEl = document.getElementById('leader');
 function setStatus(txt, ok) {
@@ -223,8 +223,7 @@ function buildCourse(seed) {
   if (_envMap) { WALL_MAT.envMap = _envMap; ROOF_MAT.envMap = _envMap;
     WALL_MAT.needsUpdate = ROOF_MAT.needsUpdate = true; }
   track = ZTRACK.generate(seed, 1100, _fieldSize || 20);
-  const floorMesh = meshFrom(track.mesh.floor, FLOOR_MAT, true);   // weld = smooth-shaded ramp
-  showDiag(floorMesh);
+  meshFrom(track.mesh.floor, FLOOR_MAT, true);   // weld = smooth-shaded ramp
   meshFrom(track.mesh.walls, WALL_MAT);
   if (track.mesh.roof && track.mesh.roof.indices.length) meshFrom(track.mesh.roof, ROOF_MAT);
   // draw each fork branch ribbon
@@ -257,16 +256,19 @@ function buildCourse(seed) {
   buildRail(-1, 0x00e5ff);   // left: cyan
   buildRail( 1, 0xff8800);   // right: orange
 
-  // NEON ARCH GATES spanning the track every ~70 nodes
+  // NEON ARCH GATES spanning the track every ~70 nodes. archR = halfW so the two legs
+  // of the half-torus land exactly on the left/right floor edges (they were at 1.3x =
+  // floating outside the track = 'not attached'). Lowered slightly so legs touch floor.
   for (let i = track.platform.endIdx + 40; i < track.nodes.length - 10; i += 70) {
     const n = track.nodes[i];
-    const archR = n.halfW * 1.3;
+    if (n.kind === 'spiral' || n.kind === 'tunnel') continue;   // skip messy sections
+    const archR = n.halfW * 1.02;
     const arch = new THREE.Mesh(
-      new THREE.TorusGeometry(archR, 0.25, 10, 32, Math.PI),  // half torus = arch
+      new THREE.TorusGeometry(archR, 0.22, 10, 32, Math.PI),  // half torus = arch
       new THREE.MeshStandardMaterial({ color:0x0a2a4a, metalness:0.8, roughness:0.3,
         emissive:0x00e5ff, emissiveIntensity:2.2 })   // hot enough to bloom
     );
-    arch.position.set(n.pos.x, n.pos.y, n.pos.z);
+    arch.position.set(n.pos.x, n.pos.y - 0.1, n.pos.z);
     // The half-torus arcs over the top half of its local XY plane. We want that plane to
     // face along the track direction so the arch spans left-right and rises overhead.
     // Build a basis: across = n.right (arch width), up = world up, forward = n.dir.
@@ -293,7 +295,7 @@ const PALETTE = [0xff3366,0x33ddff,0xffcc00,0x66ff88,0xcc66ff,0xff8844,0x44ffdd,
 let colorIdx = 0;
 
 function makeZorb(id, prefs, isSub) {
-  const cos = ZCOSMETICS.resolveForPlayer(prefs, isSub, []);
+  const cos = ZCOSMETICS.resolveForPlayer(prefs, isSub, prefs.owned || []);
   const color = (cos.skin.color != null) ? cos.skin.color : PALETTE[(colorIdx++) % PALETTE.length];
   const accent = new THREE.Color(color);
   const baseCol = new THREE.Color(color);
@@ -416,34 +418,6 @@ function buildCoreMaterial(skin, baseCol, accent) {
   if (THREE.MeshPhysicalMaterial) { params.clearcoat = 0.6; params.clearcoatRoughness = 0.15;
     return new THREE.MeshPhysicalMaterial(params); }
   return new THREE.MeshStandardMaterial(params);
-}
-
-// ---- TEMP DIAGNOSTIC (build 3d): on-screen ground truth for the black-floor hunt.
-// Shows the actual grid texture canvas (if you can see the grid image bottom-right,
-// the texture is fine), the floor mesh's runtime state, and any JS errors. Will be
-// removed once the floor is confirmed working.
-const _errLog = [];
-window.addEventListener('error', e => { _errLog.push(e.message); const el = document.getElementById('diagerr'); if (el) el.textContent = _errLog.slice(-3).join('\n'); });
-function showDiag(floorMesh) {
-  let d = document.getElementById('zdiag');
-  if (!d) { d = document.createElement('div'); d.id = 'zdiag';
-    d.style.cssText = 'position:fixed;bottom:8px;right:8px;z-index:99;background:rgba(0,0,0,.75);color:#9fefff;font:11px monospace;padding:8px;border:1px solid #2af;border-radius:6px;max-width:220px;';
-    document.body.appendChild(d); }
-  d.innerHTML = '';
-  if (_gridCanvas) { const img = new Image(); img.src = _gridCanvas.toDataURL(); img.style.cssText = 'width:96px;height:96px;display:block;margin-bottom:4px;'; d.appendChild(img); }
-  const pre = document.createElement('pre'); pre.style.margin = '0';
-  pre.textContent = [
-    'diag build ' + BUILD,
-    'floor: ' + floorMesh.material.type,
-    'map: ' + (floorMesh.material.map ? 'yes' : 'NO'),
-    'uv attr: ' + (floorMesh.geometry.attributes.uv ? 'yes' : 'NO'),
-    'verts: ' + floorMesh.geometry.attributes.position.count,
-    'fog: ' + (scene.fog ? scene.fog.density : 'none'),
-  ].join('\n');
-  d.appendChild(pre);
-  const err = document.createElement('pre'); err.id = 'diagerr'; err.style.cssText = 'margin:4px 0 0;color:#ff8080;white-space:pre-wrap;';
-  err.textContent = _errLog.slice(-3).join('\n');
-  d.appendChild(err);
 }
 
 // ---- game state ----
@@ -641,10 +615,18 @@ async function boot() {
   buildCourse(Math.floor(Math.random()*999999));
   // give the physics the track collider
   ZPHYSICS.setTrack(track.collider, track.nodes, { forks: track.forks, branchColliders: track.branchColliders });
-  // demo: spawn a field of test balls and race
+  // demo: spawn a field of test balls and race. A few are given the premium skins so
+  // Galaxy / Lava / Glass / Chrome are actually visible in the demo (they were all
+  // Classic before, so the paid skins never showed on screen).
   const names = [];
   const demo = ['NightCrawl','PixelBolt','VoidStar','GhostRide','TurboDrift','CyberDash','NeonByte','PlasmaKing','OrbMaster','MarsScum','GlitchQ','HyperV'];
-  for (let i=0;i<demo.length;i++) names.push({ id: demo[i], prefs:{}, isSub: i%3===0 });
+  const demoSkins = { NightCrawl:'galaxy', PixelBolt:'lava', VoidStar:'glass', GhostRide:'chrome', PlasmaKing:'galaxy', OrbMaster:'lava' };
+  for (let i=0;i<demo.length;i++) {
+    const skin = demoSkins[demo[i]];
+    // prefs.skin is the key the resolver reads; owned unlocks 'paid' tier (Galaxy/Lava).
+    names.push({ id: demo[i], isSub: true,
+      prefs: skin ? { skin, owned: ['Galaxy','Lava'] } : {} });
+  }
   startRace(track.seed, names);
 }
 
