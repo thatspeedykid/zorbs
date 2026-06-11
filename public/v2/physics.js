@@ -16,8 +16,10 @@ const ZPHYSICS = (() => {
   let world = null;
   let ready = false;
   let trackBody = null;
-  const balls = new Map(); // id -> { body, drive, lane, speedMul, alive }
-  let nodes = null;        // centerline for steering
+  const balls = new Map(); // id -> { body, drive, lane, speedMul, alive, branch }
+  let nodes = null;        // main centerline for steering
+  let forks = null;        // fork descriptors
+  let branchNodes = {};    // branchId -> node array (separate from main)
   let BALL_R = 0.5;
   let lastError = null;
 
@@ -69,18 +71,32 @@ const ZPHYSICS = (() => {
     return true;
   }
 
-  // Install the track as a solid trimesh collider, and remember the centerline.
-  function setTrack(colliderBuffers, centerline) {
+  // Install the track collider (walls/roof) + remember centerline + fork branches.
+  // forkData = { forks, branchColliders } from the track generator (optional).
+  function setTrack(colliderBuffers, centerline, forkData) {
     if (!ready) return;
     if (trackBody) { world.removeRigidBody(trackBody); trackBody = null; }
     nodes = centerline;
+    forks = (forkData && forkData.forks) || null;
+    branchNodes = {};
+    if (forks) for (const f of forks) for (const bid in f.branches) branchNodes[bid] = f.branches[bid];
+
     const bd = RAPIER.RigidBodyDesc.fixed();
     trackBody = world.createRigidBody(bd);
-    const cd = RAPIER.ColliderDesc
-      .trimesh(colliderBuffers.positions, colliderBuffers.indices)
-      .setRestitution(0.0)        // no bounce off the track surface = no hopping
-      .setFriction(0.8);          // grip so balls roll instead of skid
-    world.createCollider(cd, trackBody);
+    const mk = (buf) => {
+      const cd = RAPIER.ColliderDesc.trimesh(buf.positions, buf.indices)
+        .setRestitution(0.0).setFriction(0.8);
+      world.createCollider(cd, trackBody);
+    };
+    mk(colliderBuffers);
+    if (forkData && forkData.branchColliders) {
+      for (const bc of forkData.branchColliders) mk(bc.buffers);
+    }
+  }
+
+  // The node list a ball is currently following (its committed branch, or main path).
+  function ballNodes(b) {
+    return (b && b.branch && branchNodes[b.branch]) ? branchNodes[b.branch] : nodes;
   }
 
   // Smooth floor height at a position: interpolate the centerline between the nearest
@@ -95,31 +111,32 @@ const ZPHYSICS = (() => {
       (-p0 + 3 * p1 - 3 * p2 + p3) * t3
     );
   }
-  function smoothFloorY(pos, hint) {
-    if (!nodes) return pos.y;
-    const i = Math.max(0, Math.min(nodes.length - 2, hint));
-    const a = nodes[i], b = nodes[i + 1];
+  function smoothFloorY(pos, hint, nodeArr) {
+    const N = nodeArr || nodes;
+    if (!N) return pos.y;
+    const i = Math.max(0, Math.min(N.length - 2, hint));
+    const a = N[i], b = N[i + 1];
     // where is pos between node a and b? (projected onto the segment)
     const abx = b.pos.x - a.pos.x, abz = b.pos.z - a.pos.z;
     const apx = pos.x - a.pos.x, apz = pos.z - a.pos.z;
     const abLen2 = abx * abx + abz * abz || 1;
-    let t = (apx * abx + apz * abz) / abLen2;
-    t = Math.max(0, Math.min(1, t));
-    // Catmull-Rom through the 4 surrounding nodes' heights = smooth ramp, no facets
-    const y0 = nodes[Math.max(0, i - 1)].pos.y;
+    let tt = (apx * abx + apz * abz) / abLen2;
+    tt = Math.max(0, Math.min(1, tt));
+    const y0 = N[Math.max(0, i - 1)].pos.y;
     const y1 = a.pos.y, y2 = b.pos.y;
-    const y3 = nodes[Math.min(nodes.length - 1, i + 2)].pos.y;
-    return catmull(y0, y1, y2, y3, t);
+    const y3 = N[Math.min(N.length - 1, i + 2)].pos.y;
+    return catmull(y0, y1, y2, y3, tt);
   }
 
   // Find the nearest centerline node index to a position (search around a hint).
-  function nearestNode(pos, hint) {
-    if (!nodes) return 0;
+  function nearestNode(pos, hint, nodeArr) {
+    const N = nodeArr || nodes;
+    if (!N) return 0;
     let best = hint || 0, bestD = Infinity;
     const lo = Math.max(0, (hint || 0) - 8);
-    const hi = Math.min(nodes.length - 1, (hint || 0) + 24);
+    const hi = Math.min(N.length - 1, (hint || 0) + 24);
     for (let i = lo; i <= hi; i++) {
-      const n = nodes[i].pos;
+      const n = N[i].pos;
       const dx = n.x - pos.x, dy = n.y - pos.y, dz = n.z - pos.z;
       const d = dx * dx + dy * dy + dz * dz;
       if (d < bestD) { bestD = d; best = i; }
@@ -186,9 +203,38 @@ const ZPHYSICS = (() => {
       if (!b.alive) continue;
       b.body.resetForces(true);   // clear last step's drive so forces don't compound
       const t = b.body.translation();
-      b.hint = nearestNode(t, b.hint);
-      const n = nodes[b.hint];
-      const nx = nodes[Math.min(b.hint + 1, nodes.length - 1)];
+
+      // FORK COMMIT: if on the main path and we've reached a fork's split point, pick a
+      // branch based on which way the ball is leaning, then follow ONLY that branch.
+      if (!b.branch && forks) {
+        for (const f of forks) {
+          if (b.hint >= f.splitIdx - 1 && b.hint <= f.splitIdx + 1) {
+            // lean = lateral position relative to the split node's right vector
+            const sn = nodes[f.splitIdx];
+            const latv = (t.x - sn.pos.x)*sn.right.x + (t.z - sn.pos.z)*sn.right.z;
+            b.branch = latv < 0 ? f.id+'_A' : f.id+'_B';  // A=left, B=right
+            b.branchFork = f;
+            b.hint = 0;   // restart hint within the branch
+            break;
+          }
+        }
+      }
+
+      const curNodes = ballNodes(b);
+      b.hint = nearestNode(t, b.hint, curNodes);
+
+      // REJOIN: if following a branch that rejoins and we've hit its end, return to main.
+      if (b.branch && b.branchFork && b.branchFork.rejoin && b.hint >= curNodes.length - 2) {
+        // find nearest main node past the split to resume on
+        b.branch = null; b.branchFork = null;
+        b.hint = nearestNode(t, 0, nodes);
+      }
+
+      const N = ballNodes(b);
+      const n = N[Math.min(b.hint, N.length-1)];
+      const nx = N[Math.min(b.hint + 1, N.length - 1)];
+      // global progress for leader/cam: main hint, or split point + branch hint
+      b.progress = b.branch && b.branchFork ? (b.branchFork.splitIdx + b.hint) : b.hint;
 
       // forward direction = toward the next node (down the track), NEVER sideways
       let fx = nx.pos.x - n.pos.x, fy = nx.pos.y - n.pos.y, fz = nx.pos.z - n.pos.z;
@@ -215,7 +261,7 @@ const ZPHYSICS = (() => {
       // Compute how far the ball is from the smooth surface, and set its vertical
       // velocity to close that gap smoothly this step. Clamp upward pop so it can't hop.
       const tpos = b.body.translation();
-      const floorY = smoothFloorY(tpos, b.hint) + BALL_R * 1.5;
+      const floorY = smoothFloorY(tpos, b.hint, N) + BALL_R * 1.5;
       const gap = floorY - tpos.y;          // >0 means ball is below the surface
       const lv = b.body.linvel();
       // GROUNDED = at or below the surface (within a small band). When grounded, rest the
@@ -229,7 +275,7 @@ const ZPHYSICS = (() => {
         // rides the slope like a rail - it never separates, never flickers airborne.
         const aheadX = tpos.x + lv.x * dt;
         const aheadZ = tpos.z + lv.z * dt;
-        const floorAhead = smoothFloorY({ x: aheadX, y: tpos.y, z: aheadZ }, b.hint) + BALL_R * 1.5;
+        const floorAhead = smoothFloorY({ x: aheadX, y: tpos.y, z: aheadZ }, b.hint, N) + BALL_R * 1.5;
         const slopeVy = (floorAhead - floorY) / dt;   // feed-forward, not feedback
         b.body.setLinvel({ x: lv.x, y: slopeVy, z: lv.z }, true);
       } else {
@@ -255,7 +301,7 @@ const ZPHYSICS = (() => {
     const out = {};
     for (const [id, b] of balls) {
       const t = b.body.translation();
-      out[id] = { x: t.x, y: t.y, z: t.z, alive: b.alive, hint: b.hint };
+      out[id] = { x: t.x, y: t.y, z: t.z, alive: b.alive, hint: b.hint, branch: b.branch||null, progress: b.progress||b.hint };
     }
     return out;
   }
@@ -271,7 +317,8 @@ const ZPHYSICS = (() => {
     for (const [id, b] of balls) {
       if (!b.alive) continue;
       const t = b.body.translation();
-      const n = nodes[b.hint];
+      const N = ballNodes(b);
+      const n = N[Math.min(b.hint, N.length-1)];
       if (t.y < n.pos.y - (threshold || 10)) { b.alive = false; fallen.push(id); }
     }
     return fallen;
@@ -279,9 +326,10 @@ const ZPHYSICS = (() => {
 
   // Which ball is furthest along the track (highest node index)? = current leader.
   function leader() {
-    let bestId = null, bestHint = -1;
+    let bestId = null, bestP = -1;
     for (const [id, b] of balls) {
-      if (b.alive && b.hint > bestHint) { bestHint = b.hint; bestId = id; }
+      const pr = b.progress != null ? b.progress : b.hint;
+      if (b.alive && pr > bestP) { bestP = pr; bestId = id; }
     }
     return bestId;
   }

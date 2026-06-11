@@ -10,6 +10,9 @@
 //  - Deterministic from a seed (all tabs/server build the identical course)
 
 const ZTRACK = (() => {
+  // ZFORK is a global in the browser; require it in node.
+  const _ZFORK = (typeof ZFORK !== 'undefined') ? ZFORK
+    : (typeof require !== 'undefined' ? require('./forks.js').ZFORK : null);
 
   // ---- seeded RNG (mulberry32) so every client builds the same course ----
   function mulberry32(seed) {
@@ -246,14 +249,47 @@ const ZTRACK = (() => {
   // Top-level: given a seed and a target length (seconds-ish), produce everything.
   function generate(seed, lengthNodes = 700, ballCount = 20) {
     const nodes = buildCenterline(seed, lengthNodes, ballCount);
+    const platformEnd = nodes.findIndex(n => !n.isPlatform);
+    const platStart = platformEnd < 0 ? 0 : platformEnd;
+
+    // FORKS: build split routes as a post-pass (deterministic via the same seed stream)
+    let forks = [], forkAtIdx = new Map();
+    if (_ZFORK) {
+      const rng = mulberry32((seed ^ 0x9e3779b9) >>> 0);
+      const built = _ZFORK.buildForks(nodes, platStart, rng);
+      forks = built.forks; forkAtIdx = built.forkAtIdx;
+    }
+
+    // Build mesh for the main path, then add each branch's ribbon.
     const mesh = buildMesh(nodes);
+    const branchMeshes = [];
+    for (const f of forks) {
+      for (const bid in f.branches) {
+        branchMeshes.push({ branchId: bid, mesh: buildMesh(f.branches[bid]) });
+      }
+    }
+
+    // Collider: main walls/roof + every branch's walls/roof (floors stay analytic).
     const collider = buildColliderBuffers(nodes);
+    const branchColliders = branchMeshes.map(bm => ({
+      branchId: bm.branchId,
+      buffers: (() => {
+        // walls+roof only, same as main
+        const positions = []; const indices = []; let base = 0;
+        for (const part of [bm.mesh.walls, bm.mesh.roof]) {
+          for (let k=0;k<part.positions.length;k++) positions.push(part.positions[k]);
+          for (let k=0;k<part.indices.length;k++) indices.push(part.indices[k]+base);
+          base += part.positions.length/3;
+        }
+        return { positions:new Float32Array(positions), indices:new Uint32Array(indices) };
+      })()
+    }));
+
     const start = nodes[0];
     const finish = nodes[nodes.length - 1];
-    // the platform spans the leading isPlatform nodes
-    const platformEnd = nodes.findIndex(n => !n.isPlatform);
     return { seed, nodes, mesh, collider, start, finish,
-      platform: { startIdx: 0, endIdx: platformEnd < 0 ? 0 : platformEnd } };
+      platform: { startIdx: 0, endIdx: platStart },
+      forks, forkAtIdx, branchMeshes, branchColliders };
   }
 
   return { generate, buildCenterline, buildMesh, buildColliderBuffers, mulberry32 };
