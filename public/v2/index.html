@@ -29,10 +29,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=3a"></script>
-<script src="/v2/track.js?v=3a"></script>
-<script src="/v2/physics.js?v=3a"></script>
-<script src="/v2/cosmetics.js?v=3a"></script>
+<script src="/v2/forks.js?v=3b"></script>
+<script src="/v2/track.js?v=3b"></script>
+<script src="/v2/physics.js?v=3b"></script>
+<script src="/v2/cosmetics.js?v=3b"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -151,19 +151,26 @@ let track = null, trackMeshes = [];
 // the floor NEVER renders near-black: lighter base, real emissive floor, moderate metal.
 function gridTexture() {
   const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d');
-  x.fillStyle = '#0c1430'; x.fillRect(0,0,128,128);               // dark panel
-  x.strokeStyle = '#33e0ff'; x.lineWidth = 3; x.shadowColor = '#33e0ff'; x.shadowBlur = 6;
-  x.strokeRect(2,2,124,124);                                       // glowing cell border
-  x.lineWidth = 1; x.strokeStyle = 'rgba(80,200,255,0.35)';
+  // PANEL BACKGROUND must be clearly visible — a near-black panel (my earlier bug) made
+  // the whole floor read black, since this drives both the base color and the emissive.
+  const g = x.createLinearGradient(0,0,0,128);
+  g.addColorStop(0,'#2b4a8f'); g.addColorStop(1,'#1c3263');   // visible medium blue panel
+  x.fillStyle = g; x.fillRect(0,0,128,128);
+  // bright cyan grid lines (these bloom into glowing seams)
+  x.shadowColor = '#5cf0ff'; x.shadowBlur = 7;
+  x.strokeStyle = '#7df6ff'; x.lineWidth = 4; x.strokeRect(3,3,122,122);
+  x.lineWidth = 2; x.strokeStyle = 'rgba(120,230,255,0.7)';
   for (let i=32;i<128;i+=32){ x.beginPath(); x.moveTo(i,0); x.lineTo(i,128); x.moveTo(0,i); x.lineTo(128,i); x.stroke(); }
   const t = new THREE.CanvasTexture(c);
-  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(3, 1);    // 3 cells across the width
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(3, 1);
   return t;
 }
 const _gridTex = gridTexture(), _gridEmis = gridTexture();
 const FLOOR_MAT = new THREE.MeshStandardMaterial({
-  color:0x2a3a66, map:_gridTex, metalness:0.5, roughness:0.34, side:THREE.DoubleSide,
-  emissive:0x2aa8ff, emissiveMap:_gridEmis, emissiveIntensity:0.7, envMapIntensity:0.9
+  color:0xffffff, map:_gridTex, metalness:0.45, roughness:0.4, side:THREE.DoubleSide,
+  // emissive color WHITE so the emissive map's own colors drive the glow (panel emits a
+  // visible blue everywhere, lines glow bright cyan) — the floor can never be black now.
+  emissive:0xffffff, emissiveMap:_gridEmis, emissiveIntensity:0.45, envMapIntensity:0.7
 });
 const WALL_MAT  = new THREE.MeshStandardMaterial({ color:0x12244e, metalness:0.4, roughness:0.4, transparent:true, opacity:0.55, side:THREE.DoubleSide, emissive:0x0088dd, emissiveIntensity:0.4 });
 const ROOF_MAT  = new THREE.MeshStandardMaterial({ color:0x0a1a3a, metalness:0.6, roughness:0.3, transparent:true, opacity:0.28, side:THREE.DoubleSide, emissive:0x0066aa, emissiveIntensity:0.25, depthWrite:false });
@@ -289,9 +296,9 @@ function makeZorb(id, prefs, isSub) {
   // dark rim so pale colors (yellow/cyan) pop against the light floor. Cheap, huge
   // readability win — classic toon/outline trick.
   const outline = new THREE.Mesh(SPHERE_GEO, new THREE.MeshBasicMaterial({
-    color: 0x05070d, side: THREE.BackSide
+    color: 0x0a1428, side: THREE.BackSide
   }));
-  outline.scale.setScalar(1.07); core.add(outline);
+  outline.scale.setScalar(1.035); core.add(outline);
 
   // MOTION TRAIL: a short fading streak of the ball's recent positions, in its color,
   // additive so it blooms into a speed-light. Faster ball = longer visible streak.
@@ -390,7 +397,7 @@ function buildCoreMaterial(skin, baseCol, accent) {
     metalness: skin.metalness != null ? skin.metalness : 0.55,
     roughness: skin.roughness != null ? skin.roughness : 0.3,
     emissive: accent,
-    emissiveIntensity: Math.max(0.22, skin.emissive != null ? skin.emissive : 0),
+    emissiveIntensity: Math.max(0.32, skin.emissive != null ? skin.emissive : 0),
     envMap: _envMap || null, envMapIntensity: 1.0,
   };
   if (THREE.MeshPhysicalMaterial) { params.clearcoat = 0.6; params.clearcoatRoughness = 0.15;
