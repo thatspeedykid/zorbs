@@ -22,9 +22,9 @@
 <div id="arm"><div class="box">▶ CLICK TO START</div></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="/v2/track.js?v=2n"></script>
-<script src="/v2/physics.js?v=2n"></script>
-<script src="/v2/cosmetics.js?v=2n"></script>
+<script src="/v2/track.js?v=2p"></script>
+<script src="/v2/physics.js?v=2p"></script>
+<script src="/v2/cosmetics.js?v=2p"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -85,7 +85,7 @@ function meshFrom(buffers, mat) {
 
 function buildCourse(seed) {
   trackMeshes.forEach(m => scene.remove(m)); trackMeshes = [];
-  track = ZTRACK.generate(seed, 700, _fieldSize || 20);
+  track = ZTRACK.generate(seed, 1100, _fieldSize || 20);
   meshFrom(track.mesh.floor, FLOOR_MAT);
   meshFrom(track.mesh.walls, WALL_MAT);
   if (track.mesh.roof && track.mesh.roof.indices.length) meshFrom(track.mesh.roof, ROOF_MAT);

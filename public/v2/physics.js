@@ -85,17 +85,31 @@ const ZPHYSICS = (() => {
 
   // Smooth floor height at a position: interpolate the centerline between the nearest
   // node and the next, so the floor reads as a continuous ramp, not faceted triangles.
+  // Catmull-Rom: smooth curve through 4 control points (C1 continuous = no stair steps)
+  function catmull(p0, p1, p2, p3, t) {
+    const t2 = t * t, t3 = t2 * t;
+    return 0.5 * (
+      (2 * p1) +
+      (-p0 + p2) * t +
+      (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 +
+      (-p0 + 3 * p1 - 3 * p2 + p3) * t3
+    );
+  }
   function smoothFloorY(pos, hint) {
     if (!nodes) return pos.y;
     const i = Math.max(0, Math.min(nodes.length - 2, hint));
     const a = nodes[i], b = nodes[i + 1];
-    // parameter t = how far 'pos' is between node a and b along the track direction
+    // where is pos between node a and b? (projected onto the segment)
     const abx = b.pos.x - a.pos.x, abz = b.pos.z - a.pos.z;
     const apx = pos.x - a.pos.x, apz = pos.z - a.pos.z;
     const abLen2 = abx * abx + abz * abz || 1;
     let t = (apx * abx + apz * abz) / abLen2;
     t = Math.max(0, Math.min(1, t));
-    return a.pos.y + (b.pos.y - a.pos.y) * t; // interpolated centerline height
+    // Catmull-Rom through the 4 surrounding nodes' heights = smooth ramp, no facets
+    const y0 = nodes[Math.max(0, i - 1)].pos.y;
+    const y1 = a.pos.y, y2 = b.pos.y;
+    const y3 = nodes[Math.min(nodes.length - 1, i + 2)].pos.y;
+    return catmull(y0, y1, y2, y3, t);
   }
 
   // Find the nearest centerline node index to a position (search around a hint).

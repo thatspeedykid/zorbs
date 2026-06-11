@@ -37,7 +37,7 @@ const ZTRACK = (() => {
   // The course is a list of "moves" the path makes. Each move advances the centerline.
   // We bias every move to lose a little height (downhill).
   const WIDTH = 7.0;          // track half-width baseline
-  const STEP = 2.2;           // distance between centerline nodes
+  const STEP = 1.3;           // finer spacing = smaller facets, smoother look
   const DROP_PER_STEP = 0.42; // average descent per node (the "downhill")
 
   // Build the centerline as an array of nodes:
