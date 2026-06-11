@@ -59,7 +59,7 @@ const ZPHYSICS = (() => {
     const ok = await load();
     if (!ok) { ready = false; return false; }
     // gravity points straight down; the track slope turns that into forward motion
-    world = new RAPIER.World({ x: 0, y: -24, z: 0 });
+    world = new RAPIER.World({ x: 0, y: -30, z: 0 });
     world.timestep = 1/60;             // FIXED timestep = smooth, no jitter
     // more solver iterations = stable resting contacts (less micro-bounce)
     if (world.integrationParameters) {
@@ -203,31 +203,33 @@ const ZPHYSICS = (() => {
         z: fz * drive + laneFz,
       }, true);
 
-      // ANALYTIC SMOOTH FLOOR (no trimesh floor to fight = no bounce):
-      // the floor is a smooth surface computed from the centerline. We keep the ball
-      // sitting exactly on it. The ball can still rise ABOVE it (jumps/launches off
-      // drops, getting knocked up by collisions) - we only stop it sinking below.
+      // ANALYTIC SMOOTH FLOOR via VELOCITY (no teleport = no fake motion = no hop).
+      // Compute how far the ball is from the smooth surface, and set its vertical
+      // velocity to close that gap smoothly this step. Clamp upward pop so it can't hop.
       const tpos = b.body.translation();
       const floorY = smoothFloorY(tpos, b.hint) + BALL_R * 1.5;
-      if (tpos.y < floorY) {
-        // resting on / pressed into the floor: place exactly on surface, kill downward vel
-        b.body.setTranslation({ x: tpos.x, y: floorY, z: tpos.z }, true);
-        const lv = b.body.linvel();
-        if (lv.y < 0) b.body.setLinvel({ x: lv.x, y: 0, z: lv.z }, true);
+      const gap = floorY - tpos.y;          // >0 means ball is below surface (needs to rise)
+      const lv = b.body.linvel();
+      b._grounded = Math.abs(gap) < 0.4;
+      if (b._grounded) {
+        // glue to surface: vertical velocity = exactly what's needed to reach floorY,
+        // no overshoot. This is smooth and never teleports.
+        const needV = gap / dt;             // velocity to land exactly on the floor
+        b.body.setLinvel({ x: lv.x, y: needV, z: lv.z }, true);
+      } else if (gap > 0) {
+        // ball is well below (shouldn't happen) - rise gently
+        b.body.setLinvel({ x: lv.x, y: Math.min(gap / dt, 8), z: lv.z }, true);
       }
+      // if airborne ABOVE the floor (gap<0), leave it - gravity brings it down naturally
       if (b.boost > 0) b.boost = Math.max(0, b.boost - dt * 0.8);
 
-      // soft speed clamp on horizontal velocity so balls don't run away
+      // horizontal speed clamp so balls don't run away (vertical handled by floor logic)
       const v = b.body.linvel();
       const hs = Math.hypot(v.x, v.z);
       const cap = MAX_SPEED * (b.boost > 0 ? 1.5 : 1);
-      let nvx = v.x, nvy = v.y, nvz = v.z;
-      if (hs > cap) { const s = cap / hs; nvx = v.x * s; nvz = v.z * s; }
-      // ANTI-BOUNCE: cap upward velocity so balls don't pop off the surface,
-      // but NEVER add upward force - gravity must always win so they stay planted.
-      if (nvy > 2.0) nvy = 0;
-      if (nvx !== v.x || nvy !== v.y || nvz !== v.z) {
-        b.body.setLinvel({ x: nvx, y: nvy, z: nvz }, true);
+      if (hs > cap) {
+        const s = cap / hs;
+        b.body.setLinvel({ x: v.x * s, y: v.y, z: v.z * s }, true);
       }
     }
     world.step();
