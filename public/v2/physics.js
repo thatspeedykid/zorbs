@@ -109,8 +109,6 @@ const ZPHYSICS = (() => {
     const body = world.createRigidBody(bd);
     const cd = RAPIER.ColliderDesc.ball(BALL_R * 1.5)   // collide at RING radius, not core
       .setRestitution(0.0).setFriction(0.5).setDensity(1.2);
-    // small contact skin lets the ball ride over micro-faceting (smooths the gravel feel)
-    if (typeof cd.setContactSkin === 'function') cd.setContactSkin(0.08);
     world.createCollider(cd, body);
 
     // deterministic-ish personality from the id hash
@@ -150,29 +148,15 @@ const ZPHYSICS = (() => {
   function step(realDt) {
     if (!ready) return;
     acc += Math.min(0.1, realDt);     // clamp to avoid spiral-of-death
-    let ran = false;
     let steps = 0;
     while (acc >= FIXED && steps < 5) {
-      // capture 'prev' = where everything is RIGHT NOW, once, before stepping
-      for (const [, b] of balls) {
-        const t = b.body.translation();
-        b.prev = { x:t.x, y:t.y, z:t.z };
-      }
       fixedStep(FIXED);
-      ran = true;
       acc -= FIXED; steps++;
     }
-    if (ran) {
-      // 'cur' = where everything ended up after all the steps this frame
-      for (const [, b] of balls) {
-        const t = b.body.translation();
-        b.cur = { x:t.x, y:t.y, z:t.z };
-      }
-    }
-    // fraction toward the next step, for render interpolation (0..1)
-    lastAlpha = acc / FIXED;
+    // if the frame was shorter than one fixed step, still step once so motion is
+    // continuous (slight time variance, but no stutter and no desync)
+    if (steps === 0) { fixedStep(FIXED); acc = 0; }
   }
-  let lastAlpha = 0;
 
   function fixedStep(dt) {
     for (const [, b] of balls) {
@@ -211,10 +195,9 @@ const ZPHYSICS = (() => {
       const cap = MAX_SPEED * (b.boost > 0 ? 1.5 : 1);
       let nvx = v.x, nvy = v.y, nvz = v.z;
       if (hs > cap) { const s = cap / hs; nvx = v.x * s; nvz = v.z * s; }
-      // ANTI-BOUNCE + SUSPENSION: kill spurious upward velocity AND damp small vertical
-      // jitter so the ride is smooth over the faceted mesh (the "suspension" feel).
-      if (nvy > 1.5) nvy = 1.5 * 0.3;
-      if (Math.abs(nvy) < 2.0) nvy *= 0.6;   // soak up small vertical buzz
+      // ANTI-BOUNCE: cap upward velocity so balls don't pop off the surface,
+      // but NEVER add upward force - gravity must always win so they stay planted.
+      if (nvy > 2.0) nvy = 0;
       if (nvx !== v.x || nvy !== v.y || nvz !== v.z) {
         b.body.setLinvel({ x: nvx, y: nvy, z: nvz }, true);
       }
@@ -222,20 +205,12 @@ const ZPHYSICS = (() => {
     world.step();
   }
 
-  // Read all ball states with interpolation between fixed steps = buttery render.
+  // Read all ball states - the REAL current physics position (no interpolation).
   function snapshot() {
     const out = {};
-    const a = lastAlpha;
     for (const [id, b] of balls) {
-      let x, y, z;
-      if (b.prev && b.cur) {
-        x = b.prev.x + (b.cur.x - b.prev.x) * a;
-        y = b.prev.y + (b.cur.y - b.prev.y) * a;
-        z = b.prev.z + (b.cur.z - b.prev.z) * a;
-      } else {
-        const t = b.body.translation(); x=t.x; y=t.y; z=t.z;
-      }
-      out[id] = { x, y, z, alive: b.alive, hint: b.hint };
+      const t = b.body.translation();
+      out[id] = { x: t.x, y: t.y, z: t.z, alive: b.alive, hint: b.hint };
     }
     return out;
   }
