@@ -69,12 +69,6 @@ const ZTRACK = (() => {
     let targetBank = 0;
     let moveKind = 'straight', extraDrop = 0, funnelMin = 0, tunnel = false;
     let funnelLen = 1, funnelPos = 0, spiralTurn = 0, spiralLen = 1, spiralCooldown = 0;
-    // MIXER: one guaranteed spinning bowl-drum, forced in at ~38% through the course.
-    // It's a wide multi-loop funnel (reuses the proven spiral physics) that balls churn
-    // around and drain out the center of — gravity funnels everything down, so it can't
-    // trap. A spinning cage is rendered around it for the bingo-mixer look.
-    const mixerAt = Math.floor(targetNodes * 0.38);
-    let mixerDone = false;
 
     const worldUp = v(0, 1, 0);
 
@@ -92,17 +86,6 @@ const ZTRACK = (() => {
     for (let i = 0; i < targetNodes; i++) {
       // start a new move when the current one runs out
       if (segLeft <= 0) {
-        // FORCED MIXER: once we pass the trigger point, the next new move is the mixer.
-        if (!mixerDone && i >= mixerAt) {
-          moveKind = 'mixer'; extraDrop = 0.32; funnelMin = 0; tunnel = false;
-          const dir = rng() < 0.5 ? 1 : -1;
-          spiralTurn = dir * 0.13;        // tight coil = many loops
-          targetTurn = spiralTurn;
-          targetBank = dir * 0.45;
-          segLeft = 132;                  // ~2.5 full loops
-          spiralLen = segLeft;
-          mixerDone = true;
-        } else {
         const r = rng();
         moveKind = 'straight'; extraDrop = 0; funnelMin = 0; tunnel = false;
         // MORE RANDOM: wider value ranges + an added SPIRAL move. Probabilities retuned
@@ -164,7 +147,6 @@ const ZTRACK = (() => {
           targetBank = dir * Math.min(0.55, sharp * 9);
           segLeft = 14 + Math.floor(rng() * 24);
         }
-        }
       }
 
       // hold the spiral/mixer's strong turn for its whole duration (don't ease it away)
@@ -207,12 +189,6 @@ const ZTRACK = (() => {
         const ramp = Math.min(1, sp/0.25, (1-sp)/0.25);  // 0 at ends, 1 in the middle
         const e = Math.max(0, ramp); const es = e*e*(3-2*e);
         widthFactor *= 1 + 0.45 * es;                    // up to +45% in the middle only
-      } else if (moveKind === 'mixer') {
-        // MIXER BOWL: much wider than a spiral (the drum interior), eased in/out.
-        const sp = 1 - (segLeft / spiralLen);
-        const ramp = Math.min(1, sp/0.2, (1-sp)/0.2);
-        const e = Math.max(0, ramp); const es = e*e*(3-2*e);
-        widthFactor *= 1 + 1.3 * es;                     // up to +130% = big bowl
       }
       const halfW = WIDTH * widthFactor;
 
@@ -220,6 +196,59 @@ const ZTRACK = (() => {
       segLeft--;
     }
     return nodes;
+  }
+
+  // POST-PASS: splice a drop-through drum into the finished (baseline) centerline. Done
+  // AFTER generation so it does NOT perturb the proven procedural layout — we just lower
+  // everything past the splice point and insert the chamber's centerline + descriptor.
+  function spliceDrum(nodes, seed) {
+    const DRUM_DEPTH = 30, DRUM_R = WIDTH * 2.4;
+    // splice ~38% through, but not on a tunnel/funnel/spiral node (need a clean shelf)
+    let s = Math.floor(nodes.length * 0.38);
+    for (let g = 0; g < 60 && s < nodes.length-20; g++) {
+      const k = nodes[s].kind;
+      if ((k === 'straight' || k === 'turn') && !nodes[s].tunnel) break;
+      s++;
+    }
+    const drng = mulberry32((seed ^ 0x6d2b79f5) >>> 0);   // separate stream: no layout shift
+    const top = nodes[s];
+    const cx = top.pos.x, cz = top.pos.z, topY = top.pos.y;
+    const bottomY = topY - DRUM_DEPTH;
+
+    // lower everything AFTER the splice by the drum depth (creates the vertical gap)
+    for (let i = s + 1; i < nodes.length; i++) nodes[i].pos.y -= DRUM_DEPTH;
+
+    // flatten + widen a short entry shelf leading into the drum centre
+    const entryIdx = Math.max(1, s - 6);
+    for (let i = entryIdx; i <= s; i++) {
+      nodes[i].pos.y = topY; nodes[i].bank = 0;
+      nodes[i].halfW = Math.max(nodes[i].halfW, WIDTH * 1.7);
+      nodes[i].kind = 'drum_entry';
+    }
+    // the vertical DROP node (straight down the axis); mesh skips this degenerate quad
+    const dir = top.dir, right = norm(cross(dir, v(0,1,0)));
+    const dropNode = { pos:{x:cx,y:bottomY,z:cz}, dir, right, up:v(0,1,0),
+      halfW: DRUM_R, bank:0, kind:'drum_drop', tunnel:false, meshSkip:true };
+    nodes.splice(s + 1, 0, dropNode);
+    const landingIdx = s + 2;   // first node after the inserted drop
+    // flatten + widen the landing shelf so balls catch and the track continues
+    for (let i = landingIdx; i < Math.min(nodes.length, landingIdx + 8); i++) {
+      nodes[i].pos.y = bottomY; nodes[i].bank = 0;
+      nodes[i].halfW = Math.max(nodes[i].halfW, WIDTH * 1.6);
+      nodes[i].kind = 'drum_landing';
+    }
+    if (nodes[landingIdx]) nodes[landingIdx].meshSkip = true;   // skip the drop->landing bridge
+
+    // 2–3 exit holes around the bottom (separate RNG so layout is untouched)
+    const holeCount = 2 + Math.floor(drng() * 2);
+    const holes = [];
+    const a0 = drng() * Math.PI * 2;
+    for (let h = 0; h < holeCount; h++) {
+      const ang = a0 + h * (Math.PI*2/holeCount);
+      holes.push({ x: cx + Math.cos(ang)*DRUM_R*0.45, z: cz + Math.sin(ang)*DRUM_R*0.45, r: DRUM_R*0.22, ang });
+    }
+    return { cx, cz, topY, bottomY, radius: DRUM_R, holes,
+      entryIdx, dropIdx: s + 1, landingIdx };
   }
 
   // Turn the centerline into a triangle mesh (floor + two walls), welded seam-to-seam.
@@ -263,7 +292,9 @@ const ZTRACK = (() => {
     let vDist = 0;             // cumulative distance along track for the V coordinate
     for (let i = 0; i < nodes.length; i++) {
       const cur = ring(nodes[i]);
-      if (prev) {
+      // meshSkip: the vertical drop into the drum and the bridge to the landing must NOT
+      // be meshed (they'd be a degenerate vertical wall). The drum chamber covers them.
+      if (prev && !nodes[i].meshSkip) {
         const vPrev = vDist;
         vDist += 0.35;          // grid cell pitch along the track
         const vCur = vDist;
@@ -317,24 +348,58 @@ const ZTRACK = (() => {
     const platformEnd = nodes.findIndex(n => !n.isPlatform);
     const platStart = platformEnd < 0 ? 0 : platformEnd;
 
-    // MIXER DESCRIPTOR: find the mixer nodes and compute the bowl center / radius / top
-    // & bottom Y so the renderer can place a spinning cage around it. The spiral coils
-    // around a center point; we approximate it as the midpoint of the node bounding box.
-    let mixer = null;
-    const mIdx = [];
-    for (let i = 0; i < nodes.length; i++) if (nodes[i].kind === 'mixer') mIdx.push(i);
-    if (mIdx.length > 4) {
-      // CENTROID (not bbox midpoint): a spiral coils around a center point; the average
-      // of the node XZ positions lands on that center, so the cage wraps the bowl.
-      let sx=0, sz=0, minY=1e9, maxY=-1e9;
-      for (const i of mIdx) { const p = nodes[i].pos; sx+=p.x; sz+=p.z;
-        minY=Math.min(minY,p.y); maxY=Math.max(maxY,p.y); }
-      const cx = sx/mIdx.length, cz = sz/mIdx.length;
-      // radius = mean distance from centroid to the coil nodes (+ track width)
-      let rsum=0; for (const i of mIdx){ const p=nodes[i].pos; rsum += Math.hypot(p.x-cx, p.z-cz); }
-      const radius = rsum/mIdx.length + WIDTH;
-      mixer = { cx, cz, yTop: maxY, yBottom: minY, radius,
-        startIdx: mIdx[0], endIdx: mIdx[mIdx.length-1] };
+    // DROP-THROUGH DRUM: splice it into the finished baseline centerline (post-pass, so
+    // the proven procedural layout is untouched), then build the chamber collider
+    // geometry: a containment WALL, a concave FLOOR with the 2–3 exit holes punched out,
+    // and a solid catch PAD below. Spinning vanes are added in physics (kinematic).
+    let drum = spliceDrum(nodes, seed);
+    if (drum) {
+      const SEG = 36, R = drum.radius, topY = drum.topY, botY = drum.bottomY;
+      // ---- WALL: open cylinder trimesh ----
+      const wp = [], wi = [];
+      for (let i = 0; i < SEG; i++) {
+        const a0 = (i/SEG)*Math.PI*2, a1 = ((i+1)/SEG)*Math.PI*2;
+        const x0 = drum.cx+Math.cos(a0)*R, z0 = drum.cz+Math.sin(a0)*R;
+        const x1 = drum.cx+Math.cos(a1)*R, z1 = drum.cz+Math.sin(a1)*R;
+        const b = wp.length/3;
+        wp.push(x0,topY,z0, x1,topY,z1, x1,botY,z1, x0,botY,z0);
+        wi.push(b,b+1,b+2, b,b+2,b+3);
+      }
+      // ---- FLOOR: concave disc (edge higher → funnels inward) with holes punched out ----
+      const fp = [], fi = [];
+      const NR = 9, floorBase = botY + 4.0;
+      const inHole = (x,z) => drum.holes.some(h => Math.hypot(x-h.x, z-h.z) < h.r);
+      const fy = (r) => floorBase + (r/R)*(r/R)*3.0;     // gentle bowl, +3 at the rim
+      for (let j = 0; j < NR; j++) {
+        const r0 = (j/NR)*R, r1 = ((j+1)/NR)*R;
+        for (let i = 0; i < SEG; i++) {
+          const a0 = (i/SEG)*Math.PI*2, a1 = ((i+1)/SEG)*Math.PI*2;
+          const cxm = drum.cx+Math.cos((a0+a1)/2)*((r0+r1)/2);
+          const czm = drum.cz+Math.sin((a0+a1)/2)*((r0+r1)/2);
+          if (inHole(cxm, czm)) continue;                // gap = exit hole
+          const p = (rr,aa)=>[drum.cx+Math.cos(aa)*rr, fy(rr), drum.cz+Math.sin(aa)*rr];
+          const A=p(r0,a0),B=p(r1,a0),C=p(r1,a1),D=p(r0,a1);
+          const b = fp.length/3;
+          fp.push(...A,...B,...C,...D);
+          fi.push(b,b+1,b+2, b,b+2,b+3);
+        }
+      }
+      // ---- PAD: a solid flat disc just below the holes. Catches balls dropping through
+      // ANY hole (the holes ring the whole drum), so none can fall off and die. The track
+      // continues forward from here. radius slightly over the drum so nothing slips past.
+      const pp = [], pi = [], padR = R + 3, padY = botY;
+      for (let i = 0; i < SEG; i++) {
+        const a0 = (i/SEG)*Math.PI*2, a1 = ((i+1)/SEG)*Math.PI*2;
+        const b = pp.length/3;
+        pp.push(drum.cx, padY, drum.cz,
+                drum.cx+Math.cos(a0)*padR, padY, drum.cz+Math.sin(a0)*padR,
+                drum.cx+Math.cos(a1)*padR, padY, drum.cz+Math.sin(a1)*padR);
+        pi.push(b, b+1, b+2);
+      }
+      drum.wall  = { positions:new Float32Array(wp), indices:new Uint32Array(wi) };
+      drum.floor = { positions:new Float32Array(fp), indices:new Uint32Array(fi) };
+      drum.pad   = { positions:new Float32Array(pp), indices:new Uint32Array(pi) };
+      drum.floorBase = floorBase; drum.padY = padY;
     }
 
     // FORKS: build split routes as a post-pass (deterministic via the same seed stream)
@@ -381,7 +446,7 @@ const ZTRACK = (() => {
 
     const start = nodes[0];
     const finish = nodes[nodes.length - 1];
-    return { seed, nodes, mesh, collider, start, finish, mixer,
+    return { seed, nodes, mesh, collider, start, finish, drum,
       platform: { startIdx: 0, endIdx: platStart },
       forks, forkAtIdx, branchMeshes, branchColliders };
   }

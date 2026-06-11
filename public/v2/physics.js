@@ -16,6 +16,7 @@ const ZPHYSICS = (() => {
   let world = null;
   let ready = false;
   let trackBody = null;
+  let drum = null, vaneBody = null, vaneAngle = 0, drumEntryIdx = -1, drumLandingIdx = -1;
   const balls = new Map(); // id -> { body, drive, lane, speedMul, alive, branch }
   let nodes = null;        // main centerline for steering
   let forks = null;        // fork descriptors
@@ -64,6 +65,7 @@ const ZPHYSICS = (() => {
     world = new RAPIER.World({ x: 0, y: -26, z: 0 });
     balls.clear();        // stale bodies belong to a previous world — removing them
     trackBody = null;     // from a new world crashes the wasm. Fresh world, fresh refs.
+    vaneBody = null; drum = null;   // same: drum/vane belong to the old world, drop them
     world.timestep = 1/60;             // FIXED timestep = smooth, no jitter
     // more solver iterations = stable resting contacts (less micro-bounce)
     if (world.integrationParameters) {
@@ -96,7 +98,66 @@ const ZPHYSICS = (() => {
     if (forkData && forkData.branchColliders) {
       for (const bc of forkData.branchColliders) mk(bc.buffers);
     }
+
+    // ---- DROP-THROUGH DRUM ----
+    drum = (forkData && forkData.drum) || null;
+    if (vaneBody) { try { world.removeRigidBody(vaneBody); } catch(e){} vaneBody = null; }
+    if (drum) {
+      // containment wall + holed funnel floor (static, part of trackBody)
+      mk(drum.wall);
+      mk(drum.floor);
+      mk(drum.pad);     // solid catch-pad below the holes so no ball can fall to its death
+      // SPINNING VANES: a kinematic body at the drum axis with a few paddle colliders.
+      // It rotates every step and bats the free-falling balls around = the churn.
+      const vbd = RAPIER.RigidBodyDesc.kinematicPositionBased()
+        .setTranslation(drum.cx, (drum.topY + drum.bottomY)/2, drum.cz);
+      vaneBody = world.createRigidBody(vbd);
+      const vaneLen = drum.radius * 0.78, vaneH = (drum.topY - drum.bottomY) * 0.42;
+      for (let i = 0; i < 4; i++) {
+        const a = (i/4) * Math.PI * 2;
+        const cd = RAPIER.ColliderDesc.cuboid(vaneLen, vaneH, 0.4)
+          .setRotation(qFromY(a))
+          .setTranslation(Math.cos(a)*0 , 0, Math.sin(a)*0)
+          .setRestitution(0.1).setFriction(0.2);
+        world.createCollider(cd, vaneBody);
+      }
+      vaneAngle = 0;
+      // free-fall zone: trigger at the DROP node (the drum opening), not the entry
+      // platform — so balls drive normally across the platform, then tumble in.
+      drumEntryIdx = drum.dropIdx; drumLandingIdx = drum.landingIdx;
+    }
   }
+
+  // quaternion for a rotation of `a` radians about the Y axis
+  function qFromY(a){ const h=a/2; return { x:0, y:Math.sin(h), z:0, w:Math.cos(h) }; }
+  const scaleV = (v,s) => ({ x:v.x*s, y:v.y*s, z:v.z*s });
+
+  // Behaviour for a ball free-falling inside the drum. Gravity + wall + vanes do most of
+  // it; we ADD a gentle pull toward the nearest exit hole so balls always drain, plus a
+  // hard watchdog that force-drops any ball that somehow lingers — so NOTHING can trap.
+  function driveInDrum(b, t, dt) {
+    if (!drum) return;
+    // nearest hole
+    let hx = drum.cx, hz = drum.cz, best = Infinity;
+    for (const h of drum.holes) {
+      const d = (t.x-h.x)*(t.x-h.x) + (t.z-h.z)*(t.z-h.z);
+      if (d < best) { best = d; hx = h.x; hz = h.z; }
+    }
+    const m = b.body.mass() || 1;
+    // drain-assist: small horizontal nudge toward the nearest hole (stronger the longer
+    // the ball has been in the drum) so the pack always works its way to an exit.
+    let dx = hx - t.x, dz = hz - t.z; const dl = Math.hypot(dx,dz) || 1; dx/=dl; dz/=dl;
+    const assist = 2.0 + Math.min(8, b.drumT * 0.8);
+    b.body.applyImpulse({ x: dx*assist*m*dt*6, y: 0, z: dz*assist*m*dt*6 }, true);
+    // WATCHDOG: been in the drum too long → it's wedged somewhere. Teleport it just above
+    // the nearest hole and drop it. Guarantees termination; the test asserts it's rare.
+    if (b.drumT > 9) {
+      b.body.setTranslation({ x: hx, y: drum.floorBase + 1.0, z: hz }, true);
+      b.body.setLinvel({ x:0, y:-6, z:0 }, true);
+    }
+  }
+
+
 
   // The node list a ball is currently following (its committed branch, or main path).
   function ballNodes(b) {
@@ -221,10 +282,39 @@ const ZPHYSICS = (() => {
   }
 
   function fixedStep(dt) {
+    // spin the drum vanes (kinematic — drive its rotation; physics resolves ball hits)
+    if (vaneBody) {
+      vaneAngle += dt * 1.6;
+      vaneBody.setNextKinematicRotation(qFromY(vaneAngle));
+    }
     for (const [, b] of balls) {
       if (!b.alive) continue;
       b.body.resetForces(true);   // clear last step's drive so forces don't compound
       const t = b.body.translation();
+
+      // ---- DROP-THROUGH DRUM: free-fall mode ----
+      // A ball is "in the drum" from when it reaches the entry platform until it falls
+      // below the funnel floor (through a hole) onto the landing. In that window we do
+      // NOT drive it — gravity + the wall + the spinning vanes do the work. A drain-assist
+      // pulls it toward the nearest hole and a watchdog guarantees it can never trap.
+      if (drum) {
+        if (!b.inDrum && b.hint >= drum.entryIdx && b.hint <= drum.dropIdx
+            && t.y < drum.topY - 0.5 && t.y > drum.bottomY
+            && Math.hypot(t.x - drum.cx, t.z - drum.cz) < drum.radius) {
+          b.inDrum = true; b.drumT = 0;   // dropped below the rim, inside the chamber
+        }
+        if (b.inDrum) {
+          b.drumT += dt;
+          // exit: fell through a hole, now below the funnel floor → land & resume drive
+          if (t.y < drum.floorBase - 0.5) {
+            b.inDrum = false; b.hint = drum.landingIdx;
+            b.body.setLinvel(scaleV(b.body.linvel(), 0.5), true);
+          } else {
+            driveInDrum(b, t, dt);
+            continue;   // skip all normal track drive/floor logic this step
+          }
+        }
+      }
 
       // FORK COMMIT: if on the main path and we've reached a fork's split point, pick a
       // branch based on which way the ball is leaning, then follow ONLY that branch.
@@ -401,6 +491,7 @@ const ZPHYSICS = (() => {
     const fallen = [];
     for (const [id, b] of balls) {
       if (!b.alive) continue;
+      if (b.inDrum) continue;   // legitimately deep inside the drum, not fallen off
       const t = b.body.translation();
       const N = ballNodes(b);
       const n = N[Math.min(b.hint, N.length-1)];

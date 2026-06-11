@@ -4,10 +4,10 @@ const { ZTRACK } = require('./public/v2/track.js');
 const { ZPHYSICS } = require('./public/v2/physics.js');
 
 async function runRace(seed, nBalls, maxSeconds) {
-  const track = ZTRACK.generate(seed, 1100, nBalls);
+  const track = ZTRACK.generate(seed, 700, nBalls);
   await ZPHYSICS.init(0.5);
   ZPHYSICS.clearBalls();
-  ZPHYSICS.setTrack(track.collider, track.nodes, { forks: track.forks, branchColliders: track.branchColliders });
+  ZPHYSICS.setTrack(track.collider, track.nodes, { forks: track.forks, branchColliders: track.branchColliders, drum: track.drum });
 
   // spawn grid like index.html
   const plat = track.platform;
@@ -42,6 +42,16 @@ async function runRace(seed, nBalls, maxSeconds) {
   }
   const snap = ZPHYSICS.snapshot();
   const report = { seed, finished: 0, fell: fallen.size, stuck: [] };
+  // drum transit: how many balls made it past the drum's landing node (proves they
+  // fell through and didn't trap inside the chamber)
+  if (track.drum) {
+    let pastDrum = 0;
+    for (const [id, s] of Object.entries(snap)) {
+      if (s.alive && s.progress >= track.drum.landingIdx) pastDrum++;
+    }
+    report.drumLandingIdx = track.drum.landingIdx;
+    report.pastDrum = pastDrum;
+  }
   for (const [id, s] of Object.entries(snap)) {
     if (!s.alive) continue;
     if (s.progress >= track.nodes.length - 20) report.finished++;

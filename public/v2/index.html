@@ -464,7 +464,7 @@ function buildCoreMaterial(skin, baseCol, accent) {
   }
   if (style === 'glass' && THREE.MeshPhysicalMaterial) {
     return new THREE.MeshPhysicalMaterial({ color: baseCol, metalness: 0.0, roughness: 0.04,
-      transmission: 0.92, thickness: 0.6, ior: 1.4, transparent: true,
+      transmission: 0.92, ior: 1.4, transparent: true,
       emissive: accent, emissiveIntensity: 0.12,
       clearcoat: 1.0, clearcoatRoughness: 0.05, envMap: _envMap || null, envMapIntensity: 1.0 });
   }
@@ -678,7 +678,7 @@ async function boot() {
   // build a course immediately so there's something on screen
   buildCourse(Math.floor(Math.random()*999999));
   // give the physics the track collider
-  ZPHYSICS.setTrack(track.collider, track.nodes, { forks: track.forks, branchColliders: track.branchColliders });
+  ZPHYSICS.setTrack(track.collider, track.nodes, { forks: track.forks, branchColliders: track.branchColliders, drum: track.drum });
   // demo: spawn a field of test balls and race. A few are given the premium skins so
   // Galaxy / Lava / Glass / Chrome are actually visible in the demo (they were all
   // Classic before, so the paid skins never showed on screen).
