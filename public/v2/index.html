@@ -22,9 +22,9 @@
 <div id="arm"><div class="box">▶ CLICK TO START</div></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="/v2/track.js?v=2p"></script>
-<script src="/v2/physics.js?v=2p"></script>
-<script src="/v2/cosmetics.js?v=2p"></script>
+<script src="/v2/track.js?v=2q"></script>
+<script src="/v2/physics.js?v=2q"></script>
+<script src="/v2/cosmetics.js?v=2q"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -75,18 +75,39 @@ const FLOOR_MAT = new THREE.MeshStandardMaterial({ color:0x16204a, metalness:0.7
 const WALL_MAT  = new THREE.MeshStandardMaterial({ color:0x0a1a3a, metalness:0.6, roughness:0.3, transparent:true, opacity:0.65, side:THREE.DoubleSide, emissive:0x0066aa, emissiveIntensity:0.3 });
 const ROOF_MAT  = new THREE.MeshStandardMaterial({ color:0x0a1a3a, metalness:0.6, roughness:0.3, transparent:true, opacity:0.28, side:THREE.DoubleSide, emissive:0x0066aa, emissiveIntensity:0.25, depthWrite:false });
 
-function meshFrom(buffers, mat) {
-  const g = new THREE.BufferGeometry();
+function meshFrom(buffers, mat, weld) {
+  let g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(buffers.positions, 3));
   g.setIndex(new THREE.BufferAttribute(buffers.indices, 1));
+  if (weld) g = weldVertices(g);   // merge shared verts so shading is smooth, not faceted
   g.computeVertexNormals();
   const m = new THREE.Mesh(g, mat); scene.add(m); trackMeshes.push(m); return m;
+}
+
+// Weld vertices that share a position so computeVertexNormals averages across faces
+// = smooth shading (no visible facet edges on the ramp).
+function weldVertices(geo) {
+  const pos = geo.attributes.position.array;
+  const oldIdx = geo.index.array;
+  const map = new Map(); const newPos = []; const remap = new Int32Array(pos.length/3);
+  const key = (x,y,z) => Math.round(x*100)+'_'+Math.round(y*100)+'_'+Math.round(z*100);
+  for (let i=0;i<pos.length/3;i++){
+    const x=pos[i*3],y=pos[i*3+1],z=pos[i*3+2]; const k=key(x,y,z);
+    if (map.has(k)) { remap[i]=map.get(k); }
+    else { const ni=newPos.length/3; map.set(k,ni); newPos.push(x,y,z); remap[i]=ni; }
+  }
+  const newIdx = new Uint32Array(oldIdx.length);
+  for (let i=0;i<oldIdx.length;i++) newIdx[i]=remap[oldIdx[i]];
+  const ng = new THREE.BufferGeometry();
+  ng.setAttribute('position', new THREE.Float32BufferAttribute(newPos,3));
+  ng.setIndex(new THREE.BufferAttribute(newIdx,1));
+  return ng;
 }
 
 function buildCourse(seed) {
   trackMeshes.forEach(m => scene.remove(m)); trackMeshes = [];
   track = ZTRACK.generate(seed, 1100, _fieldSize || 20);
-  meshFrom(track.mesh.floor, FLOOR_MAT);
+  meshFrom(track.mesh.floor, FLOOR_MAT, true);   // weld = smooth-shaded ramp
   meshFrom(track.mesh.walls, WALL_MAT);
   if (track.mesh.roof && track.mesh.roof.indices.length) meshFrom(track.mesh.roof, ROOF_MAT);
   // glowing edge rails along the centerline for that Tron read
