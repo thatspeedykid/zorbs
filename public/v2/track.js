@@ -324,17 +324,17 @@ const ZTRACK = (() => {
     const mIdx = [];
     for (let i = 0; i < nodes.length; i++) if (nodes[i].kind === 'mixer') mIdx.push(i);
     if (mIdx.length > 4) {
-      let minX=1e9,maxX=-1e9,minZ=1e9,maxZ=-1e9,minY=1e9,maxY=-1e9;
-      for (const i of mIdx) { const p = nodes[i].pos;
-        minX=Math.min(minX,p.x); maxX=Math.max(maxX,p.x);
-        minZ=Math.min(minZ,p.z); maxZ=Math.max(maxZ,p.z);
+      // CENTROID (not bbox midpoint): a spiral coils around a center point; the average
+      // of the node XZ positions lands on that center, so the cage wraps the bowl.
+      let sx=0, sz=0, minY=1e9, maxY=-1e9;
+      for (const i of mIdx) { const p = nodes[i].pos; sx+=p.x; sz+=p.z;
         minY=Math.min(minY,p.y); maxY=Math.max(maxY,p.y); }
-      mixer = {
-        cx: (minX+maxX)/2, cz: (minZ+maxZ)/2,
-        yTop: maxY, yBottom: minY,
-        radius: Math.max(maxX-minX, maxZ-minZ)/2 + WIDTH,
-        startIdx: mIdx[0], endIdx: mIdx[mIdx.length-1],
-      };
+      const cx = sx/mIdx.length, cz = sz/mIdx.length;
+      // radius = mean distance from centroid to the coil nodes (+ track width)
+      let rsum=0; for (const i of mIdx){ const p=nodes[i].pos; rsum += Math.hypot(p.x-cx, p.z-cz); }
+      const radius = rsum/mIdx.length + WIDTH;
+      mixer = { cx, cz, yTop: maxY, yBottom: minY, radius,
+        startIdx: mIdx[0], endIdx: mIdx[mIdx.length-1] };
     }
 
     // FORKS: build split routes as a post-pass (deterministic via the same seed stream)

@@ -12,6 +12,19 @@
   #arm { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(2,5,13,.85); z-index:50; cursor:pointer; }
   #arm .box { color:#7fe9ff; border:1px solid rgba(0,200,255,.4); padding:18px 30px; border-radius:8px; letter-spacing:2px; font-size:14px; }
   #leader { position:fixed; top:10px; right:12px; color:#fff; font-size:13px; text-align:right; z-index:10; text-shadow:0 0 8px rgba(255,255,255,.4); }
+  /* SpeedyGoWild music player */
+  #music { position:fixed; bottom:10px; right:12px; z-index:30; display:flex; align-items:center; gap:10px;
+    background:rgba(6,12,26,.82); border:1px solid rgba(60,180,255,.4); border-radius:10px; padding:8px 10px;
+    backdrop-filter:blur(4px); box-shadow:0 0 18px rgba(0,120,255,.25); max-width:300px; }
+  #music img { width:48px; height:48px; border-radius:6px; object-fit:cover; background:#0a1430; flex:0 0 auto; }
+  #music .meta { min-width:0; flex:1; }
+  #music .artist { color:#7fe9ff; font-size:11px; letter-spacing:1px; }
+  #music .song { color:#fff; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #music .btns { display:flex; gap:6px; flex:0 0 auto; }
+  #music button { background:rgba(0,150,255,.15); color:#9fefff; border:1px solid rgba(60,180,255,.5);
+    border-radius:6px; width:30px; height:30px; cursor:pointer; font-size:13px; line-height:1; }
+  #music button:hover { background:rgba(0,150,255,.35); }
+  #ytframe { position:absolute; width:0; height:0; overflow:hidden; opacity:0; pointer-events:none; }
 </style>
 </head>
 <body>
@@ -21,6 +34,20 @@
 <div id="status">booting…</div>
 <div id="arm"><div class="box">▶ CLICK TO START</div></div>
 
+<!-- SpeedyGoWild background music (own copyrighted tracks via YouTube's official embed) -->
+<div id="music">
+  <img id="m-art" alt="" src="https://img.youtube.com/vi/V1qf3Mw_zSk/hqdefault.jpg">
+  <div class="meta">
+    <div class="artist">♪ SpeedyGoWild</div>
+    <div class="song" id="m-song">loading…</div>
+  </div>
+  <div class="btns">
+    <button id="m-play" title="play / pause">▶</button>
+    <button id="m-mute" title="mute">🔊</button>
+  </div>
+  <div id="ytframe"></div>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <!-- post-processing for the AAA glow pass (these attach to the THREE global) -->
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
@@ -29,10 +56,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=3f"></script>
-<script src="/v2/track.js?v=3f"></script>
-<script src="/v2/physics.js?v=3f"></script>
-<script src="/v2/cosmetics.js?v=3f"></script>
+<script src="/v2/forks.js?v=3g"></script>
+<script src="/v2/track.js?v=3g"></script>
+<script src="/v2/physics.js?v=3g"></script>
+<script src="/v2/cosmetics.js?v=3g"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -43,7 +70,7 @@ const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '3f';
+const BUILD = '3g';
 console.log('[ZORBS] build', BUILD);
 const leaderEl = document.getElementById('leader');
 function setStatus(txt, ok) {
@@ -223,7 +250,12 @@ function buildCourse(seed) {
   // wire the (now-built) env map into the glossy floor/wall so they reflect the sky+rails
   if (_envMap) { WALL_MAT.envMap = _envMap; ROOF_MAT.envMap = _envMap;
     WALL_MAT.needsUpdate = ROOF_MAT.needsUpdate = true; }
-  track = ZTRACK.generate(seed, 1100, _fieldSize || 20);
+  // Track length randomized per seed but DETERMINISTIC (same seed = same race, required
+  // for fair/wagered races). ~620–820 nodes targets roughly a 2–3 min completion;
+  // was a flat 1100 which felt too long. Derived from the seed, never Math.random.
+  const lenRng = (Math.abs((seed * 2654435761) >>> 0) % 200);   // 0..199
+  const trackLen = 620 + lenRng;                                  // 620..819
+  track = ZTRACK.generate(seed, trackLen, _fieldSize || 20);
   meshFrom(track.mesh.floor, FLOOR_MAT, true);   // weld = smooth-shaded ramp
   meshFrom(track.mesh.walls, WALL_MAT);
   if (track.mesh.roof && track.mesh.roof.indices.length) meshFrom(track.mesh.roof, ROOF_MAT);
@@ -263,10 +295,12 @@ function buildCourse(seed) {
   mixerCage = null;
   if (track.mixer) {
     const mx = track.mixer;
-    const cageR = mx.radius * 1.15;
+    const cageR = mx.radius * 1.1;
     const cy = (mx.yTop + mx.yBottom) / 2;
+    const drop = Math.max(cageR, mx.yTop - mx.yBottom);   // how tall the coil is
     const group = new THREE.Group();
     group.position.set(mx.cx, cy, mx.cz);
+    group.scale.y = drop / cageR;   // stretch the sphere into a drum spanning the descent
     // wireframe sphere = the cage bars
     const sphere = new THREE.Mesh(
       new THREE.SphereGeometry(cageR, 16, 12),
@@ -593,7 +627,7 @@ function loop(now) {
   }
 
   updateCamera(dt);
-  if (mixerCage) { mixerCage.rotation.y += dt * 0.9; mixerCage.rotation.x += dt * 0.35; }
+  if (mixerCage) { mixerCage.rotation.y += dt * 0.9; }
   if (composer) composer.render(); else renderer.render(scene, camera);
 }
 
@@ -660,10 +694,70 @@ async function boot() {
   startRace(track.seed, names);
 }
 
+// ---- SpeedyGoWild background music (YouTube IFrame API; user's own tracks) ----
+// To play the WHOLE playlist on shuffle, paste your playlist's `list=` id into PLAYLIST.
+// Otherwise it shuffles through the VIDEOS array (add more of your video ids any time).
+const MUSIC = {
+  artist: 'SpeedyGoWild',
+  VIDEOS: ['V1qf3Mw_zSk'],
+  PLAYLIST: '',   // e.g. 'PLabc123...' — set this to shuffle your entire playlist
+};
+let ytPlayer = null, ytReady = false, wantPlay = false, ytMuted = false, _shuffled = [];
+function shuffle(a){ a=a.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+(function loadYT(){
+  const tag = document.createElement('script'); tag.src = 'https://www.youtube.com/iframe_api';
+  tag.onerror = () => { document.getElementById('m-song').textContent = 'music unavailable'; };
+  document.head.appendChild(tag);
+})();
+window.onYouTubeIframeAPIReady = function(){
+  const opts = { height:'0', width:'0', events:{ onReady:onYTReady, onStateChange:onYTState },
+    playerVars:{ autoplay:0, controls:0, playsinline:1 } };
+  if (MUSIC.PLAYLIST) { opts.playerVars.listType='playlist'; opts.playerVars.list=MUSIC.PLAYLIST; }
+  else { _shuffled = shuffle(MUSIC.VIDEOS); opts.videoId = _shuffled[0]; }
+  try { ytPlayer = new YT.Player('ytframe', opts); } catch(e){ document.getElementById('m-song').textContent='music unavailable'; }
+};
+function onYTReady(){
+  ytReady = true;
+  if (MUSIC.PLAYLIST) { try { ytPlayer.setShuffle(true); ytPlayer.setLoop(true); } catch(e){} }
+  updateNowPlaying();
+  if (wantPlay) ytPlayer.playVideo();
+}
+function onYTState(e){
+  if (e.data === YT.PlayerState.PLAYING) { updateNowPlaying(); document.getElementById('m-play').textContent='⏸'; }
+  if (e.data === YT.PlayerState.PAUSED)  { document.getElementById('m-play').textContent='▶'; }
+  if (e.data === YT.PlayerState.ENDED && !MUSIC.PLAYLIST) {
+    // advance to the next shuffled track, reshuffle + loop at the end
+    const cur = (ytPlayer.getVideoData()||{}).video_id;
+    let i = _shuffled.indexOf(cur);
+    if (i >= _shuffled.length-1) { _shuffled = shuffle(MUSIC.VIDEOS); i = -1; }
+    ytPlayer.loadVideoById(_shuffled[i+1]);
+  }
+}
+function updateNowPlaying(){
+  try {
+    const d = ytPlayer.getVideoData() || {};
+    if (d.title) document.getElementById('m-song').textContent = d.title;
+    if (d.video_id) document.getElementById('m-art').src = 'https://img.youtube.com/vi/'+d.video_id+'/hqdefault.jpg';
+  } catch(e){}
+}
+function startMusic(){ wantPlay = true; if (ytReady && ytPlayer) ytPlayer.playVideo(); }
+document.getElementById('m-play').addEventListener('click', () => {
+  if (!ytReady) { wantPlay = true; return; }
+  const st = ytPlayer.getPlayerState();
+  if (st === YT.PlayerState.PLAYING) ytPlayer.pauseVideo(); else ytPlayer.playVideo();
+});
+document.getElementById('m-mute').addEventListener('click', () => {
+  if (!ytReady) return;
+  ytMuted = !ytMuted;
+  if (ytMuted) ytPlayer.mute(); else ytPlayer.unMute();
+  document.getElementById('m-mute').textContent = ytMuted ? '🔇' : '🔊';
+});
+
 // audio-gesture gate (this is what was spamming the console before: we now ONLY
 // start anything audio-ish AFTER a real click, exactly once)
 document.getElementById('arm').addEventListener('click', () => {
   document.getElementById('arm').remove();
+  startMusic();   // the click is the user gesture browsers require for audio autoplay
   boot();
 }, { once:true });
 
