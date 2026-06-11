@@ -29,10 +29,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=2x"></script>
-<script src="/v2/track.js?v=2x"></script>
-<script src="/v2/physics.js?v=2x"></script>
-<script src="/v2/cosmetics.js?v=2x"></script>
+<script src="/v2/forks.js?v=2y"></script>
+<script src="/v2/track.js?v=2y"></script>
+<script src="/v2/physics.js?v=2y"></script>
+<script src="/v2/cosmetics.js?v=2y"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -122,9 +122,11 @@ function buildEnvMap() {
   // simple gradient scene captured as env
   const envScene = new THREE.Scene();
   const g = new THREE.SphereGeometry(50, 16, 12);
+  // brighter gradient: metal reflects this, so a DARK env = black metal (the bug).
+  // Warm top, cool horizon, with enough luminance to give chrome real highlights.
   const m = new THREE.ShaderMaterial({ side:THREE.BackSide,
     vertexShader:'varying vec3 p; void main(){ p=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
-    fragmentShader:'varying vec3 p; void main(){ float h=normalize(p).y*0.5+0.5; gl_FragColor=vec4(mix(vec3(0.05,0.15,0.3),vec3(0.6,0.4,0.2),h),1.0); }' });
+    fragmentShader:'varying vec3 p; void main(){ float h=normalize(p).y*0.5+0.5; vec3 lo=vec3(0.12,0.20,0.42); vec3 hi=vec3(0.85,0.78,0.95); gl_FragColor=vec4(mix(lo,hi,h),1.0); }' });
   envScene.add(new THREE.Mesh(g, m));
   _envMap = pmrem.fromScene(envScene).texture;
   // do NOT set scene.environment (it over-lights the whole track). Ball-only below.
@@ -143,8 +145,11 @@ function buildEnvMap() {
 
 // ---- build the course ----
 let track = null, trackMeshes = [];
-const FLOOR_MAT = new THREE.MeshStandardMaterial({ color:0x1a2750, metalness:0.2, roughness:0.6, side:THREE.DoubleSide, emissive:0x0a1430, emissiveIntensity:0.35 });
-const WALL_MAT  = new THREE.MeshStandardMaterial({ color:0x0a1a3a, metalness:0.2, roughness:0.5, transparent:true, opacity:0.65, side:THREE.DoubleSide, emissive:0x0066aa, emissiveIntensity:0.3 });
+// GLOSSY WET FLOOR: metalness up + roughness down + env reflection = the track mirrors
+// the sky and neon rails like a rain-slicked surface. This is the single biggest "looks
+// expensive" cue (the Lusion/Unreal look). envMap is wired in buildCourse once it exists.
+const FLOOR_MAT = new THREE.MeshStandardMaterial({ color:0x141f3e, metalness:0.55, roughness:0.32, side:THREE.DoubleSide, emissive:0x0a1430, emissiveIntensity:0.25, envMapIntensity:0.9 });
+const WALL_MAT  = new THREE.MeshStandardMaterial({ color:0x0a1a3a, metalness:0.4, roughness:0.45, transparent:true, opacity:0.6, side:THREE.DoubleSide, emissive:0x0066aa, emissiveIntensity:0.3 });
 const ROOF_MAT  = new THREE.MeshStandardMaterial({ color:0x0a1a3a, metalness:0.6, roughness:0.3, transparent:true, opacity:0.28, side:THREE.DoubleSide, emissive:0x0066aa, emissiveIntensity:0.25, depthWrite:false });
 
 function meshFrom(buffers, mat, weld) {
@@ -178,6 +183,9 @@ function weldVertices(geo) {
 
 function buildCourse(seed) {
   trackMeshes.forEach(m => scene.remove(m)); trackMeshes = [];
+  // wire the (now-built) env map into the glossy floor/wall so they reflect the sky+rails
+  if (_envMap) { FLOOR_MAT.envMap = _envMap; WALL_MAT.envMap = _envMap; ROOF_MAT.envMap = _envMap;
+    FLOOR_MAT.needsUpdate = WALL_MAT.needsUpdate = ROOF_MAT.needsUpdate = true; }
   track = ZTRACK.generate(seed, 1100, _fieldSize || 20);
   meshFrom(track.mesh.floor, FLOOR_MAT, true);   // weld = smooth-shaded ramp
   meshFrom(track.mesh.walls, WALL_MAT);
@@ -252,25 +260,28 @@ function makeZorb(id, prefs, isSub) {
   const color = (cos.skin.color != null) ? cos.skin.color : PALETTE[(colorIdx++) % PALETTE.length];
   const accent = new THREE.Color(color);
 
-  // CORE: show the PLAYER COLOR. Previously this was hardcoded grey chrome
-  // (metalness 0.9) so the accent only leaked through as a faint glow and every
-  // ball looked the same white blob. Now the core IS the player color, lit, with
-  // a moderate metallic sheen — colors read clearly, metal still catches the rim
-  // light. Skin params (metalness/roughness/emissive) drive it so paid skins like
-  // Chrome/Plasma/Void actually change the look.
-  const baseCol = new THREE.Color(color);
-  const core = new THREE.Mesh(SPHERE_GEO, new THREE.MeshStandardMaterial({
-    color: baseCol,
-    metalness: cos.skin.metalness != null ? cos.skin.metalness : 0.35,
-    roughness: cos.skin.roughness != null ? cos.skin.roughness : 0.35,
-    emissive: accent,
-    // self-illuminate the player color so a ball NEVER renders as a black silhouette,
-    // even with the lit side facing away. Classic skin ships emissive 0.0 — that was
-    // the black-ball bug. Floor it at 0.35; metallic paid skins can ride higher.
-    emissiveIntensity: Math.max(0.35, cos.skin.emissive != null ? cos.skin.emissive : 0),
-    envMap: _envMap || null, envMapIntensity: 0.6,
-  }));
+  // ---- skin material builder (procedural textures, no external assets) ----
+  const core = new THREE.Mesh(SPHERE_GEO, buildCoreMaterial(cos.skin, baseCol, accent));
   scene.add(core);
+
+  // DARK OUTLINE: a slightly larger back-face black shell behind the ball gives a thin
+  // dark rim so pale colors (yellow/cyan) pop against the light floor. Cheap, huge
+  // readability win — classic toon/outline trick.
+  const outline = new THREE.Mesh(SPHERE_GEO, new THREE.MeshBasicMaterial({
+    color: 0x05070d, side: THREE.BackSide
+  }));
+  outline.scale.setScalar(1.07); core.add(outline);
+
+  // MOTION TRAIL: a short fading streak of the ball's recent positions, in its color,
+  // additive so it blooms into a speed-light. Faster ball = longer visible streak.
+  const TRAIL_LEN = 14;
+  const trailPos = new Float32Array(TRAIL_LEN * 3);
+  const trailGeo = new THREE.BufferGeometry();
+  trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPos, 3));
+  const trail = new THREE.Line(trailGeo, new THREE.LineBasicMaterial({
+    color: accent, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false
+  }));
+  trail.frustumCulled = false; scene.add(trail);
 
   // EQUATORIAL ENERGY BAND hugging the orb (toned down so it accents, not blinds)
   const band = new THREE.Mesh(BAND_GEO, new THREE.MeshBasicMaterial({
@@ -301,10 +312,69 @@ function makeZorb(id, prefs, isSub) {
   glow.scale.setScalar(1.18); core.add(glow);
 
   zorbs.set(id, {
-    mesh: core, ring, ringGlow, band, color,
+    mesh: core, ring, ringGlow, band, color, trail, trailPos, trailLen: TRAIL_LEN,
     spawnT: 0, spawnAnim: cos.spawn, ringSpin: cos.ring.spin || 2.0,
     ringBob: Math.random()*Math.PI*2, eliminated:false, fallT:0,
+    rollQ: new THREE.Quaternion(),
   });
+}
+
+// Build the core material for a skin style. Procedural canvas textures so there are no
+// external asset downloads — works offline, deterministic, cheap.
+const _texCache = {};
+function galaxyTexture() {
+  if (_texCache.galaxy) return _texCache.galaxy;
+  const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d');
+  const g = x.createLinearGradient(0,0,256,256);
+  g.addColorStop(0,'#1a0b3a'); g.addColorStop(0.5,'#3a1b6a'); g.addColorStop(1,'#0a0520');
+  x.fillStyle = g; x.fillRect(0,0,256,256);
+  for (let i=0;i<60;i++){ x.globalAlpha=0.1+Math.random()*0.3; x.fillStyle=['#ff66cc','#66ccff','#ffffff'][i%3];
+    x.beginPath(); x.arc(Math.random()*256,Math.random()*256,8+Math.random()*30,0,7); x.fill(); }
+  x.globalAlpha=1; for (let i=0;i<140;i++){ x.fillStyle='#ffffff';
+    x.fillRect(Math.random()*256,Math.random()*256,Math.random()<0.2?2:1,1); }
+  const t = new THREE.CanvasTexture(c); _texCache.galaxy = t; return t;
+}
+function lavaTexture() {
+  if (_texCache.lava) return _texCache.lava;
+  const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d');
+  x.fillStyle='#1a0500'; x.fillRect(0,0,256,256);
+  for (let i=0;i<28;i++){ const gx=Math.random()*256, gy=Math.random()*256;
+    const g=x.createRadialGradient(gx,gy,0,gx,gy,30+Math.random()*40);
+    g.addColorStop(0,'#fff2a0'); g.addColorStop(0.4,'#ff7a18'); g.addColorStop(1,'rgba(60,5,0,0)');
+    x.fillStyle=g; x.fillRect(0,0,256,256); }
+  const t = new THREE.CanvasTexture(c); _texCache.lava = t; return t;
+}
+function buildCoreMaterial(skin, baseCol, accent) {
+  const style = skin.style || 'metal';
+  if (style === 'galaxy') {
+    return new THREE.MeshStandardMaterial({ map: galaxyTexture(), color: 0xffffff,
+      metalness: 0.3, roughness: 0.4, emissive: 0x6633cc, emissiveIntensity: 0.5,
+      emissiveMap: galaxyTexture(), envMap: _envMap || null, envMapIntensity: 0.8 });
+  }
+  if (style === 'lava') {
+    return new THREE.MeshStandardMaterial({ map: lavaTexture(), color: 0xffffff,
+      metalness: 0.2, roughness: 0.6, emissive: 0xff5500, emissiveIntensity: 0.9,
+      emissiveMap: lavaTexture() });
+  }
+  if (style === 'glass' && THREE.MeshPhysicalMaterial) {
+    return new THREE.MeshPhysicalMaterial({ color: baseCol, metalness: 0.0, roughness: 0.04,
+      transmission: 0.92, thickness: 0.6, ior: 1.4, transparent: true,
+      emissive: accent, emissiveIntensity: 0.12,
+      clearcoat: 1.0, clearcoatRoughness: 0.05, envMap: _envMap || null, envMapIntensity: 1.0 });
+  }
+  // default: metallic sci-fi orb (clearcoat sheen if available). Emissive floored so it
+  // never renders as a black silhouette regardless of light angle.
+  const params = {
+    color: baseCol,
+    metalness: skin.metalness != null ? skin.metalness : 0.55,
+    roughness: skin.roughness != null ? skin.roughness : 0.3,
+    emissive: accent,
+    emissiveIntensity: Math.max(0.22, skin.emissive != null ? skin.emissive : 0),
+    envMap: _envMap || null, envMapIntensity: 1.0,
+  };
+  if (THREE.MeshPhysicalMaterial) { params.clearcoat = 0.6; params.clearcoatRoughness = 0.15;
+    return new THREE.MeshPhysicalMaterial(params); }
+  return new THREE.MeshStandardMaterial(params);
 }
 
 // ---- game state ----
@@ -317,7 +387,7 @@ function startRace(seed, names) {
   _fieldSize = names.length;
   buildCourse(seed);
   ZPHYSICS.clearBalls();
-  zorbs.forEach(z => { scene.remove(z.mesh); if(z.ring) scene.remove(z.ring); if(z.ringGlow) scene.remove(z.ringGlow); });
+  zorbs.forEach(z => { scene.remove(z.mesh); if(z.ring) scene.remove(z.ring); if(z.ringGlow) scene.remove(z.ringGlow); if(z.trail) scene.remove(z.trail); });
   zorbs.clear(); colorIdx = 0; winner = null;
   // queue spawns at the start of the track, staggered for a nice entrance
   spawnQueue = names.map((nm, i) => ({ id: nm.id, prefs: nm.prefs, isSub: nm.isSub, delay: i*0.12 }));
@@ -405,8 +475,28 @@ function loop(now) {
     } else {
       z.mesh.scale.setScalar(1);
     }
-    // rolling
-    if (s) z.mesh.rotation.x += dt * 4;
+    // ROLL AT TRAVEL SPEED: spin = distance/radius about the axis perpendicular to
+    // motion, so a fast ball visibly spins fast and a slow one barely turns. (The old
+    // code spun every ball at a constant rate, which read as slow-motion sliding.)
+    if (s) {
+      const sp = Math.hypot(s.vx || 0, s.vz || 0);
+      if (sp > 0.05) {
+        const dirx = s.vx / sp, dirz = s.vz / sp;
+        // roll axis = worldUp × travelDir  (horizontal, perpendicular to motion)
+        const ax = -dirz, az = dirx;             // (0,1,0)×(dirx,0,dirz)
+        const angle = (sp * dt) / BALL_R;        // arc length / radius
+        z.rollQ.setFromAxisAngle(new THREE.Vector3(ax, 0, az).normalize(), angle);
+        z.mesh.quaternion.premultiply(z.rollQ);
+      }
+      // MOTION TRAIL: shift positions back one slot, write current at the head.
+      const tp = z.trailPos, n = z.trailLen;
+      for (let k = n - 1; k > 0; k--) {
+        tp[k*3] = tp[(k-1)*3]; tp[k*3+1] = tp[(k-1)*3+1]; tp[k*3+2] = tp[(k-1)*3+2];
+      }
+      tp[0] = s.x; tp[1] = s.y; tp[2] = s.z;
+      z.trail.geometry.attributes.position.needsUpdate = true;
+      z.trail.visible = !z.eliminated && sp > 2;   // only show a streak when actually moving
+    }
     // ring follows, stays flat, spins on its own vertical axis
     if (z.ring) {
       z.ringBob += dt * z.ringSpin;
@@ -425,7 +515,7 @@ function loop(now) {
       z.mesh.position.y -= z.fallT * 6 * dt;
       z.mesh.material.transparent = true;
       z.mesh.material.opacity = Math.max(0, 1 - z.fallT*0.7);
-      if (z.fallT > 1.6) { scene.remove(z.mesh); if(z.ring) scene.remove(z.ring); if(z.ringGlow) scene.remove(z.ringGlow); zorbs.delete(id); }
+      if (z.fallT > 1.6) { scene.remove(z.mesh); if(z.ring) scene.remove(z.ring); if(z.ringGlow) scene.remove(z.ringGlow); if(z.trail) scene.remove(z.trail); zorbs.delete(id); }
     }
   }
 

@@ -68,7 +68,7 @@ const ZTRACK = (() => {
     let bank = 0;          // current banking angle
     let targetBank = 0;
     let moveKind = 'straight', extraDrop = 0, funnelMin = 0, tunnel = false;
-    let funnelLen = 1, funnelPos = 0;
+    let funnelLen = 1, funnelPos = 0, spiralTurn = 0;
 
     const worldUp = v(0, 1, 0);
 
@@ -88,43 +88,60 @@ const ZTRACK = (() => {
       if (segLeft <= 0) {
         const r = rng();
         moveKind = 'straight'; extraDrop = 0; funnelMin = 0; tunnel = false;
-        if (r < 0.32) {
-          // straight-ish run
-          targetTurn = (rng() - 0.5) * 0.01;
+        // MORE RANDOM: wider value ranges + an added SPIRAL move. Probabilities retuned
+        // so no single feel dominates and every course plays differently.
+        if (r < 0.24) {
+          // straight-ish run (length varies a lot now)
+          targetTurn = (rng() - 0.5) * 0.012;
           targetBank = 0;
-          segLeft = 14 + Math.floor(rng() * 18);
-        } else if (r < 0.62) {
-          // sweeping turn (banked)
+          segLeft = 10 + Math.floor(rng() * 26);
+        } else if (r < 0.52) {
+          // sweeping turn (banked) — sharper range for more drama
           const dir = rng() < 0.5 ? 1 : -1;
-          const sharp = 0.018 + rng() * 0.040;
+          const sharp = 0.015 + rng() * 0.055;
           targetTurn = dir * sharp;
-          targetBank = dir * Math.min(0.5, sharp * 9);
-          segLeft = 16 + Math.floor(rng() * 22);
-        } else if (r < 0.74) {
-          // DROP: steep plunge straight down-ish, narrow & fast
+          targetBank = dir * Math.min(0.55, sharp * 9);
+          segLeft = 14 + Math.floor(rng() * 28);
+        } else if (r < 0.66) {
+          // DROP: steep plunge
           moveKind = 'drop';
-          targetTurn = (rng() - 0.5) * 0.015;
+          targetTurn = (rng() - 0.5) * 0.02;
           targetBank = 0;
-          extraDrop = 1.4 + rng() * 1.2;   // much steeper descent
-          segLeft = 8 + Math.floor(rng() * 8);
-        } else if (r < 0.86) {
-          // FUNNEL: track squeezes narrow then opens back up (bunches the pack)
+          extraDrop = 1.2 + rng() * 1.6;
+          segLeft = 7 + Math.floor(rng() * 10);
+        } else if (r < 0.78) {
+          // FUNNEL: squeeze to a throat then reopen
           moveKind = 'funnel';
-          targetTurn = (rng() - 0.5) * 0.01;
+          targetTurn = (rng() - 0.5) * 0.012;
           targetBank = 0;
-          funnelMin = 0.42 + rng() * 0.12; // squeeze to ~45% width at the throat
-          segLeft = 18 + Math.floor(rng() * 10);
+          funnelMin = 0.38 + rng() * 0.16;
+          segLeft = 16 + Math.floor(rng() * 14);
           funnelLen = segLeft;
+        } else if (r < 0.90) {
+          // SPIRAL DROP-FUNNEL: the science-museum coin vortex. The centerline coils
+          // into a tight descending helix with a steep inward bank, so balls ride the
+          // wall, circle the bowl, and spiral down to the level below before the track
+          // continues. ~1.5–2.5 loops depending on length.
+          moveKind = 'spiral';
+          const dir = rng() < 0.5 ? 1 : -1;
+          spiralTurn = dir * (0.085 + rng() * 0.04);   // strong constant turn = the coil
+          targetTurn = spiralTurn;
+          targetBank = dir * 0.62;                      // steep funnel wall (balls lean hard)
+          extraDrop = 0.5 + rng() * 0.4;                // descend as it coils
+          segLeft = 70 + Math.floor(rng() * 60);        // long enough for multiple loops
         } else {
-          // TUNNEL: enclosed run with a ceiling (visual + keeps balls in)
+          // TUNNEL: enclosed run with a ceiling
           moveKind = 'tunnel';
           const dir = rng() < 0.5 ? 1 : -1;
-          targetTurn = dir * (rng() * 0.02);
+          targetTurn = dir * (rng() * 0.025);
           targetBank = 0;
           tunnel = true;
-          segLeft = 20 + Math.floor(rng() * 16);
+          segLeft = 18 + Math.floor(rng() * 20);
         }
       }
+
+      // hold the spiral's strong turn for its whole duration (don't ease it away)
+      if (moveKind === 'spiral') targetTurn = spiralTurn;
 
       // ease turn and bank toward their targets (smooth transitions)
       turn += (targetTurn - turn) * 0.12;
@@ -155,6 +172,8 @@ const ZTRACK = (() => {
         funnelPos = 1 - (segLeft / funnelLen);        // 0..1 across the funnel
         const throat = 1 - Math.sin(funnelPos * Math.PI) * (1 - funnelMin); // V then back
         widthFactor *= throat;
+      } else if (moveKind === 'spiral') {
+        widthFactor *= 1.6;   // a wide bowl so balls have room to circle the wall
       }
       const halfW = WIDTH * widthFactor;
 

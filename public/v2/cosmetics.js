@@ -7,11 +7,12 @@ const ZCOSMETICS = (() => {
   // ---- BALL SKINS ----
   // Each skin: how the ball mesh looks. resolve() returns material params.
   const ballSkins = {
-    classic: { name: 'Classic', tier: 'free', color: null /* uses player color */, metalness: 0.3, roughness: 0.4, emissive: 0.0 },
-    // future paid examples (defined but gated):
-    chrome:  { name: 'Chrome',  tier: 'sub',  color: 0xddddff, metalness: 1.0, roughness: 0.05, emissive: 0.0 },
-    plasma:  { name: 'Plasma',  tier: 'paid', color: 0xff3399, metalness: 0.2, roughness: 0.1, emissive: 0.6 },
-    void:    { name: 'Void',    tier: 'paid', color: 0x110022, metalness: 0.8, roughness: 0.2, emissive: 0.2 },
+    classic: { name: 'Classic', tier: 'free', style: 'metal',  color: null /* player color */, metalness: 0.55, roughness: 0.3,  emissive: 0.25 },
+    // premium skins — gated, render via their `style` in index.html:
+    chrome:  { name: 'Chrome',  tier: 'sub',  style: 'metal',  color: 0xeef2ff, metalness: 1.0, roughness: 0.05, emissive: 0.0 },
+    galaxy:  { name: 'Galaxy',  tier: 'paid', style: 'galaxy', color: 0x2a1b4a, metalness: 0.3, roughness: 0.4, emissive: 0.5 },
+    lava:    { name: 'Lava',    tier: 'paid', style: 'lava',   color: 0x401005, metalness: 0.2, roughness: 0.6, emissive: 0.9 },
+    glass:   { name: 'Glass',   tier: 'sub',  style: 'glass',  color: 0xbfe9ff, metalness: 0.0, roughness: 0.05, emissive: 0.05 },
   };
 
   // ---- RING STYLES (the Saturn ring around each ball) ----
