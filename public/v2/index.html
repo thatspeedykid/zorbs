@@ -22,9 +22,9 @@
 <div id="arm"><div class="box">▶ CLICK TO START</div></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="/v2/track.js?v=2m"></script>
-<script src="/v2/physics.js?v=2m"></script>
-<script src="/v2/cosmetics.js?v=2m"></script>
+<script src="/v2/track.js?v=2n"></script>
+<script src="/v2/physics.js?v=2n"></script>
+<script src="/v2/cosmetics.js?v=2n"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -175,7 +175,15 @@ function spawnOne(item) {
 
 // ---- main loop ----
 let last = performance.now();
+const FRAME_CAP = 1000 / 60;        // target 60fps
+let frameAcc = 0, prevRaf = performance.now();
 function loop(now) {
+  requestAnimationFrame(loop);      // always re-queue
+  // frame limiter: only run the sim+render when ~1/60s has elapsed
+  const elapsed = now - prevRaf; prevRaf = now;
+  frameAcc += elapsed;
+  if (frameAcc < FRAME_CAP) return; // skip this RAF tick (high-refresh monitors)
+  frameAcc = Math.min(frameAcc - FRAME_CAP, FRAME_CAP); // keep remainder, avoid drift
   const dt = Math.min(0.05, (now - last)/1000); last = now;
 
   if (phase === 'spawning') {
@@ -246,7 +254,6 @@ function loop(now) {
 
   updateCamera(dt);
   renderer.render(scene, camera);
-  requestAnimationFrame(loop);
 }
 
 // ---- camera: follow the leader smoothly from behind & above ----
