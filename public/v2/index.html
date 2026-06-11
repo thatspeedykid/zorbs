@@ -22,10 +22,10 @@
 <div id="arm"><div class="box">▶ CLICK TO START</div></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="/v2/forks.js?v=2t"></script>
-<script src="/v2/track.js?v=2t"></script>
-<script src="/v2/physics.js?v=2t"></script>
-<script src="/v2/cosmetics.js?v=2t"></script>
+<script src="/v2/forks.js?v=2u"></script>
+<script src="/v2/track.js?v=2u"></script>
+<script src="/v2/physics.js?v=2u"></script>
+<script src="/v2/cosmetics.js?v=2u"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -63,8 +63,9 @@ const fill = new THREE.DirectionalLight(0x00e5ff, 0.4); fill.position.set(0, 10,
 // Environment map: render the gradient sky to a cube so metal balls reflect it (sci-fi sheen)
 let _envMap = null;
 function buildEnvMap() {
+  if (!THREE.PMREMGenerator) return;
   const pmrem = new THREE.PMREMGenerator(renderer);
-  pmrem.compileEquirectangularShader();
+  if (pmrem.compileEquirectangularShader) pmrem.compileEquirectangularShader();
   // simple gradient scene captured as env
   const envScene = new THREE.Scene();
   const g = new THREE.SphereGeometry(50, 16, 12);
@@ -73,7 +74,7 @@ function buildEnvMap() {
     fragmentShader:'varying vec3 p; void main(){ float h=normalize(p).y*0.5+0.5; gl_FragColor=vec4(mix(vec3(0.05,0.15,0.3),vec3(0.6,0.4,0.2),h),1.0); }' });
   envScene.add(new THREE.Mesh(g, m));
   _envMap = pmrem.fromScene(envScene).texture;
-  scene.environment = _envMap;
+  // do NOT set scene.environment (it over-lights the whole track). Ball-only below.
 }
 
 // gradient sky dome (always behind everything)
@@ -89,8 +90,8 @@ function buildEnvMap() {
 
 // ---- build the course ----
 let track = null, trackMeshes = [];
-const FLOOR_MAT = new THREE.MeshStandardMaterial({ color:0x16204a, metalness:0.7, roughness:0.35, side:THREE.DoubleSide, emissive:0x0a1430, emissiveIntensity:0.4 });
-const WALL_MAT  = new THREE.MeshStandardMaterial({ color:0x0a1a3a, metalness:0.6, roughness:0.3, transparent:true, opacity:0.65, side:THREE.DoubleSide, emissive:0x0066aa, emissiveIntensity:0.3 });
+const FLOOR_MAT = new THREE.MeshStandardMaterial({ color:0x1a2750, metalness:0.2, roughness:0.6, side:THREE.DoubleSide, emissive:0x0a1430, emissiveIntensity:0.35 });
+const WALL_MAT  = new THREE.MeshStandardMaterial({ color:0x0a1a3a, metalness:0.2, roughness:0.5, transparent:true, opacity:0.65, side:THREE.DoubleSide, emissive:0x0066aa, emissiveIntensity:0.3 });
 const ROOF_MAT  = new THREE.MeshStandardMaterial({ color:0x0a1a3a, metalness:0.6, roughness:0.3, transparent:true, opacity:0.28, side:THREE.DoubleSide, emissive:0x0066aa, emissiveIntensity:0.25, depthWrite:false });
 
 function meshFrom(buffers, mat, weld) {
@@ -196,8 +197,9 @@ function makeZorb(id, prefs, isSub) {
   // METALLIC CORE: high metalness + low roughness = chrome-y sci-fi orb. The accent
   // color tints it; emissive gives a faint inner energy.
   const core = new THREE.Mesh(SPHERE_GEO, new THREE.MeshStandardMaterial({
-    color: 0x8899aa, metalness: 0.95, roughness: 0.22,
-    emissive: accent, emissiveIntensity: 0.12,
+    color: 0x8899aa, metalness: 0.9, roughness: 0.28,
+    emissive: accent, emissiveIntensity: 0.18,
+    envMap: _envMap || null, envMapIntensity: 1.0,
   }));
   scene.add(core);
 
