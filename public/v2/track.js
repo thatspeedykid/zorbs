@@ -117,18 +117,18 @@ const ZTRACK = (() => {
           funnelMin = 0.38 + rng() * 0.16;
           segLeft = 16 + Math.floor(rng() * 14);
           funnelLen = segLeft;
-        } else if (r < 0.90) {
-          // SPIRAL DROP-FUNNEL: the science-museum coin vortex. The centerline coils
-          // into a tight descending helix with a steep inward bank, so balls ride the
-          // wall, circle the bowl, and spiral down to the level below before the track
-          // continues. ~1.5–2.5 loops depending on length.
+        } else if (r < 0.83) {
+          // SPIRAL DROP-FUNNEL: the science-museum coin vortex. Occasional feature, not
+          // the whole map — kept rare (~5%) and shorter (~1–1.5 loops) so courses stay
+          // varied. The centerline coils into a descending helix with a steep inward
+          // bank so balls ride the wall and spiral down before the track continues.
           moveKind = 'spiral';
           const dir = rng() < 0.5 ? 1 : -1;
-          spiralTurn = dir * (0.085 + rng() * 0.04);   // strong constant turn = the coil
+          spiralTurn = dir * (0.10 + rng() * 0.03);
           targetTurn = spiralTurn;
-          targetBank = dir * 0.62;                      // steep funnel wall (balls lean hard)
-          extraDrop = 0.5 + rng() * 0.4;                // descend as it coils
-          segLeft = 70 + Math.floor(rng() * 60);        // long enough for multiple loops
+          targetBank = dir * 0.6;
+          extraDrop = 0.5 + rng() * 0.3;
+          segLeft = 44 + Math.floor(rng() * 30);        // ~1–1.5 loops
         } else {
           // TUNNEL: enclosed run with a ceiling
           moveKind = 'tunnel';
@@ -188,6 +188,7 @@ const ZTRACK = (() => {
   // plus separate arrays the renderer can use for materials if desired.
   function buildMesh(nodes) {
     const floorPos = [];
+    const floorUV = [];
     const wallPos = [];
     const floorIdx = [];
     const wallIdx = [];
@@ -220,10 +221,16 @@ const ZTRACK = (() => {
 
     let prev = null;
     let vi = 0, wvi = 0, rvi = 0;
+    let vDist = 0;             // cumulative distance along track for the V coordinate
     for (let i = 0; i < nodes.length; i++) {
       const cur = ring(nodes[i]);
       if (prev) {
+        const vPrev = vDist;
+        vDist += 0.35;          // grid cell pitch along the track
+        const vCur = vDist;
         pushQuad(floorPos, floorIdx, prev.lf, prev.rf, cur.rf, cur.lf, vi); vi += 4;
+        // UVs matching the quad's vertex order (prev.lf, prev.rf, cur.rf, cur.lf):
+        floorUV.push(0, vPrev,  1, vPrev,  1, vCur,  0, vCur);
         // taller walls inside tunnels (use ceiling height as wall top there)
         const pLW = prev.tunnel ? prev.lc : prev.lw, pRW = prev.tunnel ? prev.rc : prev.rw;
         const cLW = cur.tunnel ? cur.lc : cur.lw,  cRW = cur.tunnel ? cur.rc : cur.rw;
@@ -238,7 +245,7 @@ const ZTRACK = (() => {
     }
 
     return {
-      floor: { positions: new Float32Array(floorPos), indices: new Uint32Array(floorIdx) },
+      floor: { positions: new Float32Array(floorPos), indices: new Uint32Array(floorIdx), uvs: new Float32Array(floorUV) },
       walls: { positions: new Float32Array(wallPos), indices: new Uint32Array(wallIdx) },
       roof:  { positions: new Float32Array(roofPos), indices: new Uint32Array(roofIdx) },
     };

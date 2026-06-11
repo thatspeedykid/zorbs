@@ -29,10 +29,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=2z"></script>
-<script src="/v2/track.js?v=2z"></script>
-<script src="/v2/physics.js?v=2z"></script>
-<script src="/v2/cosmetics.js?v=2z"></script>
+<script src="/v2/forks.js?v=3a"></script>
+<script src="/v2/track.js?v=3a"></script>
+<script src="/v2/physics.js?v=3a"></script>
+<script src="/v2/cosmetics.js?v=3a"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -145,16 +145,33 @@ function buildEnvMap() {
 
 // ---- build the course ----
 let track = null, trackMeshes = [];
-// GLOSSY WET FLOOR: metalness up + roughness down + env reflection = the track mirrors
-// the sky and neon rails like a rain-slicked surface. This is the single biggest "looks
-// expensive" cue (the Lusion/Unreal look). envMap is wired in buildCourse once it exists.
-const FLOOR_MAT = new THREE.MeshStandardMaterial({ color:0x141f3e, metalness:0.55, roughness:0.32, side:THREE.DoubleSide, emissive:0x0a1430, emissiveIntensity:0.25, envMapIntensity:0.9 });
-const WALL_MAT  = new THREE.MeshStandardMaterial({ color:0x0a1a3a, metalness:0.4, roughness:0.45, transparent:true, opacity:0.6, side:THREE.DoubleSide, emissive:0x0066aa, emissiveIntensity:0.3 });
+// FUTURISTIC GRID FLOOR: a dark glossy panel with glowing cyan grid lines (Tron look
+// from the reference shots). The grid is a procedural canvas texture used as BOTH the
+// emissive map (lines glow + bloom) and a subtle base map. Brightened from before so
+// the floor NEVER renders near-black: lighter base, real emissive floor, moderate metal.
+function gridTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d');
+  x.fillStyle = '#0c1430'; x.fillRect(0,0,128,128);               // dark panel
+  x.strokeStyle = '#33e0ff'; x.lineWidth = 3; x.shadowColor = '#33e0ff'; x.shadowBlur = 6;
+  x.strokeRect(2,2,124,124);                                       // glowing cell border
+  x.lineWidth = 1; x.strokeStyle = 'rgba(80,200,255,0.35)';
+  for (let i=32;i<128;i+=32){ x.beginPath(); x.moveTo(i,0); x.lineTo(i,128); x.moveTo(0,i); x.lineTo(128,i); x.stroke(); }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(3, 1);    // 3 cells across the width
+  return t;
+}
+const _gridTex = gridTexture(), _gridEmis = gridTexture();
+const FLOOR_MAT = new THREE.MeshStandardMaterial({
+  color:0x2a3a66, map:_gridTex, metalness:0.5, roughness:0.34, side:THREE.DoubleSide,
+  emissive:0x2aa8ff, emissiveMap:_gridEmis, emissiveIntensity:0.7, envMapIntensity:0.9
+});
+const WALL_MAT  = new THREE.MeshStandardMaterial({ color:0x12244e, metalness:0.4, roughness:0.4, transparent:true, opacity:0.55, side:THREE.DoubleSide, emissive:0x0088dd, emissiveIntensity:0.4 });
 const ROOF_MAT  = new THREE.MeshStandardMaterial({ color:0x0a1a3a, metalness:0.6, roughness:0.3, transparent:true, opacity:0.28, side:THREE.DoubleSide, emissive:0x0066aa, emissiveIntensity:0.25, depthWrite:false });
 
 function meshFrom(buffers, mat, weld) {
   let g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(buffers.positions, 3));
+  if (buffers.uvs) g.setAttribute('uv', new THREE.BufferAttribute(buffers.uvs, 2));
   g.setIndex(new THREE.BufferAttribute(buffers.indices, 1));
   if (weld) g = weldVertices(g);   // merge shared verts so shading is smooth, not faceted
   g.computeVertexNormals();
@@ -165,18 +182,21 @@ function meshFrom(buffers, mat, weld) {
 // = smooth shading (no visible facet edges on the ramp).
 function weldVertices(geo) {
   const pos = geo.attributes.position.array;
+  const uv = geo.attributes.uv ? geo.attributes.uv.array : null;
   const oldIdx = geo.index.array;
-  const map = new Map(); const newPos = []; const remap = new Int32Array(pos.length/3);
+  const map = new Map(); const newPos = []; const newUV = []; const remap = new Int32Array(pos.length/3);
   const key = (x,y,z) => Math.round(x*100)+'_'+Math.round(y*100)+'_'+Math.round(z*100);
   for (let i=0;i<pos.length/3;i++){
     const x=pos[i*3],y=pos[i*3+1],z=pos[i*3+2]; const k=key(x,y,z);
     if (map.has(k)) { remap[i]=map.get(k); }
-    else { const ni=newPos.length/3; map.set(k,ni); newPos.push(x,y,z); remap[i]=ni; }
+    else { const ni=newPos.length/3; map.set(k,ni); newPos.push(x,y,z);
+      if (uv) newUV.push(uv[i*2], uv[i*2+1]); remap[i]=ni; }
   }
   const newIdx = new Uint32Array(oldIdx.length);
   for (let i=0;i<oldIdx.length;i++) newIdx[i]=remap[oldIdx[i]];
   const ng = new THREE.BufferGeometry();
   ng.setAttribute('position', new THREE.Float32BufferAttribute(newPos,3));
+  if (uv) ng.setAttribute('uv', new THREE.Float32BufferAttribute(newUV,2));
   ng.setIndex(new THREE.BufferAttribute(newIdx,1));
   return ng;
 }
