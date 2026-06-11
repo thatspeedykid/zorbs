@@ -22,9 +22,9 @@
 <div id="arm"><div class="box">▶ CLICK TO START</div></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="/v2/track.js?v=2h"></script>
-<script src="/v2/physics.js?v=2h"></script>
-<script src="/v2/cosmetics.js?v=2h"></script>
+<script src="/v2/track.js?v=2i"></script>
+<script src="/v2/physics.js?v=2i"></script>
+<script src="/v2/cosmetics.js?v=2i"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -170,7 +170,7 @@ function spawnOne(item) {
   const lateral = ((col + 0.5) / perRow - 0.5) * n.halfW * 1.7;
   const sx = n.pos.x + n.right.x * lateral;
   const sz = n.pos.z + n.right.z * lateral;
-  ZPHYSICS.addBall(item.id, { x: sx, y: n.pos.y + 1.0, z: sz });
+  ZPHYSICS.addBall(item.id, { x: sx, y: n.pos.y + BALL_R*1.5, z: sz }); // sit ON the surface
 }
 
 // ---- main loop ----

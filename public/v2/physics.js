@@ -203,16 +203,17 @@ const ZPHYSICS = (() => {
         z: fz * drive + laneFz,
       }, true);
 
-      // SMOOTH-FLOOR CORRECTION: glue the ball to the interpolated centerline height
-      // so it glides over the faceted mesh instead of hopping on every triangle seam.
+      // ANALYTIC SMOOTH FLOOR (no trimesh floor to fight = no bounce):
+      // the floor is a smooth surface computed from the centerline. We keep the ball
+      // sitting exactly on it. The ball can still rise ABOVE it (jumps/launches off
+      // drops, getting knocked up by collisions) - we only stop it sinking below.
       const tpos = b.body.translation();
-      const targetY = smoothFloorY(tpos, b.hint) + BALL_R * 1.5; // sit on smooth surface
-      const dy = targetY - tpos.y;
-      // only correct small deviations (so genuine big drops/launches still happen)
-      if (Math.abs(dy) < 1.2) {
-        b.body.setTranslation({ x: tpos.x, y: tpos.y + dy * 0.5, z: tpos.z }, true);
+      const floorY = smoothFloorY(tpos, b.hint) + BALL_R * 1.5;
+      if (tpos.y < floorY) {
+        // resting on / pressed into the floor: place exactly on surface, kill downward vel
+        b.body.setTranslation({ x: tpos.x, y: floorY, z: tpos.z }, true);
         const lv = b.body.linvel();
-        if (lv.y < 0 && dy > -0.05) b.body.setLinvel({ x: lv.x, y: lv.y * 0.3, z: lv.z }, true);
+        if (lv.y < 0) b.body.setLinvel({ x: lv.x, y: 0, z: lv.z }, true);
       }
       if (b.boost > 0) b.boost = Math.max(0, b.boost - dt * 0.8);
 

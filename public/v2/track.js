@@ -227,13 +227,15 @@ const ZTRACK = (() => {
     idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
   }
 
-  // Build a combined collider buffer (floor + walls) for the physics engine.
+  // Build collider buffers. We make TWO: the full one (unused now) and a WALLS+ROOF
+  // ONLY one. The floor is handled analytically (smooth height follow) so balls glide
+  // instead of catching on floor triangle seams. Walls stay real physics.
   function buildColliderBuffers(nodes) {
     const m = buildMesh(nodes);
     const positions = [];
     const indices = [];
     let base = 0;
-    for (const part of [m.floor, m.walls, m.roof]) {
+    for (const part of [m.walls, m.roof]) {   // NO floor in the collider
       for (let k = 0; k < part.positions.length; k++) positions.push(part.positions[k]);
       for (let k = 0; k < part.indices.length; k++) indices.push(part.indices[k] + base);
       base += part.positions.length / 3;
