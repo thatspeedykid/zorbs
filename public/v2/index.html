@@ -29,10 +29,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=3b"></script>
-<script src="/v2/track.js?v=3b"></script>
-<script src="/v2/physics.js?v=3b"></script>
-<script src="/v2/cosmetics.js?v=3b"></script>
+<script src="/v2/forks.js?v=3c"></script>
+<script src="/v2/track.js?v=3c"></script>
+<script src="/v2/physics.js?v=3c"></script>
+<script src="/v2/cosmetics.js?v=3c"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -40,6 +40,11 @@
 // ---------------------------------------------------------------------------
 const BALL_R = 0.5;
 const statusEl = document.getElementById('status');
+// BUILD STAMP: shown in the HUD + console so there is never any question about which
+// version the browser is actually running. If the stamp doesn't match the latest
+// commit, the problem is deployment/caching — not the code.
+const BUILD = '3c';
+console.log('[ZORBS] build', BUILD);
 const leaderEl = document.getElementById('leader');
 function setStatus(txt, ok) {
   statusEl.textContent = txt;
@@ -167,10 +172,13 @@ function gridTexture() {
 }
 const _gridTex = gridTexture(), _gridEmis = gridTexture();
 const FLOOR_MAT = new THREE.MeshStandardMaterial({
-  color:0xffffff, map:_gridTex, metalness:0.45, roughness:0.4, side:THREE.DoubleSide,
-  // emissive color WHITE so the emissive map's own colors drive the glow (panel emits a
-  // visible blue everywhere, lines glow bright cyan) — the floor can never be black now.
-  emissive:0xffffff, emissiveMap:_gridEmis, emissiveIntensity:0.45, envMapIntensity:0.7
+  // FAILSAFE BRIGHTNESS: the floor is now driven primarily by EMISSION (the lit-panel
+  // look), not by lights or reflections. Why: ACES tone mapping crushes dark tones and
+  // metalness kills diffuse, so if the env reflection fails for ANY reason a half-metal
+  // dark floor renders pure black (the recurring bug). Emissive doesn't care about
+  // lights, env, or camera angle — this floor shows up no matter what.
+  color:0xbfd0ff, map:_gridTex, metalness:0.25, roughness:0.45, side:THREE.DoubleSide,
+  emissive:0xffffff, emissiveMap:_gridEmis, emissiveIntensity:0.85, envMapIntensity:0.7
 });
 const WALL_MAT  = new THREE.MeshStandardMaterial({ color:0x12244e, metalness:0.4, roughness:0.4, transparent:true, opacity:0.55, side:THREE.DoubleSide, emissive:0x0088dd, emissiveIntensity:0.4 });
 const ROOF_MAT  = new THREE.MeshStandardMaterial({ color:0x0a1a3a, metalness:0.6, roughness:0.3, transparent:true, opacity:0.28, side:THREE.DoubleSide, emissive:0x0066aa, emissiveIntensity:0.25, depthWrite:false });
@@ -593,7 +601,7 @@ async function boot() {
   setStatus('loading physics…', false);
   const ok = await ZPHYSICS.init(BALL_R);
   if (!ok) { setStatus('LEGACY (physics failed: ' + ZPHYSICS.getError() + ')', false); return; }
-  setStatus('⬡ RAPIER READY', true);
+  setStatus('⬡ READY · build ' + BUILD, true);
   try { buildEnvMap(); } catch(e){ console.warn('env map skipped', e); }
   // build a course immediately so there's something on screen
   buildCourse(Math.floor(Math.random()*999999));
