@@ -29,10 +29,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=2v"></script>
-<script src="/v2/track.js?v=2v"></script>
-<script src="/v2/physics.js?v=2v"></script>
-<script src="/v2/cosmetics.js?v=2v"></script>
+<script src="/v2/forks.js?v=2w"></script>
+<script src="/v2/track.js?v=2w"></script>
+<script src="/v2/physics.js?v=2w"></script>
+<script src="/v2/cosmetics.js?v=2w"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -70,9 +70,9 @@ if (THREE.EffectComposer && THREE.UnrealBloomPass) {
   composer.addPass(new THREE.RenderPass(scene, camera));
   const bloom = new THREE.UnrealBloomPass(
     new THREE.Vector2(innerWidth, innerHeight),
-    0.9,    // strength
-    0.5,    // radius
-    0.6     // threshold — only genuinely bright stuff blooms
+    0.55,   // strength (was 0.9 — was washing the balls to white)
+    0.4,    // radius
+    0.85    // threshold — only the genuinely brightest pixels (rings/rails) bloom
   );
   composer.addPass(bloom);
 }
@@ -247,41 +247,50 @@ function makeZorb(id, prefs, isSub) {
   const color = (cos.skin.color != null) ? cos.skin.color : PALETTE[(colorIdx++) % PALETTE.length];
   const accent = new THREE.Color(color);
 
-  // METALLIC CORE: high metalness + low roughness = chrome-y sci-fi orb. The accent
-  // color tints it; emissive gives a faint inner energy.
+  // CORE: show the PLAYER COLOR. Previously this was hardcoded grey chrome
+  // (metalness 0.9) so the accent only leaked through as a faint glow and every
+  // ball looked the same white blob. Now the core IS the player color, lit, with
+  // a moderate metallic sheen — colors read clearly, metal still catches the rim
+  // light. Skin params (metalness/roughness/emissive) drive it so paid skins like
+  // Chrome/Plasma/Void actually change the look.
+  const baseCol = new THREE.Color(color);
   const core = new THREE.Mesh(SPHERE_GEO, new THREE.MeshStandardMaterial({
-    color: 0x8899aa, metalness: 0.9, roughness: 0.28,
-    emissive: accent, emissiveIntensity: 0.18,
-    envMap: _envMap || null, envMapIntensity: 1.0,
+    color: baseCol,
+    metalness: cos.skin.metalness != null ? cos.skin.metalness : 0.35,
+    roughness: cos.skin.roughness != null ? cos.skin.roughness : 0.35,
+    emissive: accent,
+    emissiveIntensity: cos.skin.emissive != null ? cos.skin.emissive : 0.12,
+    envMap: _envMap || null, envMapIntensity: 0.6,
   }));
   scene.add(core);
 
-  // EQUATORIAL ENERGY BAND hugging the orb (the lit ribbon from the reference)
+  // EQUATORIAL ENERGY BAND hugging the orb (toned down so it accents, not blinds)
   const band = new THREE.Mesh(BAND_GEO, new THREE.MeshBasicMaterial({
-    color: accent, transparent:true, opacity:0.9, blending:THREE.AdditiveBlending, depthWrite:false
+    color: accent, transparent:true, opacity:0.55, blending:THREE.AdditiveBlending, depthWrite:false
   }));
   band.rotation.x = Math.PI/2; core.add(band);
 
-  // LASER SATURN RING: a thin ultra-bright ring + a fat soft additive glow behind it.
+  // LASER SATURN RING: bright thin ring + a soft glow. Both dialed back hard — the
+  // bloom pass now supplies the glow, so the source pixels don't need to be pure white.
   let ring = null, ringGlow = null;
   if (cos.ring.enabled) {
     const rc = (cos.ring.color != null) ? new THREE.Color(cos.ring.color) : accent;
     ring = new THREE.Mesh(RING_GEO, new THREE.MeshBasicMaterial({
-      color: rc, transparent:true, opacity:1.0, blending:THREE.AdditiveBlending, depthWrite:false
+      color: rc, transparent:true, opacity:0.85, blending:THREE.AdditiveBlending, depthWrite:false
     }));
     ring.rotation.x = Math.PI/2; ring.renderOrder = 6; scene.add(ring);
     ringGlow = new THREE.Mesh(RING_GLOW_GEO, new THREE.MeshBasicMaterial({
-      color: rc, transparent:true, opacity:0.35, blending:THREE.AdditiveBlending, depthWrite:false
+      color: rc, transparent:true, opacity:0.18, blending:THREE.AdditiveBlending, depthWrite:false
     }));
     ringGlow.rotation.x = Math.PI/2; ringGlow.renderOrder = 5; scene.add(ringGlow);
   }
 
-  // soft fresnel rim glow on the orb
+  // soft fresnel rim glow — much fainter (was 0.28, the main culprit in the white blob)
   const glow = new THREE.Mesh(SPHERE_GEO, new THREE.MeshBasicMaterial({
-    color: accent, transparent:true, opacity:0.28, side:THREE.BackSide,
+    color: accent, transparent:true, opacity:0.12, side:THREE.BackSide,
     blending:THREE.AdditiveBlending, depthWrite:false
   }));
-  glow.scale.setScalar(1.22); core.add(glow);
+  glow.scale.setScalar(1.18); core.add(glow);
 
   zorbs.set(id, {
     mesh: core, ring, ringGlow, band, color,
@@ -437,12 +446,14 @@ function updateCamera(dt) {
   const node = track.nodes[ci];
   const ahead = track.nodes[Math.min(track.nodes.length - 1, ci + 10)];
 
-  // desired camera: behind & above the leader node, along the track direction
+  // desired camera: behind & ABOVE the leader node, along the track direction.
+  // Higher and further back than before (was -14 / +9) — the low angle was skimming
+  // the floor and hiding the pack. This reads as a proper marble-race chase cam.
   const dir = node.dir;
   const desired = new THREE.Vector3(
-    node.pos.x - dir.x * 14,
-    node.pos.y + 9,
-    node.pos.z - dir.z * 14
+    node.pos.x - dir.x * 20,
+    node.pos.y + 16,
+    node.pos.z - dir.z * 20
   );
   camPos.lerp(desired, 0.05);          // smooth position
   camera.position.copy(camPos);
