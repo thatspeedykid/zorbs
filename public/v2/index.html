@@ -29,10 +29,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=2w"></script>
-<script src="/v2/track.js?v=2w"></script>
-<script src="/v2/physics.js?v=2w"></script>
-<script src="/v2/cosmetics.js?v=2w"></script>
+<script src="/v2/forks.js?v=2x"></script>
+<script src="/v2/track.js?v=2x"></script>
+<script src="/v2/physics.js?v=2x"></script>
+<script src="/v2/cosmetics.js?v=2x"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -88,6 +88,11 @@ scene.add(new THREE.AmbientLight(0x445577, 0.75));
 const key = new THREE.DirectionalLight(0xaaccff, 1.6); key.position.set(20, 60, 10); scene.add(key);
 const rim = new THREE.DirectionalLight(0xff66cc, 0.6); rim.position.set(-30, 20, -20); scene.add(rim);
 const fill = new THREE.DirectionalLight(0x00e5ff, 0.5); fill.position.set(0, 10, -40); scene.add(fill);
+// HEMISPHERE LIGHT: sky color from above, deep-blue bounce from below. This is what
+// stops the balls going pure black when their lit side faces away from the camera —
+// every surface now gets some colored ambient, so the metal reads as metal, not a
+// silhouette. Big readability win for a dark scene.
+scene.add(new THREE.HemisphereLight(0x9fc8ff, 0x16203a, 0.7));
 
 // STARFIELD: a sphere of additive points behind everything — instant depth + scale.
 (function stars(){
@@ -259,7 +264,10 @@ function makeZorb(id, prefs, isSub) {
     metalness: cos.skin.metalness != null ? cos.skin.metalness : 0.35,
     roughness: cos.skin.roughness != null ? cos.skin.roughness : 0.35,
     emissive: accent,
-    emissiveIntensity: cos.skin.emissive != null ? cos.skin.emissive : 0.12,
+    // self-illuminate the player color so a ball NEVER renders as a black silhouette,
+    // even with the lit side facing away. Classic skin ships emissive 0.0 — that was
+    // the black-ball bug. Floor it at 0.35; metallic paid skins can ride higher.
+    emissiveIntensity: Math.max(0.35, cos.skin.emissive != null ? cos.skin.emissive : 0),
     envMap: _envMap || null, envMapIntensity: 0.6,
   }));
   scene.add(core);
@@ -276,11 +284,11 @@ function makeZorb(id, prefs, isSub) {
   if (cos.ring.enabled) {
     const rc = (cos.ring.color != null) ? new THREE.Color(cos.ring.color) : accent;
     ring = new THREE.Mesh(RING_GEO, new THREE.MeshBasicMaterial({
-      color: rc, transparent:true, opacity:0.85, blending:THREE.AdditiveBlending, depthWrite:false
+      color: rc, transparent:true, opacity:0.55, blending:THREE.AdditiveBlending, depthWrite:false
     }));
     ring.rotation.x = Math.PI/2; ring.renderOrder = 6; scene.add(ring);
     ringGlow = new THREE.Mesh(RING_GLOW_GEO, new THREE.MeshBasicMaterial({
-      color: rc, transparent:true, opacity:0.18, blending:THREE.AdditiveBlending, depthWrite:false
+      color: rc, transparent:true, opacity:0.1, blending:THREE.AdditiveBlending, depthWrite:false
     }));
     ringGlow.rotation.x = Math.PI/2; ringGlow.renderOrder = 5; scene.add(ringGlow);
   }
