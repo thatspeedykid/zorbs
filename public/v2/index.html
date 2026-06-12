@@ -66,10 +66,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=3p"></script>
-<script src="/v2/track.js?v=3p"></script>
-<script src="/v2/physics.js?v=3p"></script>
-<script src="/v2/cosmetics.js?v=3p"></script>
+<script src="/v2/forks.js?v=3q"></script>
+<script src="/v2/track.js?v=3q"></script>
+<script src="/v2/physics.js?v=3q"></script>
+<script src="/v2/cosmetics.js?v=3q"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -80,7 +80,7 @@ const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '3p';
+const BUILD = '3q';
 console.log('[ZORBS] build', BUILD);
 const leaderEl = document.getElementById('leader');
 function setStatus(txt, ok) {
@@ -328,20 +328,7 @@ function buildCourse(seed) {
       color:col, transparent:true, opacity:0.16, blending:THREE.AdditiveBlending, depthWrite:false }));
     scene.add(halo); trackMeshes.push(halo);
   }
-  // STREAKING PULSES: glowing sprites that ride the centerline and race forward, looping.
-  // Pure eye-candy that sells speed/energy. Cheap (≈18 additive sprites).
-  const pulseGroup = new THREE.Group();
-  const pulseMat = new THREE.SpriteMaterial({ color:0xbff7ff, transparent:true,
-    opacity:0.9, blending:THREE.AdditiveBlending, depthWrite:false, depthTest:false });
-  const pulses = [];
-  for (let i = 0; i < 18; i++) {
-    const s = new THREE.Sprite(pulseMat.clone());
-    s.scale.set(1.8, 1.8, 1.8);
-    pulseGroup.add(s);
-    pulses.push({ sprite:s, t: i / 18 });   // staggered along the curve
-  }
-  scene.add(pulseGroup); trackMeshes.push(pulseGroup);
-  _pulse = { curve: centerCurve, pulses, lane, laneBaseOpacity: 0.26 };
+  _pulse = { lane, laneBaseOpacity: 0.26 };
 
   // NEON ARCH GATES spanning the track every ~70 nodes. archR = halfW so the two legs
   // of the half-torus land exactly on the left/right floor edges (they were at 1.3x =
@@ -597,24 +584,12 @@ function loop(now) {
   // so the track flashes on the beat. (beat is 0 unless self-hosted audio is playing.)
   const beat = sampleBeat();
   if (_beatBar) _beatBar.style.transform = 'scaleX(' + Math.min(1, beat) + ')';
-  if (_bloom) _bloom.strength = _bloomBase + beat * 0.55;          // glow surge on beat
-  if (typeof WALL_MAT !== 'undefined') WALL_MAT.emissiveIntensity = 0.6 + beat * 1.1;
-  if (typeof ROOF_MAT !== 'undefined') ROOF_MAT.emissiveIntensity = 0.25 + beat * 0.5;
-  if (_pulse) {
-    const tnow = now / 1000;
-    if (_pulse.lane) {
-      _pulse.lane.material.opacity = Math.min(0.8, _pulse.laneBaseOpacity + beat * 0.6);
-      _pulse.lane.material.color.setRGB(0.22 + beat*0.5, 0.78, 0.88);
-    }
-    const speed = 0.09 + beat * 0.22;
-    for (const p of _pulse.pulses) {
-      p.t += dt * speed; if (p.t > 1) p.t -= 1;
-      _pulse.curve.getPointAt(p.t, _tmpV);
-      p.sprite.position.copy(_tmpV);
-      p.sprite.material.opacity = 0.32 + 0.25 * Math.sin(tnow*4 + p.t*30) + beat*0.45;
-      const sc = 1.2 + beat * 1.8;
-      p.sprite.scale.set(sc, sc, sc);
-    }
+  if (_bloom) _bloom.strength = _bloomBase + beat * 0.35;          // gentle glow swell
+  if (typeof WALL_MAT !== 'undefined') WALL_MAT.emissiveIntensity = 0.6 + beat * 0.9;
+  if (typeof ROOF_MAT !== 'undefined') ROOF_MAT.emissiveIntensity = 0.25 + beat * 0.45;
+  if (_pulse && _pulse.lane) {
+    _pulse.lane.material.opacity = Math.min(0.75, _pulse.laneBaseOpacity + beat * 0.5);
+    _pulse.lane.material.color.setRGB(0.22 + beat*0.45, 0.78, 0.88);
   }
 
   if (phase === 'spawning') {
@@ -873,17 +848,18 @@ function setupAnalyser(){
     }
   } catch(e) { _analyser = null; }
 }
-// returns 0..1 KICK energy as a smooth pulse. fftSize 1024 → ~43 Hz per bin, so bins
-// 1..4 ≈ 43–215 Hz = the kick/bass drum (not hi-hats). Peak-follower: snap up on a hit,
-// decay smoothly = one clean pulse per beat instead of a fast square flicker.
+// returns 0..1 bass energy as a SLOW SUSTAINED swell — a low-pass envelope of the kick/
+// bass band so it rises and falls smoothly with the bassline ("DUUUNNN") instead of
+// snapping on every transient. fftSize 1024 → ~43 Hz/bin; bins 1..4 ≈ 43–215 Hz.
 function sampleBeat(){
   if (!_analyser) return 0;
   _analyser.getByteFrequencyData(_freqData);
   let sum = 0; for (let i = 1; i <= 4; i++) sum += _freqData[i];
-  let level = sum / (4 * 255);                 // 0..1
-  level = Math.max(0, (level - 0.12) / 0.88);  // gate out the quiet floor so it rests at 0
-  if (level > _beat) _beat = level;            // instant attack on the kick
-  else _beat = _beat * 0.88;                   // smooth decay = the pulse tail
+  let level = sum / (4 * 255);
+  level = Math.max(0, (level - 0.14) / 0.86);        // gate the quiet floor
+  // gentle low-pass: ease toward the level (a bit quicker up than down) for long swells
+  const rate = level > _beat ? 0.10 : 0.05;
+  _beat += (level - _beat) * rate;
   return _beat;
 }
 function loadSelf(i, autoplay){
