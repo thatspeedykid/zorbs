@@ -58,10 +58,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=3i"></script>
-<script src="/v2/track.js?v=3i"></script>
-<script src="/v2/physics.js?v=3i"></script>
-<script src="/v2/cosmetics.js?v=3i"></script>
+<script src="/v2/forks.js?v=3j"></script>
+<script src="/v2/track.js?v=3j"></script>
+<script src="/v2/physics.js?v=3j"></script>
+<script src="/v2/cosmetics.js?v=3j"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -72,7 +72,7 @@ const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '3i';
+const BUILD = '3j';
 console.log('[ZORBS] build', BUILD);
 const leaderEl = document.getElementById('leader');
 function setStatus(txt, ok) {
@@ -331,7 +331,7 @@ function buildCourse(seed) {
     pulses.push({ sprite:s, t: i / 18 });   // staggered along the curve
   }
   scene.add(pulseGroup); trackMeshes.push(pulseGroup);
-  _pulse = { curve: centerCurve, pulses };
+  _pulse = { curve: centerCurve, pulses, lane, laneBaseOpacity: 0.55 };
 
   // NEON ARCH GATES spanning the track every ~70 nodes. archR = halfW so the two legs
   // of the half-torus land exactly on the left/right floor edges (they were at 1.3x =
@@ -582,15 +582,24 @@ function loop(now) {
   frameAcc = Math.min(frameAcc - FRAME_CAP, FRAME_CAP); // keep remainder, avoid drift
   const dt = Math.min(0.05, (now - last)/1000); last = now;
 
-  // streaking energy pulses ride the centerline forward and loop (motion eye-candy)
+  // streaking energy pulses ride the centerline forward — and the center lane DANCES to
+  // the music: bass energy brightens/colors the lane and speeds up + fattens the streaks.
   if (_pulse) {
     const tnow = now / 1000;
+    const beat = sampleBeat();                     // 0..1 (0 when not self-hosted/playing)
+    if (_pulse.lane) {
+      _pulse.lane.material.opacity = Math.min(1, _pulse.laneBaseOpacity + beat * 0.9);
+      // hue pushes from cyan toward hot white-pink on big hits
+      _pulse.lane.material.color.setRGB(0.4 + beat*0.6, 0.94, 1.0);
+    }
+    const speed = 0.09 + beat * 0.22;              // streaks surge forward on the beat
     for (const p of _pulse.pulses) {
-      p.t += dt * 0.09; if (p.t > 1) p.t -= 1;
+      p.t += dt * speed; if (p.t > 1) p.t -= 1;
       _pulse.curve.getPointAt(p.t, _tmpV);
       p.sprite.position.copy(_tmpV);
-      // gentle twinkle so the stream shimmers
-      p.sprite.material.opacity = 0.55 + 0.4 * Math.sin(tnow*4 + p.t*30);
+      p.sprite.material.opacity = 0.5 + 0.4 * Math.sin(tnow*4 + p.t*30) + beat*0.5;
+      const sc = 1.8 + beat * 2.4;                 // pulses swell on the beat
+      p.sprite.scale.set(sc, sc, sc);
     }
   }
 
@@ -815,9 +824,38 @@ function initSelfHosted(){
     _sidx++; if (_sidx >= _slist.length) { _slist = shuffle(MUSIC.TRACKS); _sidx = 0; }
     loadSelf(_sidx, true);
   });
-  audioEl.addEventListener('play',  () => document.getElementById('m-play').textContent = '⏸');
+  audioEl.addEventListener('play',  () => { setupAnalyser(); document.getElementById('m-play').textContent = '⏸'; });
   audioEl.addEventListener('pause', () => document.getElementById('m-play').textContent = '▶');
   audioEl.addEventListener('error', () => document.getElementById('m-song').textContent = 'track unavailable');
+}
+// WEB AUDIO ANALYSER — taps the <audio> stream so the center lane can dance to the beat.
+// Only works on self-hosted (same-origin / CORS-clean) audio; a YouTube iframe is sealed
+// and can't be analysed. Created lazily on first play (AudioContext needs a user gesture).
+let _audioCtx = null, _analyser = null, _freqData = null, _beat = 0, _srcMade = false;
+function setupAnalyser(){
+  try {
+    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (_audioCtx.state === 'suspended') _audioCtx.resume();
+    if (!_srcMade) {                      // createMediaElementSource is one-time per element
+      const src = _audioCtx.createMediaElementSource(audioEl);
+      _analyser = _audioCtx.createAnalyser();
+      _analyser.fftSize = 256; _analyser.smoothingTimeConstant = 0.75;
+      src.connect(_analyser);
+      _analyser.connect(_audioCtx.destination);   // keep it audible
+      _freqData = new Uint8Array(_analyser.frequencyBinCount);
+      _srcMade = true;
+    }
+  } catch(e) { _analyser = null; }
+}
+// returns 0..1 bass energy with fast attack / slow decay (so it pulses, not jitters)
+function sampleBeat(){
+  if (!_analyser) return 0;
+  _analyser.getByteFrequencyData(_freqData);
+  let sum = 0; const N = 6;              // lowest ~6 bins ≈ kick/bass
+  for (let i = 0; i < N; i++) sum += _freqData[i];
+  const bass = sum / (N * 255);
+  _beat = Math.max(bass, _beat * 0.90);
+  return _beat;
 }
 function loadSelf(i, autoplay){
   _sidx = i; const t = _slist[i] || {};
@@ -869,7 +907,7 @@ function updateNowPlaying(){
 /* ===== shared controls (mode-aware) ===== */
 function startMusic(){
   wantPlay = true;
-  if (audioMode === 'self' && audioEl) audioEl.play().catch(()=>{});
+  if (audioMode === 'self' && audioEl) { setupAnalyser(); audioEl.play().catch(()=>{}); }
   else if (audioMode === 'yt' && ytReady && ytPlayer) ytPlayer.playVideo();
 }
 document.getElementById('m-play').addEventListener('click', () => {
