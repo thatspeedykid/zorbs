@@ -16,10 +16,16 @@
   #music { position:fixed; bottom:10px; right:12px; z-index:30; display:flex; align-items:center; gap:10px;
     background:rgba(6,12,26,.82); border:1px solid rgba(60,180,255,.4); border-radius:10px; padding:8px 10px;
     backdrop-filter:blur(4px); box-shadow:0 0 18px rgba(0,120,255,.25); max-width:300px; }
-  #music img { width:48px; height:48px; border-radius:6px; object-fit:cover; background:#0a1430; flex:0 0 auto; }
   #music .meta { min-width:0; flex:1; }
   #music .artist { color:#7fe9ff; font-size:11px; letter-spacing:1px; }
   #music .song { color:#fff; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  /* volume slider */
+  #music .vol { -webkit-appearance:none; appearance:none; width:100%; height:4px; margin-top:6px;
+    border-radius:3px; background:linear-gradient(90deg,#00e5ff,#0a2a4a); cursor:pointer; outline:none; }
+  #music .vol::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; width:12px; height:12px;
+    border-radius:50%; background:#9fefff; box-shadow:0 0 6px rgba(0,200,255,.9); border:none; cursor:pointer; }
+  #music .vol::-moz-range-thumb { width:12px; height:12px; border-radius:50%; background:#9fefff;
+    box-shadow:0 0 6px rgba(0,200,255,.9); border:none; cursor:pointer; }
   #music .btns { display:flex; gap:6px; flex:0 0 auto; }
   #music button { background:rgba(0,150,255,.15); color:#9fefff; border:1px solid rgba(60,180,255,.5);
     border-radius:6px; width:30px; height:30px; cursor:pointer; font-size:13px; line-height:1; }
@@ -37,10 +43,10 @@
 <!-- SpeedyGoWild background music: self-hosted playlist (music/playlist.json) when present
      = zero YouTube + zero ad-blocker issues; otherwise falls back to the YouTube embed -->
 <div id="music">
-  <img id="m-art" alt="" src="https://img.youtube.com/vi/V1qf3Mw_zSk/hqdefault.jpg">
   <div class="meta">
     <div class="artist">♪ SpeedyGoWild</div>
     <div class="song" id="m-song">loading…</div>
+    <input id="m-vol" class="vol" type="range" min="0" max="100" value="60" title="volume">
   </div>
   <div class="btns">
     <button id="m-play" title="play / pause">▶</button>
@@ -58,10 +64,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=3j"></script>
-<script src="/v2/track.js?v=3j"></script>
-<script src="/v2/physics.js?v=3j"></script>
-<script src="/v2/cosmetics.js?v=3j"></script>
+<script src="/v2/forks.js?v=3k"></script>
+<script src="/v2/track.js?v=3k"></script>
+<script src="/v2/physics.js?v=3k"></script>
+<script src="/v2/cosmetics.js?v=3k"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -72,7 +78,7 @@ const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '3j';
+const BUILD = '3k';
 console.log('[ZORBS] build', BUILD);
 const leaderEl = document.getElementById('leader');
 function setStatus(txt, ok) {
@@ -827,6 +833,7 @@ function initSelfHosted(){
   audioEl.addEventListener('play',  () => { setupAnalyser(); document.getElementById('m-play').textContent = '⏸'; });
   audioEl.addEventListener('pause', () => document.getElementById('m-play').textContent = '▶');
   audioEl.addEventListener('error', () => document.getElementById('m-song').textContent = 'track unavailable');
+  applyVolume();
 }
 // WEB AUDIO ANALYSER — taps the <audio> stream so the center lane can dance to the beat.
 // Only works on self-hosted (same-origin / CORS-clean) audio; a YouTube iframe is sealed
@@ -861,7 +868,7 @@ function loadSelf(i, autoplay){
   _sidx = i; const t = _slist[i] || {};
   audioEl.src = t.src || '';
   document.getElementById('m-song').textContent = t.title || MUSIC.artist;
-  if (t.art) document.getElementById('m-art').src = t.art;
+  // album art intentionally omitted (cover removed from the player)
   if (autoplay || wantPlay) audioEl.play().catch(()=>{});
 }
 
@@ -884,6 +891,7 @@ function onYTReady(){
   ytReady = true;
   if (MUSIC.PLAYLIST) { try { ytPlayer.setShuffle(true); ytPlayer.setLoop(true); } catch(e){} }
   updateNowPlaying();
+  if (typeof applyVolume === 'function') applyVolume();
   if (wantPlay) ytPlayer.playVideo();
 }
 function onYTState(e){
@@ -900,7 +908,7 @@ function updateNowPlaying(){
   try {
     const d = ytPlayer.getVideoData() || {};
     if (d.title) document.getElementById('m-song').textContent = d.title;
-    if (d.video_id) document.getElementById('m-art').src = 'https://img.youtube.com/vi/'+d.video_id+'/hqdefault.jpg';
+  // (album art omitted)
   } catch(e){}
 }
 
@@ -932,6 +940,26 @@ document.getElementById('m-mute').addEventListener('click', () => {
     document.getElementById('m-mute').textContent = ytMuted ? '🔇' : '🔊';
   }
 });
+
+// VOLUME SLIDER (mode-aware). Self-hosted uses audioEl.volume (0..1); YouTube uses
+// setVolume (0..100). Remembered across sessions via localStorage.
+let _vol = 60;   // 0..100
+try { const sv = parseInt(localStorage.getItem('zorbs_vol')); if (!isNaN(sv)) _vol = sv; } catch(e){}
+function applyVolume(){
+  if (audioMode === 'self' && audioEl) { audioEl.volume = _vol/100; if (_vol>0) audioEl.muted = false; }
+  else if (audioMode === 'yt' && ytReady && ytPlayer) { try { ytPlayer.setVolume(_vol); if (_vol>0){ ytPlayer.unMute(); ytMuted=false; } } catch(e){} }
+  const mute = document.getElementById('m-mute');
+  if (mute) mute.textContent = _vol === 0 ? '🔇' : '🔊';
+}
+const _volEl = document.getElementById('m-vol');
+if (_volEl) {
+  _volEl.value = _vol;
+  _volEl.addEventListener('input', () => {
+    _vol = parseInt(_volEl.value) || 0;
+    try { localStorage.setItem('zorbs_vol', String(_vol)); } catch(e){}
+    applyVolume();
+  });
+}
 
 // audio-gesture gate (this is what was spamming the console before: we now ONLY
 // start anything audio-ish AFTER a real click, exactly once)
