@@ -69,12 +69,34 @@ const ZFORK = (() => {
     const end = Math.min(mainNodes.length - 6, splitIdx + steps);
     const lenF = end - splitIdx;
     if (lenF < 34) return null;                 // too short to diverge cleanly
+    // Only diverge on STRAIGHT-ish runs. Offsetting the routes sideways through a turn
+    // sweeps them out into a fan/spiral (the shell shapes), so bail on curvy sections and
+    // let a normal lane-fork handle those instead.
+    let turnAcc = 0;
+    for (let k = splitIdx; k < end; k++) {
+      const a = mainNodes[k].dir, b = mainNodes[k+1].dir;
+      const dot = Math.max(-1, Math.min(1, a.x*b.x + a.y*b.y + a.z*b.z));
+      turnAcc += Math.acos(dot);
+    }
+    if (turnAcc > 0.45) return null;            // ~26° total heading change — too curvy
+    // STRAIGHTNESS GATE: offsetting the main path on a CURVE twists the ribbon into a
+    // fan/seashell. Only build a divergent fork where the section is near-straight; the
+    // caller falls back to a safe lane-fork otherwise.
+    let heading = 0;
+    for (let k = splitIdx; k < end; k++) {
+      const a = mainNodes[k].dir, b = mainNodes[k+1].dir;
+      const dot = Math.max(-1, Math.min(1, a.x*b.x + a.y*b.y + a.z*b.z));
+      heading += Math.acos(dot);
+    }
+    if (heading > 0.9) return null;             // too curvy → not a clean divergent fork
+
     const MOUTH = 14;                          // wide Y-mouth nodes at each end
     const base = mainNodes[splitIdx].halfW;
-    const GAP = base * 0.9;                     // routes nearly touch where ribbons begin
-    const SPREAD = base * 1.7;                  // peak route center offset (gentler bow)
-    const PAD = base * 2.4;                     // Y-mouth corridor half-width
-    const prof = { A: { sign:-1, amp:0.85 }, B: { sign:1, amp:0.82 } };  // both gentle
+    const GAP = base * 1.4;                     // route center offset where ribbons begin
+    const SPREAD = base * 2.3;                  // peak route center offset (the bow)
+    const PAD = base * 2.9;                     // Y-mouth corridor half-width
+    const RW = base * 1.35;                     // route half-width (wide — room for the field)
+    const prof = { A: { sign:-1, amp:0.9 }, B: { sign:1, amp:0.88 } };
 
     const offsetAt = (k, amp, sign) => {
       let mag;
