@@ -208,6 +208,8 @@ const ZPHYSICS = (() => {
   const DRIVE_FORCE = 7.5;   // base forward push
   const LANE_PULL = 2.2;     // how strongly a ball seeks its preferred lane
   const MAX_SPEED = 26;
+  const SPIRAL_DOWNFORCE = 6.0;     // extra downforce on spiral coils (keeps balls planted)
+  const BOOST_PAD_STRENGTH = 1.3;   // forward boost from a side pad (MEDIUM mode tuning)
 
   // Fixed-timestep stepping with an accumulator. Call step(realDt) each frame;
   // it runs 0..N fixed sub-steps so physics is deterministic and smooth.
@@ -300,12 +302,26 @@ const ZPHYSICS = (() => {
       const laneFx = r.x * latErr * lanePull;
       const laneFz = r.z * latErr * lanePull;
 
+      const m = b.body.mass() || 1;
+      // SPIRAL DOWNFORCE: tight downward coils can let a ball float off the curved surface;
+      // a little extra downforce on spiral nodes keeps it planted (deliberately gentle).
+      const downforce = (n.kind === 'spiral') ? SPIRAL_DOWNFORCE * m : 0;
+
+      // BOOST PADS (F-Zero side strips): if this node is a pad and the ball is riding that
+      // side near the edge, give it a forward burst — rewards hugging the boost line.
+      if (n.boost) {
+        const nearR = curLat >  n.halfW * 0.40;
+        const nearL = curLat < -n.halfW * 0.40;
+        const onPad = (n.boost === 2) ? (nearR || nearL) : (n.boost > 0 ? nearR : nearL);
+        if (onPad) b.boost = Math.min(2.2, Math.max(b.boost, BOOST_PAD_STRENGTH));
+      }
+
       // total drive: forward + gentle lane-seek + boost. Applied as a force each
       // fixed step (consistent), and kept modest so ball-ball contacts still win.
       const drive = DRIVE_FORCE * b.speedMul * (1 + b.boost);
       b.body.addForce({
         x: fx * drive + laneFx,
-        y: 0,                            // NO vertical drive - gravity keeps them planted
+        y: -downforce,                   // gravity + (on spirals) a little extra downforce
         z: fz * drive + laneFz,
       }, true);
 

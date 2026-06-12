@@ -66,10 +66,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=3s"></script>
-<script src="/v2/track.js?v=3s"></script>
-<script src="/v2/physics.js?v=3s"></script>
-<script src="/v2/cosmetics.js?v=3s"></script>
+<script src="/v2/forks.js?v=3t"></script>
+<script src="/v2/track.js?v=3t"></script>
+<script src="/v2/physics.js?v=3t"></script>
+<script src="/v2/cosmetics.js?v=3t"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -80,7 +80,7 @@ const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '3s';
+const BUILD = '3t';
 console.log('[ZORBS] build', BUILD);
 const leaderEl = document.getElementById('leader');
 function setStatus(txt, ok) {
@@ -191,6 +191,7 @@ function buildEnvMap() {
 // ---- build the course ----
 let track = null, trackMeshes = [];
 let _pulse = null;                  // streaking-pulse animation state (set in buildCourse)
+let _boostMats = [];                // boost-pad chevron textures (scrolled each frame)
 const _tmpV = new THREE.Vector3();  // scratch vector reused each frame (no per-frame alloc)
 const _beatBar = document.getElementById('m-beat');   // live beat meter in the player
 // neon palette the center line cycles through on each beat thud
@@ -390,6 +391,36 @@ function buildCourse(seed) {
     banner.position.set(0, postH - 0.95, 0); grp.add(banner);
     scene.add(grp); trackMeshes.push(grp);
   })();
+
+  // BOOST PADS — glowing chevron strips along BOTH edges of each boost zone (F-Zero style).
+  // Chevron texture scrolls forward (animated in the loop) to read as "speed this way".
+  _boostMats = [];
+  if (track.boosts && track.boosts.length) {
+    // forward-pointing chevron texture (bright amber on transparent)
+    const bc = document.createElement('canvas'); bc.width = 32; bc.height = 32;
+    const bx = bc.getContext('2d'); bx.strokeStyle = '#ffd24a'; bx.lineWidth = 7; bx.lineCap = 'round';
+    bx.beginPath(); bx.moveTo(5,22); bx.lineTo(16,8); bx.lineTo(27,22); bx.stroke();
+    for (const z of track.boosts) {
+      for (const side of [-1, 1]) {
+        const pts = [];
+        for (let i = z.startIdx; i <= z.endIdx; i++) {
+          const n = track.nodes[i];
+          const off = n.halfW * 0.82 * side;
+          pts.push(new THREE.Vector3(n.pos.x + n.right.x*off, n.pos.y + 0.16, n.pos.z + n.right.z*off));
+        }
+        if (pts.length < 2) continue;
+        const tex = new THREE.CanvasTexture(bc);
+        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(1, Math.max(2, pts.length * 0.5));
+        const geo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), pts.length*2, 0.42, 5, false);
+        const mat = new THREE.MeshBasicMaterial({ map:tex, color:0xffb030, transparent:true,
+          opacity:0.9, blending:THREE.AdditiveBlending, depthWrite:false });
+        const strip = new THREE.Mesh(geo, mat);
+        scene.add(strip); trackMeshes.push(strip);
+        _boostMats.push(tex);
+      }
+    }
+  }
 }
 
 // ---- balls: SCI-FI metallic orb + glowing laser saturn ring ----
@@ -585,6 +616,7 @@ function loop(now) {
   // streaking energy pulses ride the centerline forward — and the WHOLE TRACK dances to
   // the music: bass energy drives the center lane, the bloom glow, and the wall emissive,
   // so the track flashes on the beat. (beat is 0 unless self-hosted audio is playing.)
+  for (let i = 0; i < _boostMats.length; i++) _boostMats[i].offset.y = (now/1000 * 1.4) % 1;
   const beat = sampleBeat();
   if (_beatBar) _beatBar.style.transform = 'scaleX(' + Math.min(1, beat) + ')';
   if (_bloom) _bloom.strength = _bloomBase + beat * 0.5;

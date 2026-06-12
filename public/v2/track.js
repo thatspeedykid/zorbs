@@ -313,6 +313,33 @@ const ZTRACK = (() => {
       forks = built.forks; forkAtIdx = built.forkAtIdx;
     }
 
+    // BOOST PADS (F-Zero side strips). Deterministic via a separate rng so the layout is
+    // untouched. MEDIUM mode: a pad zone roughly every ~70 nodes, ~14 nodes long, on BOTH
+    // edges (forgiving — hug either side to catch it). Density/side become mode-driven later.
+    const boosts = [];
+    {
+      const brng = mulberry32((seed ^ 0x9e3779b9) >>> 0);
+      const GAP_MIN = 55, GAP_VAR = 40, LEN_MIN = 12, LEN_VAR = 8;
+      let i = platStart + 30;
+      while (i < nodes.length - 40) {
+        const len = LEN_MIN + Math.floor(brng() * LEN_VAR);
+        let ok = true;
+        for (let k = 0; k < len; k++) {
+          const nd = nodes[i + k];
+          if (!nd || nd.isPlatform || nd.branchId || nd.kind === 'fork' ||
+              nd.tunnel || /drum/.test(nd.kind || '')) { ok = false; break; }
+        }
+        if (ok) {
+          const side = 2;   // MEDIUM: both edges boost
+          for (let k = 0; k < len; k++) nodes[i + k].boost = side;
+          boosts.push({ startIdx: i, endIdx: i + len - 1, side });
+          i += len + GAP_MIN + Math.floor(brng() * GAP_VAR);
+        } else {
+          i += 10;
+        }
+      }
+    }
+
     // Build mesh for the main path, then add each fork's geometry.
     // lanesOnly forks (v2.1) live INSIDE the widened main corridor, so the main mesh
     // already covers their floor and outer walls — they only contribute the DIVIDER
@@ -349,7 +376,7 @@ const ZTRACK = (() => {
 
     const start = nodes[0];
     const finish = nodes[nodes.length - 1];
-    return { seed, nodes, mesh, collider, start, finish,
+    return { seed, nodes, mesh, collider, start, finish, boosts,
       platform: { startIdx: 0, endIdx: platStart },
       forks, forkAtIdx, branchMeshes, branchColliders };
   }
