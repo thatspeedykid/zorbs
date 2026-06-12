@@ -103,10 +103,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=4a"></script>
-<script src="/v2/track.js?v=4a"></script>
-<script src="/v2/physics.js?v=4a"></script>
-<script src="/v2/cosmetics.js?v=4a"></script>
+<script src="/v2/forks.js?v=4b"></script>
+<script src="/v2/track.js?v=4b"></script>
+<script src="/v2/physics.js?v=4b"></script>
+<script src="/v2/cosmetics.js?v=4b"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -117,8 +117,37 @@ const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '4a';
+const BUILD = '4b';
 console.log('[ZORBS] build', BUILD);
+
+// ---- ERROR LOGGER: phone runtime errors home (/api/log) so we can fix the game from real
+// data as it runs in the wild. Deduped + capped so it never spams. Pure additive safety net.
+const ZLOG = (() => {
+  const seen = new Map(); let sent = 0;
+  const safe = (fn) => { try { return fn(); } catch (_) { return ''; } };
+  function report(kind, msg, stack, extra) {
+    try {
+      if (sent > 40) return;                                  // cap per page load
+      const key = kind + '|' + String(msg || '').slice(0, 120) + '|' + ((extra && extra.line) || 0);
+      const now = Date.now();
+      if (seen.get(key) && now - seen.get(key) < 10000) return; // dedupe within 10s
+      seen.set(key, now); sent++;
+      const payload = Object.assign({
+        kind, msg: String(msg || ''), stack: String(stack || ''),
+        build: safe(() => BUILD) || '?',
+        raceId: safe(() => _raceId) || '',
+        phase: safe(() => phase) || '',
+        url: location.href,
+      }, extra || {});
+      const data = JSON.stringify(payload);
+      if (navigator.sendBeacon) navigator.sendBeacon('/api/log', new Blob([data], { type: 'application/json' }));
+      else fetch('/api/log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: data, keepalive: true }).catch(() => {});
+    } catch (_) {}
+  }
+  window.addEventListener('error', e => report('error', e.message, e.error && e.error.stack, { line: e.lineno, col: e.colno, url: e.filename || location.href }));
+  window.addEventListener('unhandledrejection', e => { const r = e.reason; report('promise', (r && r.message) || String(r), r && r.stack); });
+  return { report };
+})();
 const leaderEl = document.getElementById('leader');
 function setStatus(txt, ok) {
   statusEl.textContent = txt;
@@ -995,7 +1024,8 @@ async function fetchRaceSeed(replayId) {
 async function boot() {
   setStatus('loading physics…', false);
   const ok = await ZPHYSICS.init(BALL_R);
-  if (!ok) { setStatus('LEGACY (physics failed: ' + ZPHYSICS.getError() + ')', false); return; }
+  if (!ok) { setStatus('LEGACY (physics failed: ' + ZPHYSICS.getError() + ')', false);
+    ZLOG.report('manual', 'physics init failed: ' + ZPHYSICS.getError(), ''); return; }
   setStatus('⬡ READY · build ' + BUILD, true);
   try { buildEnvMap(); } catch(e){ console.warn('env map skipped', e); }
   // SERVER-ASSIGNED RACE: the seed comes from the server (/api/race), not the client, so
