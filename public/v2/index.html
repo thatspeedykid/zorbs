@@ -11,7 +11,37 @@
   #status { position:fixed; bottom:8px; left:8px; font-size:10px; font-family:monospace; padding:3px 8px; border-radius:4px; z-index:20; }
   #arm { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(2,5,13,.85); z-index:50; cursor:pointer; }
   #arm .box { color:#7fe9ff; border:1px solid rgba(0,200,255,.4); padding:18px 30px; border-radius:8px; letter-spacing:2px; font-size:14px; }
-  #leader { position:fixed; top:10px; right:12px; color:#fff; font-size:13px; text-align:right; z-index:10; text-shadow:0 0 8px rgba(255,255,255,.4); }
+  #leader { display:none; }
+  #rightcol { position:fixed; top:10px; right:12px; width:216px; z-index:10; font-family:'Courier New',monospace; }
+  #standings .row { display:flex; align-items:center; gap:7px; padding:3px 8px; margin:2px 0; border-radius:6px;
+    background:rgba(6,20,40,.55); font-size:12px; color:#dff3ff; box-shadow:0 0 0 1px rgba(80,160,255,.14); transition:opacity .3s; }
+  #standings .row.lead { box-shadow:0 0 0 1px rgba(120,230,255,.65), 0 0 14px rgba(40,180,255,.4); color:#fff; }
+  #standings .row.out { opacity:.38; filter:grayscale(.7); }
+  #standings .row.fin { box-shadow:0 0 0 1px rgba(120,255,180,.5); }
+  #standings .rank { width:18px; text-align:right; color:#7fe9ff; font-weight:bold; }
+  #standings .dot { width:10px; height:10px; border-radius:50%; flex:0 0 auto; box-shadow:0 0 6px currentColor; }
+  #standings .nm { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #standings .st { font-size:10px; opacity:.85; }
+  #feed { margin-top:8px; display:flex; flex-direction:column; gap:3px; }
+  #feed .ev { font-size:11px; padding:3px 8px; border-radius:6px; background:rgba(6,20,40,.5);
+    color:#bfeaff; box-shadow:0 0 0 1px rgba(80,160,255,.12); animation:evin .28s ease; }
+  #feed .ev b { color:#fff; }
+  #feed .ev.boost b { color:#7fb0ff; }  #feed .ev.fell b { color:#ff7a8a; }  #feed .ev.lead b { color:#8effc8; }
+  @keyframes evin { from{opacity:0; transform:translateX(14px);} to{opacity:1; transform:none;} }
+  #endcard { position:fixed; inset:0; display:none; align-items:center; justify-content:center; z-index:50;
+    background:rgba(2,8,20,.55); backdrop-filter:blur(3px); font-family:'Courier New',monospace; }
+  #endcard .panel { width:340px; max-height:80vh; overflow:auto; background:linear-gradient(160deg,rgba(10,26,52,.96),rgba(6,14,32,.96));
+    border:1px solid rgba(80,180,255,.45); border-radius:14px; padding:20px 22px; box-shadow:0 0 50px rgba(20,120,255,.35); }
+  #endcard h2 { margin:0 0 4px; color:#7fe9ff; letter-spacing:3px; font-size:15px; text-align:center; }
+  #endcard .champ { text-align:center; font-size:22px; color:#fff; margin:8px 0 14px; text-shadow:0 0 16px rgba(120,220,255,.7); }
+  #endcard .champ .c { font-size:30px; }
+  #endcard .prow { display:flex; align-items:center; gap:9px; padding:5px 8px; margin:3px 0; border-radius:7px; background:rgba(255,255,255,.04); }
+  #endcard .prow .p { width:24px; color:#7fe9ff; font-weight:bold; text-align:right; }
+  #endcard .prow.gold{ background:rgba(255,210,80,.14);} #endcard .prow.silver{ background:rgba(200,220,255,.12);} #endcard .prow.bronze{ background:rgba(255,160,90,.12);}
+  #endcard .dot { width:11px; height:11px; border-radius:50%; box-shadow:0 0 6px currentColor; }
+  #endcard .again { margin-top:14px; width:100%; padding:9px; border-radius:8px; cursor:pointer; font-family:inherit;
+    background:rgba(40,140,255,.25); color:#cfeaff; border:1px solid rgba(80,180,255,.5); letter-spacing:2px; }
+  #endcard .again:hover { background:rgba(40,140,255,.45); }
   /* SpeedyGoWild music player */
   #music { position:fixed; bottom:10px; right:12px; z-index:30; display:flex; align-items:center; gap:10px;
     background:rgba(6,12,26,.82); border:1px solid rgba(60,180,255,.4); border-radius:10px; padding:8px 10px;
@@ -39,6 +69,13 @@
 <canvas id="c"></canvas>
 <div id="hud">ZORBS v2 — engine test</div>
 <div id="leader"></div>
+<div id="rightcol"><div id="standings"></div><div id="feed"></div></div>
+<div id="endcard"><div class="panel">
+  <h2>RACE COMPLETE</h2>
+  <div class="champ"></div>
+  <div class="places"></div>
+  <button class="again">RACE AGAIN</button>
+</div></div>
 <div id="status">booting…</div>
 <div id="arm"><div class="box">▶ CLICK TO START</div></div>
 
@@ -66,10 +103,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=3z"></script>
-<script src="/v2/track.js?v=3z"></script>
-<script src="/v2/physics.js?v=3z"></script>
-<script src="/v2/cosmetics.js?v=3z"></script>
+<script src="/v2/forks.js?v=4a"></script>
+<script src="/v2/track.js?v=4a"></script>
+<script src="/v2/physics.js?v=4a"></script>
+<script src="/v2/cosmetics.js?v=4a"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -80,7 +117,7 @@ const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '3z';
+const BUILD = '4a';
 console.log('[ZORBS] build', BUILD);
 const leaderEl = document.getElementById('leader');
 function setStatus(txt, ok) {
@@ -650,6 +687,72 @@ let _fieldSize = 20;
 let spawnQueue = [], spawnTimer = 0;
 let winner = null;
 
+// ---- live HUD: standings, action feed, end podium ----
+const standingsEl = document.getElementById('standings');
+const feedEl = document.getElementById('feed');
+const endcardEl = document.getElementById('endcard');
+let _finishOrder = [], _winAt = 0, _lastLeaderId = null;
+const _finishedSet = new Set(), _fellSet = new Set(), _boostState = {}, _boostCool = {};
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function cssColor(c){ const n = (c==null)?0x8899aa : (typeof c==='number'? c : (c.getHex? c.getHex():0x8899aa)); return '#'+(n>>>0 & 0xffffff).toString(16).padStart(6,'0'); }
+function pushFeed(cls, html){
+  const d = document.createElement('div'); d.className = 'ev '+cls; d.innerHTML = html;
+  feedEl.prepend(d);
+  while (feedEl.children.length > 6) feedEl.removeChild(feedEl.lastChild);
+  setTimeout(() => { if (d.parentNode){ d.style.transition='opacity .5s'; d.style.opacity='0'; setTimeout(()=>d.remove(), 500); } }, 6500);
+}
+function resetHUD(){
+  _finishOrder = []; _winAt = 0; _lastLeaderId = null;
+  _finishedSet.clear(); _fellSet.clear();
+  for (const k in _boostState) delete _boostState[k];
+  for (const k in _boostCool) delete _boostCool[k];
+  standingsEl.innerHTML = ''; feedEl.innerHTML = ''; endcardEl.style.display = 'none';
+}
+function updateHUD(snap, nowSec){
+  const rows = [];
+  zorbs.forEach((z, id) => rows.push({ id, z, s: snap[id], fin: _finishedSet.has(id), out: z.eliminated }));
+  rows.sort((a,b) => {
+    if (a.fin && b.fin) return _finishOrder.indexOf(a.id) - _finishOrder.indexOf(b.id);
+    if (a.fin !== b.fin) return a.fin ? -1 : 1;
+    if (a.out !== b.out) return a.out ? 1 : -1;
+    return (b.s ? b.s.progress : 0) - (a.s ? a.s.progress : 0);
+  });
+  let html = '';
+  rows.forEach((r, i) => {
+    const cls = r.fin ? 'fin' : (r.out ? 'out' : (i === 0 ? 'lead' : ''));
+    const st = r.fin ? ('#'+(_finishOrder.indexOf(r.id)+1)) : (r.out ? 'OUT' : '');
+    html += '<div class="row '+cls+'"><span class="rank">'+(i+1)+'</span><span class="dot" style="color:'+cssColor(r.z.color)+'"></span><span class="nm">'+esc(r.id)+'</span><span class="st">'+st+'</span></div>';
+  });
+  standingsEl.innerHTML = html;
+  // lead-change feed (only among still-racing balls, before anyone wins)
+  const top = rows.find(r => !r.fin && !r.out);
+  if (top && !winner && _lastLeaderId && top.id !== _lastLeaderId) pushFeed('lead', '<b>'+esc(top.id)+'</b> took the lead!');
+  if (top && !winner) _lastLeaderId = top.id;
+  // boost feed (rising edge, per-ball cooldown)
+  zorbs.forEach((z, id) => {
+    const s = snap[id]; if (!s || z.eliminated) return;
+    const boosting = s.boost > 0.5;
+    if (boosting && !_boostState[id] && (nowSec - (_boostCool[id]||0)) > 4) { pushFeed('boost', '<b>'+esc(id)+'</b> used boost!'); _boostCool[id] = nowSec; }
+    _boostState[id] = boosting;
+  });
+}
+function showEndCard(){
+  const order = _finishOrder.slice();
+  // append any non-finishers (fell / DNF) after the finishers
+  zorbs.forEach((z, id) => { if (!_finishedSet.has(id)) order.push(id); });
+  const champ = order[0];
+  endcardEl.querySelector('.champ').innerHTML = champ ? ('<span class="c">🏆</span><br>'+esc(champ)) : '—';
+  const medal = ['gold','silver','bronze'];
+  let html = '';
+  order.forEach((id, i) => {
+    const z = zorbs.get(id); const tag = _finishedSet.has(id) ? '' : ' · DNF';
+    html += '<div class="prow '+(medal[i]||'')+'"><span class="p">'+(i+1)+'</span><span class="dot" style="color:'+cssColor(z?z.color:0)+'"></span><span style="flex:1">'+esc(id)+'</span><span style="opacity:.7;font-size:11px">'+(i===0?'WINNER':('#'+(i+1)+tag))+'</span></div>';
+  });
+  endcardEl.querySelector('.places').innerHTML = html;
+  endcardEl.style.display = 'flex';
+}
+document.querySelector('#endcard .again').addEventListener('click', () => location.reload());
+
 function startRace(seed, names) {
   _fieldSize = names.length;
   buildCourse(seed);
@@ -660,7 +763,7 @@ function startRace(seed, names) {
   spawnQueue = names.map((nm, i) => ({ id: nm.id, prefs: nm.prefs, isSub: nm.isSub, delay: i*0.12 }));
   spawnTimer = 0; _spawnIndex = 0;
   phase = 'spawning';
-  leaderEl.textContent = '';
+  resetHUD();
 }
 
 let _spawnIndex = 0;
@@ -726,21 +829,28 @@ function loop(now) {
 
   if (phase === 'racing' && ZPHYSICS.isReady()) {
     ZPHYSICS.step(dt);
-    // eliminate fallers
-    const fallen = ZPHYSICS.checkFalls(12);
+    const fallen = ZPHYSICS.checkFalls(_fieldSize);
     for (const id of fallen) {
-      const z = zorbs.get(id); if (z) z.eliminated = true;
+      const z = zorbs.get(id);
+      if (z && !z.eliminated) { z.eliminated = true;
+        if (!_finishedSet.has(id)) { _fellSet.add(id); pushFeed('fell', '<b>'+esc(id)+'</b> fell off!'); } }
     }
-    // winner check: leader reached the final stretch
-    const lead = ZPHYSICS.leader();
-    if (lead != null) {
-      const snap = ZPHYSICS.snapshot()[lead];
-      if (snap && snap.hint >= track.nodes.length - 3 && !winner) {
-        winner = lead; phase = 'done';
-        leaderEl.innerHTML = '🏆 ' + lead;
-      } else if (snap) {
-        leaderEl.textContent = '1st: ' + lead;
+    // detect EVERY finisher in order (not just the winner) for full standings
+    const snapR = ZPHYSICS.snapshot();
+    const endHint = track.nodes.length - 3;
+    for (const id in snapR) {
+      const z = zorbs.get(id);
+      if (snapR[id].hint >= endHint && !_finishedSet.has(id) && z && !z.eliminated) {
+        _finishedSet.add(id); _finishOrder.push(id);
+        if (_finishOrder.length === 1) { winner = id; _winAt = now; pushFeed('lead', '🏆 <b>'+esc(id)+'</b> WINS!'); }
+        else pushFeed('lead', '<b>'+esc(id)+'</b> finished #'+_finishOrder.length);
       }
+    }
+    updateHUD(snapR, now/1000);
+    // end the race a few seconds after the winner (lets stragglers place), or when all done
+    const total = zorbs.size;
+    if (winner && ((now - _winAt > 4000) || (_finishedSet.size + _fellSet.size >= total))) {
+      phase = 'done'; showEndCard();
     }
   }
 

@@ -407,7 +407,7 @@ const ZPHYSICS = (() => {
     for (const [id, b] of balls) {
       const t = b.body.translation();
       const lv = b.body.linvel();
-      out[id] = { x: t.x, y: t.y, z: t.z, vx: lv.x, vz: lv.z, alive: b.alive, hint: b.hint, branch: b.branch||null, progress: b.progress||b.hint };
+      out[id] = { x: t.x, y: t.y, z: t.z, vx: lv.x, vz: lv.z, alive: b.alive, hint: b.hint, branch: b.branch||null, progress: b.progress||b.hint, boost: b.boost||0 };
     }
     return out;
   }
