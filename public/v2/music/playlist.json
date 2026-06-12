@@ -1,0 +1,5 @@
+{
+  "artist": "SpeedyGoWild",
+  "_howto": "Add your own hosted audio tracks below to play them in-game with ZERO YouTube (so nothing gets blocked by ad-blockers). Each track: title, src (a direct https URL to an mp3/ogg/m4a you host, e.g. on speedygowild.xyz), and optional art (cover image URL). While 'tracks' is empty the game falls back to the YouTube embed. Example: { \"title\": \"City Escapes\", \"src\": \"https://speedygowild.xyz/music/city-escapes.mp3\", \"art\": \"https://speedygowild.xyz/music/city-escapes.jpg\" }",
+  "tracks": []
+}

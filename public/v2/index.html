@@ -34,7 +34,8 @@
 <div id="status">booting…</div>
 <div id="arm"><div class="box">▶ CLICK TO START</div></div>
 
-<!-- SpeedyGoWild background music (own copyrighted tracks via YouTube's official embed) -->
+<!-- SpeedyGoWild background music: self-hosted playlist (music/playlist.json) when present
+     = zero YouTube + zero ad-blocker issues; otherwise falls back to the YouTube embed -->
 <div id="music">
   <img id="m-art" alt="" src="https://img.youtube.com/vi/V1qf3Mw_zSk/hqdefault.jpg">
   <div class="meta">
@@ -46,6 +47,7 @@
     <button id="m-mute" title="mute">🔊</button>
   </div>
   <div id="ytframe"></div>
+  <audio id="m-audio" crossorigin="anonymous" preload="auto"></audio>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -56,10 +58,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=3g"></script>
-<script src="/v2/track.js?v=3g"></script>
-<script src="/v2/physics.js?v=3g"></script>
-<script src="/v2/cosmetics.js?v=3g"></script>
+<script src="/v2/forks.js?v=3h"></script>
+<script src="/v2/track.js?v=3h"></script>
+<script src="/v2/physics.js?v=3h"></script>
+<script src="/v2/cosmetics.js?v=3h"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -70,7 +72,7 @@ const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '3g';
+const BUILD = '3h';
 console.log('[ZORBS] build', BUILD);
 const leaderEl = document.getElementById('leader');
 function setStatus(txt, ok) {
@@ -104,9 +106,9 @@ if (THREE.EffectComposer && THREE.UnrealBloomPass) {
   composer.addPass(new THREE.RenderPass(scene, camera));
   const bloom = new THREE.UnrealBloomPass(
     new THREE.Vector2(innerWidth, innerHeight),
-    0.55,   // strength (was 0.9 — was washing the balls to white)
-    0.4,    // radius
-    0.85    // threshold — only the genuinely brightest pixels (rings/rails) bloom
+    0.72,   // strength — richer neon glow on rails/arches/pulses
+    0.5,    // radius — softer, wider halo
+    0.82    // threshold — the brightest pixels (rails/pulses) bloom
   );
   composer.addPass(bloom);
 }
@@ -179,7 +181,8 @@ function buildEnvMap() {
 
 // ---- build the course ----
 let track = null, trackMeshes = [];
-let mixerCage = null;   // spinning bingo cage group (rotated each frame in the loop)
+let _pulse = null;                  // streaking-pulse animation state (set in buildCourse)
+const _tmpV = new THREE.Vector3();  // scratch vector reused each frame (no per-frame alloc)
 // FUTURISTIC GRID FLOOR: a dark glossy panel with glowing cyan grid lines (Tron look
 // from the reference shots). The grid is a procedural canvas texture used as BOTH the
 // emissive map (lines glow + bloom) and a subtle base map. Brightened from before so
@@ -289,35 +292,46 @@ function buildCourse(seed) {
   buildRail(-1, 0x00e5ff);   // left: cyan
   buildRail( 1, 0xff8800);   // right: orange
 
-  // SPINNING BINGO CAGE around the mixer bowl. A glowing wireframe sphere-drum that
-  // rotates every frame — the balls churn inside the bowl while this cage spins over
-  // them, selling the bingo-mixer look. Purely visual (the bowl geometry does the work).
-  mixerCage = null;
-  if (track.mixer) {
-    const mx = track.mixer;
-    const cageR = mx.radius * 1.1;
-    const cy = (mx.yTop + mx.yBottom) / 2;
-    const drop = Math.max(cageR, mx.yTop - mx.yBottom);   // how tall the coil is
-    const group = new THREE.Group();
-    group.position.set(mx.cx, cy, mx.cz);
-    group.scale.y = drop / cageR;   // stretch the sphere into a drum spanning the descent
-    // wireframe sphere = the cage bars
-    const sphere = new THREE.Mesh(
-      new THREE.SphereGeometry(cageR, 16, 12),
-      new THREE.MeshBasicMaterial({ color:0x33e0ff, wireframe:true, transparent:true, opacity:0.5, blending:THREE.AdditiveBlending, depthWrite:false })
-    );
-    group.add(sphere);
-    // two bright equator rings for extra readability + bloom
-    for (const tilt of [0, Math.PI/2]) {
-      const ring = new THREE.Mesh(
-        new THREE.TorusGeometry(cageR, 0.4, 8, 48),
-        new THREE.MeshBasicMaterial({ color:0xfff0a0, transparent:true, opacity:0.7, blending:THREE.AdditiveBlending, depthWrite:false })
-      );
-      ring.rotation.x = Math.PI/2; ring.rotation.y = tilt; group.add(ring);
-    }
-    scene.add(group); trackMeshes.push(group);
-    mixerCage = group;
+  // CENTER ENERGY LANE + RAIL HALOS + STREAKING PULSES — these add depth and *motion*
+  // (the thing a static glowing track lacks). The centerline curve is reused for all
+  // three and stored on `_pulse` so the render loop can animate the streaks forward.
+  const cpts = [];
+  for (let i = 0; i < track.nodes.length; i += 3) {
+    const n = track.nodes[i];
+    cpts.push(new THREE.Vector3(n.pos.x, n.pos.y + 0.14, n.pos.z));
   }
+  const centerCurve = new THREE.CatmullRomCurve3(cpts);
+  // bright center lane down the middle of the floor
+  const laneGeo = new THREE.TubeGeometry(centerCurve, cpts.length * 2, 0.16, 6, false);
+  const lane = new THREE.Mesh(laneGeo, new THREE.MeshBasicMaterial({
+    color:0x66f0ff, transparent:true, opacity:0.55, blending:THREE.AdditiveBlending, depthWrite:false }));
+  scene.add(lane); trackMeshes.push(lane);
+  // faint wide HALO around each edge rail (makes the rails read thick + glowy)
+  for (const [side, col] of [[-1,0x0090ff],[1,0xff5500]]) {
+    const hp = [];
+    for (let i = 0; i < track.nodes.length; i += 4) {
+      const n = track.nodes[i];
+      hp.push(new THREE.Vector3(n.pos.x + n.right.x*n.halfW*side, n.pos.y+0.12, n.pos.z + n.right.z*n.halfW*side));
+    }
+    const hgeo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(hp), hp.length*2, 0.34, 6, false);
+    const halo = new THREE.Mesh(hgeo, new THREE.MeshBasicMaterial({
+      color:col, transparent:true, opacity:0.16, blending:THREE.AdditiveBlending, depthWrite:false }));
+    scene.add(halo); trackMeshes.push(halo);
+  }
+  // STREAKING PULSES: glowing sprites that ride the centerline and race forward, looping.
+  // Pure eye-candy that sells speed/energy. Cheap (≈18 additive sprites).
+  const pulseGroup = new THREE.Group();
+  const pulseMat = new THREE.SpriteMaterial({ color:0xbff7ff, transparent:true,
+    opacity:0.9, blending:THREE.AdditiveBlending, depthWrite:false, depthTest:false });
+  const pulses = [];
+  for (let i = 0; i < 18; i++) {
+    const s = new THREE.Sprite(pulseMat.clone());
+    s.scale.set(1.8, 1.8, 1.8);
+    pulseGroup.add(s);
+    pulses.push({ sprite:s, t: i / 18 });   // staggered along the curve
+  }
+  scene.add(pulseGroup); trackMeshes.push(pulseGroup);
+  _pulse = { curve: centerCurve, pulses };
 
   // NEON ARCH GATES spanning the track every ~70 nodes. archR = halfW so the two legs
   // of the half-torus land exactly on the left/right floor edges (they were at 1.3x =
@@ -535,6 +549,18 @@ function loop(now) {
   frameAcc = Math.min(frameAcc - FRAME_CAP, FRAME_CAP); // keep remainder, avoid drift
   const dt = Math.min(0.05, (now - last)/1000); last = now;
 
+  // streaking energy pulses ride the centerline forward and loop (motion eye-candy)
+  if (_pulse) {
+    const tnow = now / 1000;
+    for (const p of _pulse.pulses) {
+      p.t += dt * 0.09; if (p.t > 1) p.t -= 1;
+      _pulse.curve.getPointAt(p.t, _tmpV);
+      p.sprite.position.copy(_tmpV);
+      // gentle twinkle so the stream shimmers
+      p.sprite.material.opacity = 0.55 + 0.4 * Math.sin(tnow*4 + p.t*30);
+    }
+  }
+
   if (phase === 'spawning') {
     spawnTimer += dt;
     while (spawnQueue.length && spawnTimer >= spawnQueue[0].delay) {
@@ -627,7 +653,7 @@ function loop(now) {
   }
 
   updateCamera(dt);
-  if (mixerCage) { mixerCage.rotation.y += dt * 0.9; }
+
   if (composer) composer.render(); else renderer.render(scene, camera);
 }
 
@@ -694,21 +720,66 @@ async function boot() {
   startRace(track.seed, names);
 }
 
-// ---- SpeedyGoWild background music (YouTube IFrame API; user's own tracks) ----
-// To play the WHOLE playlist on shuffle, paste your playlist's `list=` id into PLAYLIST.
-// Otherwise it shuffles through the VIDEOS array (add more of your video ids any time).
+// ---- SpeedyGoWild background music ----
+// PREFERRED: a server-side playlist of your OWN hosted tracks (music/playlist.json).
+//   This plays via a plain HTML5 <audio> tag — no YouTube, so NOTHING gets blocked by
+//   ad-blockers, and you control the playlist by editing one JSON file on the server.
+//   Format:  { "artist":"SpeedyGoWild", "tracks":[ {"title":"...","src":"https://.../x.mp3","art":"https://.../x.jpg"}, ... ] }
+//   Host the mp3s anywhere you like (e.g. speedygowild.xyz) and list them there.
+// FALLBACK: if playlist.json is missing/empty, it uses the YouTube embed as before.
 const MUSIC = {
   artist: 'SpeedyGoWild',
   VIDEOS: ['V1qf3Mw_zSk'],
-  PLAYLIST: '',   // e.g. 'PLabc123...' — set this to shuffle your entire playlist
+  PLAYLIST: '',     // YouTube fallback: a `list=` id shuffles your whole YT playlist
+  TRACKS: [],       // filled from playlist.json if present
 };
-let ytPlayer = null, ytReady = false, wantPlay = false, ytMuted = false, _shuffled = [];
+let audioMode = null;   // 'self' | 'yt'
+let wantPlay = false;   // user pressed play before the player was ready
 function shuffle(a){ a=a.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
-(function loadYT(){
+
+// decide which backend to use, then init it
+fetch('music/playlist.json', { cache:'no-store' })
+  .then(r => r.ok ? r.json() : null)
+  .then(j => {
+    if (j && Array.isArray(j.tracks) && j.tracks.length) {
+      MUSIC.TRACKS = j.tracks; if (j.artist) MUSIC.artist = j.artist;
+      document.querySelector('#music .artist').textContent = '♪ ' + MUSIC.artist;
+      initSelfHosted();
+    } else { initYouTube(); }
+  })
+  .catch(() => initYouTube());
+
+/* ===== SELF-HOSTED (HTML5 audio) — block-proof ===== */
+let audioEl = null, _slist = [], _sidx = 0;
+function initSelfHosted(){
+  audioMode = 'self';
+  audioEl = document.getElementById('m-audio');
+  _slist = shuffle(MUSIC.TRACKS); _sidx = 0;
+  loadSelf(0, false);
+  audioEl.addEventListener('ended', () => {
+    _sidx++; if (_sidx >= _slist.length) { _slist = shuffle(MUSIC.TRACKS); _sidx = 0; }
+    loadSelf(_sidx, true);
+  });
+  audioEl.addEventListener('play',  () => document.getElementById('m-play').textContent = '⏸');
+  audioEl.addEventListener('pause', () => document.getElementById('m-play').textContent = '▶');
+  audioEl.addEventListener('error', () => document.getElementById('m-song').textContent = 'track unavailable');
+}
+function loadSelf(i, autoplay){
+  _sidx = i; const t = _slist[i] || {};
+  audioEl.src = t.src || '';
+  document.getElementById('m-song').textContent = t.title || MUSIC.artist;
+  if (t.art) document.getElementById('m-art').src = t.art;
+  if (autoplay || wantPlay) audioEl.play().catch(()=>{});
+}
+
+/* ===== YOUTUBE FALLBACK (existing behaviour) ===== */
+let ytPlayer = null, ytReady = false, ytMuted = false, _shuffled = [];
+function initYouTube(){
+  audioMode = 'yt';
   const tag = document.createElement('script'); tag.src = 'https://www.youtube.com/iframe_api';
   tag.onerror = () => { document.getElementById('m-song').textContent = 'music unavailable'; };
   document.head.appendChild(tag);
-})();
+}
 window.onYouTubeIframeAPIReady = function(){
   const opts = { height:'0', width:'0', events:{ onReady:onYTReady, onStateChange:onYTState },
     playerVars:{ autoplay:0, controls:0, playsinline:1 } };
@@ -726,7 +797,6 @@ function onYTState(e){
   if (e.data === YT.PlayerState.PLAYING) { updateNowPlaying(); document.getElementById('m-play').textContent='⏸'; }
   if (e.data === YT.PlayerState.PAUSED)  { document.getElementById('m-play').textContent='▶'; }
   if (e.data === YT.PlayerState.ENDED && !MUSIC.PLAYLIST) {
-    // advance to the next shuffled track, reshuffle + loop at the end
     const cur = (ytPlayer.getVideoData()||{}).video_id;
     let i = _shuffled.indexOf(cur);
     if (i >= _shuffled.length-1) { _shuffled = shuffle(MUSIC.VIDEOS); i = -1; }
@@ -740,17 +810,34 @@ function updateNowPlaying(){
     if (d.video_id) document.getElementById('m-art').src = 'https://img.youtube.com/vi/'+d.video_id+'/hqdefault.jpg';
   } catch(e){}
 }
-function startMusic(){ wantPlay = true; if (ytReady && ytPlayer) ytPlayer.playVideo(); }
+
+/* ===== shared controls (mode-aware) ===== */
+function startMusic(){
+  wantPlay = true;
+  if (audioMode === 'self' && audioEl) audioEl.play().catch(()=>{});
+  else if (audioMode === 'yt' && ytReady && ytPlayer) ytPlayer.playVideo();
+}
 document.getElementById('m-play').addEventListener('click', () => {
-  if (!ytReady) { wantPlay = true; return; }
-  const st = ytPlayer.getPlayerState();
-  if (st === YT.PlayerState.PLAYING) ytPlayer.pauseVideo(); else ytPlayer.playVideo();
+  wantPlay = true;
+  if (audioMode === 'self' && audioEl) { audioEl.paused ? audioEl.play().catch(()=>{}) : audioEl.pause(); return; }
+  if (audioMode === 'yt') {
+    if (!ytReady) return;
+    const st = ytPlayer.getPlayerState();
+    if (st === YT.PlayerState.PLAYING) ytPlayer.pauseVideo(); else ytPlayer.playVideo();
+  }
 });
 document.getElementById('m-mute').addEventListener('click', () => {
-  if (!ytReady) return;
-  ytMuted = !ytMuted;
-  if (ytMuted) ytPlayer.mute(); else ytPlayer.unMute();
-  document.getElementById('m-mute').textContent = ytMuted ? '🔇' : '🔊';
+  if (audioMode === 'self' && audioEl) {
+    audioEl.muted = !audioEl.muted;
+    document.getElementById('m-mute').textContent = audioEl.muted ? '🔇' : '🔊';
+    return;
+  }
+  if (audioMode === 'yt') {
+    if (!ytReady) return;
+    ytMuted = !ytMuted;
+    if (ytMuted) ytPlayer.mute(); else ytPlayer.unMute();
+    document.getElementById('m-mute').textContent = ytMuted ? '🔇' : '🔊';
+  }
 });
 
 // audio-gesture gate (this is what was spamming the console before: we now ONLY
