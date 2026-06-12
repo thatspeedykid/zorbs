@@ -66,10 +66,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=3o"></script>
-<script src="/v2/track.js?v=3o"></script>
-<script src="/v2/physics.js?v=3o"></script>
-<script src="/v2/cosmetics.js?v=3o"></script>
+<script src="/v2/forks.js?v=3p"></script>
+<script src="/v2/track.js?v=3p"></script>
+<script src="/v2/physics.js?v=3p"></script>
+<script src="/v2/cosmetics.js?v=3p"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -80,7 +80,7 @@ const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '3o';
+const BUILD = '3p';
 console.log('[ZORBS] build', BUILD);
 const leaderEl = document.getElementById('leader');
 function setStatus(txt, ok) {
@@ -596,7 +596,7 @@ function loop(now) {
   // the music: bass energy drives the center lane, the bloom glow, and the wall emissive,
   // so the track flashes on the beat. (beat is 0 unless self-hosted audio is playing.)
   const beat = sampleBeat();
-  if (_beatBar) _beatBar.style.transform = 'scaleX(' + Math.min(1, beat * 1.6) + ')';
+  if (_beatBar) _beatBar.style.transform = 'scaleX(' + Math.min(1, beat) + ')';
   if (_bloom) _bloom.strength = _bloomBase + beat * 0.55;          // glow surge on beat
   if (typeof WALL_MAT !== 'undefined') WALL_MAT.emissiveIntensity = 0.6 + beat * 1.1;
   if (typeof ROOF_MAT !== 'undefined') ROOF_MAT.emissiveIntensity = 0.25 + beat * 0.5;
@@ -865,7 +865,7 @@ function setupAnalyser(){
     if (!_srcMade) {                      // createMediaElementSource is one-time per element
       const src = _audioCtx.createMediaElementSource(audioEl);
       _analyser = _audioCtx.createAnalyser();
-      _analyser.fftSize = 256; _analyser.smoothingTimeConstant = 0.75;
+      _analyser.fftSize = 1024; _analyser.smoothingTimeConstant = 0.82;
       src.connect(_analyser);
       _analyser.connect(_audioCtx.destination);   // keep it audible
       _freqData = new Uint8Array(_analyser.frequencyBinCount);
@@ -873,14 +873,17 @@ function setupAnalyser(){
     }
   } catch(e) { _analyser = null; }
 }
-// returns 0..1 bass energy with fast attack / slow decay (so it pulses, not jitters)
+// returns 0..1 KICK energy as a smooth pulse. fftSize 1024 → ~43 Hz per bin, so bins
+// 1..4 ≈ 43–215 Hz = the kick/bass drum (not hi-hats). Peak-follower: snap up on a hit,
+// decay smoothly = one clean pulse per beat instead of a fast square flicker.
 function sampleBeat(){
   if (!_analyser) return 0;
   _analyser.getByteFrequencyData(_freqData);
-  let sum = 0; const N = 6;              // lowest ~6 bins ≈ kick/bass
-  for (let i = 0; i < N; i++) sum += _freqData[i];
-  const bass = sum / (N * 255);
-  _beat = Math.max(bass, _beat * 0.90);
+  let sum = 0; for (let i = 1; i <= 4; i++) sum += _freqData[i];
+  let level = sum / (4 * 255);                 // 0..1
+  level = Math.max(0, (level - 0.12) / 0.88);  // gate out the quiet floor so it rests at 0
+  if (level > _beat) _beat = level;            // instant attack on the kick
+  else _beat = _beat * 0.88;                   // smooth decay = the pulse tail
   return _beat;
 }
 function loadSelf(i, autoplay){
