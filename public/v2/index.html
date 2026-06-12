@@ -66,10 +66,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=3r"></script>
-<script src="/v2/track.js?v=3r"></script>
-<script src="/v2/physics.js?v=3r"></script>
-<script src="/v2/cosmetics.js?v=3r"></script>
+<script src="/v2/forks.js?v=3s"></script>
+<script src="/v2/track.js?v=3s"></script>
+<script src="/v2/physics.js?v=3s"></script>
+<script src="/v2/cosmetics.js?v=3s"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -80,7 +80,7 @@ const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '3r';
+const BUILD = '3s';
 console.log('[ZORBS] build', BUILD);
 const leaderEl = document.getElementById('leader');
 function setStatus(txt, ok) {
@@ -193,6 +193,9 @@ let track = null, trackMeshes = [];
 let _pulse = null;                  // streaking-pulse animation state (set in buildCourse)
 const _tmpV = new THREE.Vector3();  // scratch vector reused each frame (no per-frame alloc)
 const _beatBar = document.getElementById('m-beat');   // live beat meter in the player
+// neon palette the center line cycles through on each beat thud
+let _lastBeat = 0, _hueIdx = 0;
+const BEAT_COLORS = [[0.0,0.9,1.0],[1.0,0.25,0.8],[0.4,1.0,0.5],[1.0,0.6,0.15],[0.6,0.35,1.0]];
 // FUTURISTIC GRID FLOOR: a dark glossy panel with glowing cyan grid lines (Tron look
 // from the reference shots). The grid is a procedural canvas texture used as BOTH the
 // emissive map (lines glow + bloom) and a subtle base map. Brightened from before so
@@ -587,9 +590,13 @@ function loop(now) {
   if (_bloom) _bloom.strength = _bloomBase + beat * 0.5;
   if (typeof WALL_MAT !== 'undefined') WALL_MAT.emissiveIntensity = 0.55 + beat * 1.4;
   if (typeof ROOF_MAT !== 'undefined') ROOF_MAT.emissiveIntensity = 0.25 + beat * 0.6;
+  // each beat THUD (rising edge) advances the center line to the next neon color
+  if (beat > 0.5 && _lastBeat <= 0.5) _hueIdx = (_hueIdx + 1) % BEAT_COLORS.length;
+  _lastBeat = beat;
   if (_pulse && _pulse.lane) {
+    const c = BEAT_COLORS[_hueIdx];
+    _pulse.lane.material.color.setRGB(c[0], c[1], c[2]);
     _pulse.lane.material.opacity = Math.min(0.85, _pulse.laneBaseOpacity + beat * 0.6);
-    _pulse.lane.material.color.setRGB(0.22 + beat*0.55, 0.78, 0.9);
   }
 
   if (phase === 'spawning') {
@@ -646,7 +653,7 @@ function loop(now) {
       if (sp > 0.05) {
         const dirx = s.vx / sp, dirz = s.vz / sp;
         // roll axis = worldUp × travelDir  (horizontal, perpendicular to motion)
-        const ax = -dirz, az = dirx;             // (0,1,0)×(dirx,0,dirz)
+        const ax = dirz, az = -dirx;             // (0,1,0)×(dirx,0,dirz) = (dirz,0,-dirx)
         const angle = (sp * dt) / BALL_R;        // arc length / radius
         z.rollQ.setFromAxisAngle(new THREE.Vector3(ax, 0, az).normalize(), angle);
         z.mesh.quaternion.premultiply(z.rollQ);
