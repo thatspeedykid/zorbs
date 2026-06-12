@@ -30,7 +30,6 @@
   #music button { background:rgba(0,150,255,.15); color:#9fefff; border:1px solid rgba(60,180,255,.5);
     border-radius:6px; width:30px; height:30px; cursor:pointer; font-size:13px; line-height:1; }
   #music button:hover { background:rgba(0,150,255,.35); }
-  #ytframe { position:absolute; width:0; height:0; overflow:hidden; opacity:0; pointer-events:none; }
 </style>
 </head>
 <body>
@@ -52,7 +51,6 @@
     <button id="m-play" title="play / pause">▶</button>
     <button id="m-mute" title="mute">🔊</button>
   </div>
-  <div id="ytframe"></div>
   <audio id="m-audio" crossorigin="anonymous" preload="auto"></audio>
 </div>
 
@@ -64,10 +62,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=3k"></script>
-<script src="/v2/track.js?v=3k"></script>
-<script src="/v2/physics.js?v=3k"></script>
-<script src="/v2/cosmetics.js?v=3k"></script>
+<script src="/v2/forks.js?v=3l"></script>
+<script src="/v2/track.js?v=3l"></script>
+<script src="/v2/physics.js?v=3l"></script>
+<script src="/v2/cosmetics.js?v=3l"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -78,7 +76,7 @@ const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '3k';
+const BUILD = '3l';
 console.log('[ZORBS] build', BUILD);
 const leaderEl = document.getElementById('leader');
 function setStatus(txt, ok) {
@@ -106,7 +104,7 @@ const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 2000
 
 // BLOOM: everything bright (rails, rings, arches, energy bands) gets a real glow halo.
 // Guarded so the page still runs plain if a CDN script fails to load.
-let composer = null;
+let composer = null, _bloom = null, _bloomBase = 0.72;
 if (THREE.EffectComposer && THREE.UnrealBloomPass) {
   composer = new THREE.EffectComposer(renderer);
   composer.addPass(new THREE.RenderPass(scene, camera));
@@ -117,6 +115,7 @@ if (THREE.EffectComposer && THREE.UnrealBloomPass) {
     0.82    // threshold — the brightest pixels (rails/pulses) bloom
   );
   composer.addPass(bloom);
+  _bloom = bloom;
 }
 
 addEventListener('resize', () => {
@@ -588,23 +587,26 @@ function loop(now) {
   frameAcc = Math.min(frameAcc - FRAME_CAP, FRAME_CAP); // keep remainder, avoid drift
   const dt = Math.min(0.05, (now - last)/1000); last = now;
 
-  // streaking energy pulses ride the centerline forward — and the center lane DANCES to
-  // the music: bass energy brightens/colors the lane and speeds up + fattens the streaks.
+  // streaking energy pulses ride the centerline forward — and the WHOLE TRACK dances to
+  // the music: bass energy drives the center lane, the bloom glow, and the wall emissive,
+  // so the track flashes on the beat. (beat is 0 unless self-hosted audio is playing.)
+  const beat = sampleBeat();
+  if (_bloom) _bloom.strength = _bloomBase + beat * 0.95;          // whole-scene glow surge
+  if (typeof WALL_MAT !== 'undefined') WALL_MAT.emissiveIntensity = 0.8 + beat * 1.8;
+  if (typeof ROOF_MAT !== 'undefined') ROOF_MAT.emissiveIntensity = 0.25 + beat * 0.9;
   if (_pulse) {
     const tnow = now / 1000;
-    const beat = sampleBeat();                     // 0..1 (0 when not self-hosted/playing)
     if (_pulse.lane) {
       _pulse.lane.material.opacity = Math.min(1, _pulse.laneBaseOpacity + beat * 0.9);
-      // hue pushes from cyan toward hot white-pink on big hits
       _pulse.lane.material.color.setRGB(0.4 + beat*0.6, 0.94, 1.0);
     }
-    const speed = 0.09 + beat * 0.22;              // streaks surge forward on the beat
+    const speed = 0.09 + beat * 0.22;
     for (const p of _pulse.pulses) {
       p.t += dt * speed; if (p.t > 1) p.t -= 1;
       _pulse.curve.getPointAt(p.t, _tmpV);
       p.sprite.position.copy(_tmpV);
       p.sprite.material.opacity = 0.5 + 0.4 * Math.sin(tnow*4 + p.t*30) + beat*0.5;
-      const sc = 1.8 + beat * 2.4;                 // pulses swell on the beat
+      const sc = 1.8 + beat * 2.4;
       p.sprite.scale.set(sc, sc, sc);
     }
   }
@@ -790,39 +792,50 @@ async function boot() {
   startRace(track.seed, names);
 }
 
-// ---- SpeedyGoWild background music ----
-// PREFERRED: a server-side playlist of your OWN hosted tracks (music/playlist.json).
-//   This plays via a plain HTML5 <audio> tag — no YouTube, so NOTHING gets blocked by
-//   ad-blockers, and you control the playlist by editing one JSON file on the server.
-//   Format:  { "artist":"SpeedyGoWild", "tracks":[ {"title":"...","src":"https://.../x.mp3","art":"https://.../x.jpg"}, ... ] }
-//   Host the mp3s anywhere you like (e.g. speedygowild.xyz) and list them there.
-// FALLBACK: if playlist.json is missing/empty, it uses the YouTube embed as before.
+// ---- SpeedyGoWild background music (self-hosted only — no YouTube) ----
+// Reads music/playlist.json: { artist, spotify, baseUrl, tracks:[{title,file} | {title,src}] }.
+// Plays via a plain HTML5 <audio> tag (same-origin, or CORS-clean R2). That stream is also
+// tapped by the Web Audio analyser so the whole track can pulse to the beat.
 const MUSIC = {
   artist: 'SpeedyGoWild',
-  VIDEOS: ['V1qf3Mw_zSk'],
-  PLAYLIST: '',     // YouTube fallback: a `list=` id shuffles your whole YT playlist
-  TRACKS: [],       // filled from playlist.json if present
+  spotify: 'https://open.spotify.com/artist/47Pj5n2KiZRgKgx4fOnB3x',
+  TRACKS: [],       // filled from playlist.json
 };
-let audioMode = null;   // 'self' | 'yt'
+// make the artist name in the player open the SpeedyGoWild Spotify in a new tab
+function wireArtistLink(){
+  const el = document.querySelector('#music .artist');
+  if (!el) return;
+  el.textContent = '♪ ' + MUSIC.artist + '  ↗';
+  el.style.cursor = 'pointer';
+  el.title = 'Open SpeedyGoWild on Spotify';
+  el.onclick = () => { if (MUSIC.spotify) window.open(MUSIC.spotify, '_blank', 'noopener'); };
+}
 let wantPlay = false;   // user pressed play before the player was ready
 function shuffle(a){ a=a.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
 
-// decide which backend to use, then init it
+function noMusic(msg){ const el = document.getElementById('m-song'); if (el) el.textContent = msg || 'music coming soon'; }
+// load the self-hosted playlist and start the player (no YouTube)
 fetch('music/playlist.json', { cache:'no-store' })
   .then(r => r.ok ? r.json() : null)
   .then(j => {
     if (j && Array.isArray(j.tracks) && j.tracks.length) {
-      MUSIC.TRACKS = j.tracks; if (j.artist) MUSIC.artist = j.artist;
-      document.querySelector('#music .artist').textContent = '♪ ' + MUSIC.artist;
-      initSelfHosted();
-    } else { initYouTube(); }
+      // resolve each track's URL: explicit src wins, else baseUrl + file
+      const base = (j.baseUrl || '').trim();
+      MUSIC.TRACKS = j.tracks.map(t => ({
+        title: t.title,
+        src: t.src || (base && t.file ? base.replace(/\/?$/, '/') + t.file : (t.file || ''))
+      })).filter(t => t.src && !/REPLACE-WITH-YOUR-R2-URL/.test(t.src));
+      if (j.artist) MUSIC.artist = j.artist;
+      if (j.spotify) MUSIC.spotify = j.spotify;
+      wireArtistLink();
+      if (MUSIC.TRACKS.length) initSelfHosted(); else noMusic('add tracks to playlist.json');
+    } else { noMusic(); }
   })
-  .catch(() => initYouTube());
+  .catch(() => noMusic());
 
 /* ===== SELF-HOSTED (HTML5 audio) — block-proof ===== */
 let audioEl = null, _slist = [], _sidx = 0;
 function initSelfHosted(){
-  audioMode = 'self';
   audioEl = document.getElementById('m-audio');
   _slist = shuffle(MUSIC.TRACKS); _sidx = 0;
   loadSelf(0, false);
@@ -868,86 +881,29 @@ function loadSelf(i, autoplay){
   _sidx = i; const t = _slist[i] || {};
   audioEl.src = t.src || '';
   document.getElementById('m-song').textContent = t.title || MUSIC.artist;
-  // album art intentionally omitted (cover removed from the player)
   if (autoplay || wantPlay) audioEl.play().catch(()=>{});
 }
 
-/* ===== YOUTUBE FALLBACK (existing behaviour) ===== */
-let ytPlayer = null, ytReady = false, ytMuted = false, _shuffled = [];
-function initYouTube(){
-  audioMode = 'yt';
-  const tag = document.createElement('script'); tag.src = 'https://www.youtube.com/iframe_api';
-  tag.onerror = () => { document.getElementById('m-song').textContent = 'music unavailable'; };
-  document.head.appendChild(tag);
-}
-window.onYouTubeIframeAPIReady = function(){
-  const opts = { height:'0', width:'0', events:{ onReady:onYTReady, onStateChange:onYTState },
-    playerVars:{ autoplay:0, controls:0, playsinline:1 } };
-  if (MUSIC.PLAYLIST) { opts.playerVars.listType='playlist'; opts.playerVars.list=MUSIC.PLAYLIST; }
-  else { _shuffled = shuffle(MUSIC.VIDEOS); opts.videoId = _shuffled[0]; }
-  try { ytPlayer = new YT.Player('ytframe', opts); } catch(e){ document.getElementById('m-song').textContent='music unavailable'; }
-};
-function onYTReady(){
-  ytReady = true;
-  if (MUSIC.PLAYLIST) { try { ytPlayer.setShuffle(true); ytPlayer.setLoop(true); } catch(e){} }
-  updateNowPlaying();
-  if (typeof applyVolume === 'function') applyVolume();
-  if (wantPlay) ytPlayer.playVideo();
-}
-function onYTState(e){
-  if (e.data === YT.PlayerState.PLAYING) { updateNowPlaying(); document.getElementById('m-play').textContent='⏸'; }
-  if (e.data === YT.PlayerState.PAUSED)  { document.getElementById('m-play').textContent='▶'; }
-  if (e.data === YT.PlayerState.ENDED && !MUSIC.PLAYLIST) {
-    const cur = (ytPlayer.getVideoData()||{}).video_id;
-    let i = _shuffled.indexOf(cur);
-    if (i >= _shuffled.length-1) { _shuffled = shuffle(MUSIC.VIDEOS); i = -1; }
-    ytPlayer.loadVideoById(_shuffled[i+1]);
-  }
-}
-function updateNowPlaying(){
-  try {
-    const d = ytPlayer.getVideoData() || {};
-    if (d.title) document.getElementById('m-song').textContent = d.title;
-  // (album art omitted)
-  } catch(e){}
-}
-
-/* ===== shared controls (mode-aware) ===== */
+/* ===== controls ===== */
 function startMusic(){
   wantPlay = true;
-  if (audioMode === 'self' && audioEl) { setupAnalyser(); audioEl.play().catch(()=>{}); }
-  else if (audioMode === 'yt' && ytReady && ytPlayer) ytPlayer.playVideo();
+  if (audioEl) { setupAnalyser(); audioEl.play().catch(()=>{}); }
 }
 document.getElementById('m-play').addEventListener('click', () => {
   wantPlay = true;
-  if (audioMode === 'self' && audioEl) { audioEl.paused ? audioEl.play().catch(()=>{}) : audioEl.pause(); return; }
-  if (audioMode === 'yt') {
-    if (!ytReady) return;
-    const st = ytPlayer.getPlayerState();
-    if (st === YT.PlayerState.PLAYING) ytPlayer.pauseVideo(); else ytPlayer.playVideo();
-  }
+  if (audioEl) { audioEl.paused ? audioEl.play().catch(()=>{}) : audioEl.pause(); }
 });
 document.getElementById('m-mute').addEventListener('click', () => {
-  if (audioMode === 'self' && audioEl) {
-    audioEl.muted = !audioEl.muted;
-    document.getElementById('m-mute').textContent = audioEl.muted ? '🔇' : '🔊';
-    return;
-  }
-  if (audioMode === 'yt') {
-    if (!ytReady) return;
-    ytMuted = !ytMuted;
-    if (ytMuted) ytPlayer.mute(); else ytPlayer.unMute();
-    document.getElementById('m-mute').textContent = ytMuted ? '🔇' : '🔊';
-  }
+  if (!audioEl) return;
+  audioEl.muted = !audioEl.muted;
+  document.getElementById('m-mute').textContent = audioEl.muted ? '🔇' : '🔊';
 });
 
-// VOLUME SLIDER (mode-aware). Self-hosted uses audioEl.volume (0..1); YouTube uses
-// setVolume (0..100). Remembered across sessions via localStorage.
+// VOLUME SLIDER — audioEl.volume (0..1). Remembered across sessions via localStorage.
 let _vol = 60;   // 0..100
 try { const sv = parseInt(localStorage.getItem('zorbs_vol')); if (!isNaN(sv)) _vol = sv; } catch(e){}
 function applyVolume(){
-  if (audioMode === 'self' && audioEl) { audioEl.volume = _vol/100; if (_vol>0) audioEl.muted = false; }
-  else if (audioMode === 'yt' && ytReady && ytPlayer) { try { ytPlayer.setVolume(_vol); if (_vol>0){ ytPlayer.unMute(); ytMuted=false; } } catch(e){} }
+  if (audioEl) { audioEl.volume = _vol/100; if (_vol>0) audioEl.muted = false; }
   const mute = document.getElementById('m-mute');
   if (mute) mute.textContent = _vol === 0 ? '🔇' : '🔊';
 }
