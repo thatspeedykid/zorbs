@@ -58,10 +58,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=3h"></script>
-<script src="/v2/track.js?v=3h"></script>
-<script src="/v2/physics.js?v=3h"></script>
-<script src="/v2/cosmetics.js?v=3h"></script>
+<script src="/v2/forks.js?v=3i"></script>
+<script src="/v2/track.js?v=3i"></script>
+<script src="/v2/physics.js?v=3i"></script>
+<script src="/v2/cosmetics.js?v=3i"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -72,7 +72,7 @@ const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '3h';
+const BUILD = '3i';
 console.log('[ZORBS] build', BUILD);
 const leaderEl = document.getElementById('leader');
 function setStatus(txt, ok) {
@@ -357,6 +357,39 @@ function buildCourse(seed) {
     arch.quaternion.setFromRotationMatrix(m4);
     scene.add(arch); trackMeshes.push(arch);
   }
+
+  // FINISH LINE: a checkered banner on two glowing posts, placed at the win node (where a
+  // ball is counted as finished). Faces back up the track so it reads as you approach.
+  (function finishLine(){
+    const fi = Math.max(1, track.nodes.length - 3);
+    const n = track.nodes[fi];
+    const across = new THREE.Vector3(n.right.x, 0, n.right.z).normalize();
+    const up = new THREE.Vector3(0, 1, 0);
+    const fwd = new THREE.Vector3().crossVectors(across, up).normalize();
+    const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(across, up, fwd));
+    const W = n.halfW + 0.4, postH = 5;
+    const grp = new THREE.Group();
+    grp.position.set(n.pos.x, n.pos.y - 0.1, n.pos.z);
+    grp.quaternion.copy(q);
+    // checkered banner texture
+    const cv = document.createElement('canvas'); cv.width = 256; cv.height = 32;
+    const cx = cv.getContext('2d'); const NX = 16, NY = 2, sx = cv.width/NX, sy = cv.height/NY;
+    for (let a=0;a<NX;a++) for (let b=0;b<NY;b++){ cx.fillStyle = ((a+b)%2)?'#ffffff':'#0b0b14'; cx.fillRect(a*sx,b*sy,sx,sy); }
+    const tex = new THREE.CanvasTexture(cv);
+    // glowing posts + top bar (hot emissive = catches bloom)
+    const glowMat = new THREE.MeshStandardMaterial({ color:0x0a2a4a, metalness:0.8, roughness:0.3, emissive:0x00ffcc, emissiveIntensity:2.5 });
+    for (const s of [-1, 1]) {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, postH, 10), glowMat);
+      post.position.set(s*W, postH/2 - 0.1, 0); grp.add(post);
+    }
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(W*2, 0.2, 0.2), glowMat);
+    bar.position.set(0, postH - 0.1, 0); grp.add(bar);
+    // checkered banner just under the top bar
+    const banner = new THREE.Mesh(new THREE.PlaneGeometry(W*2, 1.5),
+      new THREE.MeshBasicMaterial({ map:tex, side:THREE.DoubleSide, transparent:true }));
+    banner.position.set(0, postH - 0.95, 0); grp.add(banner);
+    scene.add(grp); trackMeshes.push(grp);
+  })();
 }
 
 // ---- balls: SCI-FI metallic orb + glowing laser saturn ring ----
@@ -695,14 +728,36 @@ function updateCamera(dt) {
 }
 
 // ---- boot ----
+// Ask the server for the official race seed (server-authoritative + provably fair). The
+// client never invents the seed for a real race. Local fallback keeps dev/offline working.
+let _raceId = null, _raceServer = false;
+async function fetchRaceSeed(replayId) {
+  try {
+    const url = '/api/race' + (replayId ? ('?raceId=' + encodeURIComponent(replayId)) : '');
+    const r = await fetch(url, { cache:'no-store' });
+    if (r.ok) {
+      const j = await r.json();
+      if (typeof j.seed === 'number') {
+        _raceId = j.raceId; _raceServer = true;
+        return j.seed >>> 0;
+      }
+    }
+  } catch(e) { /* offline / dev */ }
+  _raceId = 'local-' + Math.floor(Math.random()*1e9).toString(36); _raceServer = false;
+  return Math.floor(Math.random()*999999);
+}
+
 async function boot() {
   setStatus('loading physics…', false);
   const ok = await ZPHYSICS.init(BALL_R);
   if (!ok) { setStatus('LEGACY (physics failed: ' + ZPHYSICS.getError() + ')', false); return; }
   setStatus('⬡ READY · build ' + BUILD, true);
   try { buildEnvMap(); } catch(e){ console.warn('env map skipped', e); }
-  // build a course immediately so there's something on screen
-  buildCourse(Math.floor(Math.random()*999999));
+  // SERVER-ASSIGNED RACE: the seed comes from the server (/api/race), not the client, so
+  // a player can't host/choose their own race. Falls back to a local seed if the API is
+  // unreachable (dev/offline) so the page still runs.
+  const seed = await fetchRaceSeed();
+  buildCourse(seed);
   // give the physics the track collider
   ZPHYSICS.setTrack(track.collider, track.nodes, { forks: track.forks, branchColliders: track.branchColliders });
   // demo: spawn a field of test balls and race. A few are given the premium skins so
