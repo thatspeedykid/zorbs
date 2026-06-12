@@ -15,6 +15,8 @@
 
 const ZFORK = (() => {
 
+  let USE_DIVERGENT = false;   // off by default — safe lane-forks. Toggle for testing.
+
   const v = (x, y, z) => ({ x, y, z });
   const add = (a, b) => v(a.x + b.x, a.y + b.y, a.z + b.z);
   const scale = (a, s) => v(a.x * s, a.y * s, a.z * s);
@@ -54,6 +56,82 @@ const ZFORK = (() => {
         right, up, halfW: hw, bank: 0, kind: kind || 'branch', tunnel: false, branchId });
     }
     return nodes;
+  }
+
+  // TRUE DIVERGENT ROUTES: two separate ribbons that bow far apart and rejoin. Fixes the
+  // old wedge/wall-crossing bugs with: (1) a wide Y-MOUTH pad at each end where the floor
+  // covers everything and balls get pulled onto their route, (2) routes that stay far
+  // enough apart in the middle that their walls never touch, (3) the main path's floor
+  // SKIPPED in the middle (meshSkip) so there's nothing to cross. Each branch node carries
+  // corridor-floor support over the mouths and standard floor over the divergent middle.
+  function makeDivergentFork(mainNodes, splitIdx, rng, forkId) {
+    const steps = 56 + Math.floor(rng() * 20);
+    const end = Math.min(mainNodes.length - 6, splitIdx + steps);
+    const lenF = end - splitIdx;
+    if (lenF < 34) return null;                 // too short to diverge cleanly
+    const MOUTH = 14;                          // wide Y-mouth nodes at each end
+    const base = mainNodes[splitIdx].halfW;
+    const GAP = base * 0.9;                     // routes nearly touch where ribbons begin
+    const SPREAD = base * 1.7;                  // peak route center offset (gentler bow)
+    const PAD = base * 2.4;                     // Y-mouth corridor half-width
+    const prof = { A: { sign:-1, amp:0.85 }, B: { sign:1, amp:0.82 } };  // both gentle
+
+    const offsetAt = (k, amp, sign) => {
+      let mag;
+      if (k <= MOUTH) { const e = k/MOUTH, es = e*e*(3-2*e); mag = GAP * es; }
+      else if (k >= lenF - MOUTH) { const e = (lenF-k)/MOUTH, es = e*e*(3-2*e); mag = GAP * es; }
+      else { const tt = (k - MOUTH) / (lenF - 2*MOUTH); mag = (GAP + (SPREAD-GAP)*Math.sin(tt*Math.PI)) * amp; }
+      return mag * sign;
+    };
+
+    const branches = {};
+    for (const key of ['A','B']) {
+      const { sign, amp } = prof[key];
+      const bid = forkId + '_' + key;
+      const raw = [];
+      for (let k = 0; k <= lenF; k++) {
+        const m = mainNodes[splitIdx + k];
+        const off = offsetAt(k, amp, sign);
+        raw.push({ x: m.pos.x + m.right.x*off, y: m.pos.y, z: m.pos.z + m.right.z*off, off });
+      }
+      const nlist = [];
+      for (let k = 0; k <= lenF; k++) {
+        const c = raw[k], nx = raw[Math.min(lenF,k+1)], pv = raw[Math.max(0,k-1)];
+        let dir = norm(v(nx.x-pv.x, nx.y-pv.y, nx.z-pv.z));
+        if (Math.hypot(nx.x-pv.x, nx.z-pv.z) < 1e-4) { const md = mainNodes[splitIdx+k].dir; dir = norm(v(md.x,md.y,md.z)); }
+        const right = norm(cross(dir, worldUp));
+        const up = norm(cross(right, dir));
+        const inMouth = (k <= MOUTH || k >= lenF - MOUTH);
+        const node = { pos: v(c.x,c.y,c.z), dir, right, up,
+          halfW: base * 1.05, bank: 0, kind:"route", tunnel:false, branchId: bid };
+        if (inMouth) {
+          node.corridorHalfW = PAD; node.laneOff = c.off;  // physics floor = the wide pad
+          node.meshSkip = true;                             // but NO branch walls here
+        }
+        nlist.push(node);
+      }
+      branches[bid] = nlist;
+    }
+
+    // main path: widen the Y-mouth pads, skip the divergent middle (branches cover it)
+    for (let k = 0; k <= lenF; k++) {
+      const m = mainNodes[splitIdx + k];
+      if (m._baseHalfW == null) m._baseHalfW = m.halfW;
+      if (k <= MOUTH || k >= lenF - MOUTH) {
+        const e = Math.min(1, (k <= MOUTH ? k/MOUTH : (lenF-k)/MOUTH));
+        const es = e*e*(3-2*e);
+        m.halfW = m._baseHalfW + (PAD - m._baseHalfW) * es;
+      } else {
+        m.meshSkip = true;
+      }
+    }
+
+    return {
+      id: forkId, splitIdx, flavor:'divergent', rejoin:true, lanesOnly:false,
+      branches,
+      rejoinIdx: { [forkId+'_A']: end, [forkId+'_B']: end },
+      endA: branches[forkId+'_A'][lenF], endB: branches[forkId+'_B'][lenF],
+    };
   }
 
   // Create one fork rooted at mainNodes[splitIdx]. Returns the fork descriptor.
@@ -157,7 +235,9 @@ const ZFORK = (() => {
         // (one of the stuck-ball bugs). Real separate finishes need geometry that runs
         // all the way to the end of the course; until that's built, rejoin everything.
         const rejoin = true;
-        const fork = makeFork(mainNodes, i, rng, 'fork'+(n++), rejoin);
+        const fork = (USE_DIVERGENT && makeDivergentFork(mainNodes, i, rng, 'fork'+n))
+                     || makeFork(mainNodes, i, rng, 'fork'+n, rejoin);
+        n++;
         forks.push(fork);
         forkAtIdx.set(i, fork);
         i += minGap + Math.floor(rng()*80);
@@ -168,7 +248,7 @@ const ZFORK = (() => {
     return { forks, forkAtIdx };
   }
 
-  return { buildForks, makeFork, buildBranch };
+  return { buildForks, makeFork, makeDivergentFork, buildBranch, setDivergent: (b) => { USE_DIVERGENT = !!b; } };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = { ZFORK };

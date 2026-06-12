@@ -66,10 +66,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=3u"></script>
-<script src="/v2/track.js?v=3u"></script>
-<script src="/v2/physics.js?v=3u"></script>
-<script src="/v2/cosmetics.js?v=3u"></script>
+<script src="/v2/forks.js?v=3v"></script>
+<script src="/v2/track.js?v=3v"></script>
+<script src="/v2/physics.js?v=3v"></script>
+<script src="/v2/cosmetics.js?v=3v"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -80,7 +80,7 @@ const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '3u';
+const BUILD = '3v';
 console.log('[ZORBS] build', BUILD);
 const leaderEl = document.getElementById('leader');
 function setStatus(txt, ok) {
@@ -266,6 +266,10 @@ function weldVertices(geo) {
 
 function buildCourse(seed) {
   trackMeshes.forEach(m => scene.remove(m)); trackMeshes = [];
+  // EXPERIMENTAL: ?forks=divergent enables the true divergent-route forks (two separate
+  // ribbons that bow apart and rejoin). Default is the clean side-by-side lane forks.
+  if (typeof ZFORK !== 'undefined' && ZFORK.setDivergent)
+    ZFORK.setDivergent(new URLSearchParams(location.search).get('forks') === 'divergent');
   // wire the (now-built) env map into the glossy floor/wall so they reflect the sky+rails
   if (_envMap) { WALL_MAT.envMap = _envMap; ROOF_MAT.envMap = _envMap;
     WALL_MAT.needsUpdate = ROOF_MAT.needsUpdate = true; }

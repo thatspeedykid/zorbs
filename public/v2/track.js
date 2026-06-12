@@ -250,6 +250,7 @@ const ZTRACK = (() => {
     let vi = 0, wvi = 0, rvi = 0;
     let vDist = 0;             // cumulative distance along track for the V coordinate
     for (let i = 0; i < nodes.length; i++) {
+      if (nodes[i].meshSkip) { prev = null; continue; }   // gap — no floor/walls here
       const cur = ring(nodes[i]);
       if (prev) {
         const vPrev = vDist;

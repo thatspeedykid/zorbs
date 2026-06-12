@@ -297,6 +297,11 @@ const ZPHYSICS = (() => {
         b._churn += dt * (1.5 + b.speedMul);            // each ball wanders at its own rate
         targetLane = Math.sin(b._churn) * n.halfW * 0.55; // sweep across the bowl (kept off the very edge)
         lanePull = LANE_PULL * 0.5;                       // looser so they drift, not snap
+      } else if (n.kind === 'route') {
+        // DIVERGENT ROUTES: keep the ball in the inner band (clear of the gap edge) but
+        // let it keep some lateral spread so balls don't clump and pile up at the exit.
+        targetLane = Math.max(-n.halfW*0.5, Math.min(n.halfW*0.5, b.lane * 0.6));
+        lanePull = LANE_PULL * 2.0;
       }
       const latErr = (targetLane - curLat);             // toward preferred/churn lane
       const laneFx = r.x * latErr * lanePull;
