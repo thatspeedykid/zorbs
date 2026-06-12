@@ -27,6 +27,9 @@
   #music .vol::-moz-range-thumb { width:12px; height:12px; border-radius:50%; background:#9fefff;
     box-shadow:0 0 6px rgba(0,200,255,.9); border:none; cursor:pointer; }
   #music .btns { display:flex; gap:6px; flex:0 0 auto; }
+  #music #m-beat-wrap { height:3px; margin-top:5px; border-radius:2px; overflow:hidden; background:rgba(0,80,140,.35); }
+  #music #m-beat { height:100%; width:100%; transform:scaleX(0); transform-origin:left;
+    background:linear-gradient(90deg,#00e5ff,#ff66cc); box-shadow:0 0 6px rgba(0,220,255,.8); }
   #music button { background:rgba(0,150,255,.15); color:#9fefff; border:1px solid rgba(60,180,255,.5);
     border-radius:6px; width:30px; height:30px; cursor:pointer; font-size:13px; line-height:1; }
   #music button:hover { background:rgba(0,150,255,.35); }
@@ -46,6 +49,7 @@
     <div class="artist">♪ SpeedyGoWild</div>
     <div class="song" id="m-song">loading…</div>
     <input id="m-vol" class="vol" type="range" min="0" max="100" value="60" title="volume">
+    <div id="m-beat-wrap" title="live beat"><div id="m-beat"></div></div>
   </div>
   <div class="btns">
     <button id="m-play" title="play / pause">▶</button>
@@ -62,10 +66,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=3n"></script>
-<script src="/v2/track.js?v=3n"></script>
-<script src="/v2/physics.js?v=3n"></script>
-<script src="/v2/cosmetics.js?v=3n"></script>
+<script src="/v2/forks.js?v=3o"></script>
+<script src="/v2/track.js?v=3o"></script>
+<script src="/v2/physics.js?v=3o"></script>
+<script src="/v2/cosmetics.js?v=3o"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -76,7 +80,7 @@ const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '3n';
+const BUILD = '3o';
 console.log('[ZORBS] build', BUILD);
 const leaderEl = document.getElementById('leader');
 function setStatus(txt, ok) {
@@ -188,6 +192,7 @@ function buildEnvMap() {
 let track = null, trackMeshes = [];
 let _pulse = null;                  // streaking-pulse animation state (set in buildCourse)
 const _tmpV = new THREE.Vector3();  // scratch vector reused each frame (no per-frame alloc)
+const _beatBar = document.getElementById('m-beat');   // live beat meter in the player
 // FUTURISTIC GRID FLOOR: a dark glossy panel with glowing cyan grid lines (Tron look
 // from the reference shots). The grid is a procedural canvas texture used as BOTH the
 // emissive map (lines glow + bloom) and a subtle base map. Brightened from before so
@@ -591,22 +596,23 @@ function loop(now) {
   // the music: bass energy drives the center lane, the bloom glow, and the wall emissive,
   // so the track flashes on the beat. (beat is 0 unless self-hosted audio is playing.)
   const beat = sampleBeat();
-  if (_bloom) _bloom.strength = _bloomBase + beat * 0.40;          // gentle glow surge on beat
-  if (typeof WALL_MAT !== 'undefined') WALL_MAT.emissiveIntensity = 0.6 + beat * 0.7;
-  if (typeof ROOF_MAT !== 'undefined') ROOF_MAT.emissiveIntensity = 0.25 + beat * 0.35;
+  if (_beatBar) _beatBar.style.transform = 'scaleX(' + Math.min(1, beat * 1.6) + ')';
+  if (_bloom) _bloom.strength = _bloomBase + beat * 0.55;          // glow surge on beat
+  if (typeof WALL_MAT !== 'undefined') WALL_MAT.emissiveIntensity = 0.6 + beat * 1.1;
+  if (typeof ROOF_MAT !== 'undefined') ROOF_MAT.emissiveIntensity = 0.25 + beat * 0.5;
   if (_pulse) {
     const tnow = now / 1000;
     if (_pulse.lane) {
-      _pulse.lane.material.opacity = Math.min(0.7, _pulse.laneBaseOpacity + beat * 0.4);
-      _pulse.lane.material.color.setRGB(0.22 + beat*0.4, 0.78, 0.88);
+      _pulse.lane.material.opacity = Math.min(0.8, _pulse.laneBaseOpacity + beat * 0.6);
+      _pulse.lane.material.color.setRGB(0.22 + beat*0.5, 0.78, 0.88);
     }
-    const speed = 0.09 + beat * 0.18;
+    const speed = 0.09 + beat * 0.22;
     for (const p of _pulse.pulses) {
       p.t += dt * speed; if (p.t > 1) p.t -= 1;
       _pulse.curve.getPointAt(p.t, _tmpV);
       p.sprite.position.copy(_tmpV);
-      p.sprite.material.opacity = 0.32 + 0.25 * Math.sin(tnow*4 + p.t*30) + beat*0.3;
-      const sc = 1.2 + beat * 1.1;
+      p.sprite.material.opacity = 0.32 + 0.25 * Math.sin(tnow*4 + p.t*30) + beat*0.45;
+      const sc = 1.2 + beat * 1.8;
       p.sprite.scale.set(sc, sc, sc);
     }
   }
