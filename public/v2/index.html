@@ -66,10 +66,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=3q"></script>
-<script src="/v2/track.js?v=3q"></script>
-<script src="/v2/physics.js?v=3q"></script>
-<script src="/v2/cosmetics.js?v=3q"></script>
+<script src="/v2/forks.js?v=3r"></script>
+<script src="/v2/track.js?v=3r"></script>
+<script src="/v2/physics.js?v=3r"></script>
+<script src="/v2/cosmetics.js?v=3r"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -80,7 +80,7 @@ const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '3q';
+const BUILD = '3r';
 console.log('[ZORBS] build', BUILD);
 const leaderEl = document.getElementById('leader');
 function setStatus(txt, ok) {
@@ -584,12 +584,12 @@ function loop(now) {
   // so the track flashes on the beat. (beat is 0 unless self-hosted audio is playing.)
   const beat = sampleBeat();
   if (_beatBar) _beatBar.style.transform = 'scaleX(' + Math.min(1, beat) + ')';
-  if (_bloom) _bloom.strength = _bloomBase + beat * 0.35;          // gentle glow swell
-  if (typeof WALL_MAT !== 'undefined') WALL_MAT.emissiveIntensity = 0.6 + beat * 0.9;
-  if (typeof ROOF_MAT !== 'undefined') ROOF_MAT.emissiveIntensity = 0.25 + beat * 0.45;
+  if (_bloom) _bloom.strength = _bloomBase + beat * 0.5;
+  if (typeof WALL_MAT !== 'undefined') WALL_MAT.emissiveIntensity = 0.55 + beat * 1.4;
+  if (typeof ROOF_MAT !== 'undefined') ROOF_MAT.emissiveIntensity = 0.25 + beat * 0.6;
   if (_pulse && _pulse.lane) {
-    _pulse.lane.material.opacity = Math.min(0.75, _pulse.laneBaseOpacity + beat * 0.5);
-    _pulse.lane.material.color.setRGB(0.22 + beat*0.45, 0.78, 0.88);
+    _pulse.lane.material.opacity = Math.min(0.85, _pulse.laneBaseOpacity + beat * 0.6);
+    _pulse.lane.material.color.setRGB(0.22 + beat*0.55, 0.78, 0.9);
   }
 
   if (phase === 'spawning') {
@@ -848,18 +848,22 @@ function setupAnalyser(){
     }
   } catch(e) { _analyser = null; }
 }
-// returns 0..1 bass energy as a SLOW SUSTAINED swell — a low-pass envelope of the kick/
-// bass band so it rises and falls smoothly with the bassline ("DUUUNNN") instead of
-// snapping on every transient. fftSize 1024 → ~43 Hz/bin; bins 1..4 ≈ 43–215 Hz.
+// returns 0..1 bass pulse, SELF-CALIBRATING so it works on any track regardless of how
+// loud it is. We track a slow baseline and a decaying peak of the kick/bass band, then
+// normalise the current level between them — so a kick reads ~1 and the lulls read ~0.
+// Quick-ish attack lands the hit; a slower decay gives a visible swell ("DUUUNNN").
+let _bassAvg = 0, _bassMax = 0.02;
 function sampleBeat(){
   if (!_analyser) return 0;
   _analyser.getByteFrequencyData(_freqData);
-  let sum = 0; for (let i = 1; i <= 4; i++) sum += _freqData[i];
-  let level = sum / (4 * 255);
-  level = Math.max(0, (level - 0.14) / 0.86);        // gate the quiet floor
-  // gentle low-pass: ease toward the level (a bit quicker up than down) for long swells
-  const rate = level > _beat ? 0.10 : 0.05;
-  _beat += (level - _beat) * rate;
+  let sum = 0; for (let i = 1; i <= 4; i++) sum += _freqData[i];   // ~43–215 Hz (kick/bass)
+  const level = sum / (4 * 255);
+  _bassAvg += (level - _bassAvg) * 0.03;                 // slow baseline (the song's floor)
+  _bassMax = Math.max(level, _bassMax * 0.997);          // decaying peak (the ceiling)
+  const span = Math.max(0.04, _bassMax - _bassAvg);
+  let norm = Math.max(0, Math.min(1, (level - _bassAvg) / span));   // ~0 lull, ~1 on a kick
+  const rate = norm > _beat ? 0.55 : 0.08;               // fast attack, slow swelling decay
+  _beat += (norm - _beat) * rate;
   return _beat;
 }
 function loadSelf(i, autoplay){
