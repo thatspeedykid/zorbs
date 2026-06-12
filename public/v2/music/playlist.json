@@ -1,18 +1,18 @@
 {
   "artist": "SpeedyGoWild",
   "spotify": "https://open.spotify.com/artist/47Pj5n2KiZRgKgx4fOnB3x",
-  "_howto": "baseUrl is your R2 public bucket URL ending in /Music/. Each track lists a 'file' = the exact filename uploaded to R2 (case-sensitive). Replace REPLACE-WITH-YOUR-R2-URL with your R2 public hostname.",
+  "_howto": "baseUrl is the R2 public bucket URL ending in /Music/. Each track's 'file' must match the exact filename in R2 (case-sensitive).",
   "baseUrl": "https://pub-ade1ec4abb664bc9a8d4aa0aa81eacee.r2.dev/Music/",
   "tracks": [
-    { "title": "Dreams in Neon",    "file": "dreams-in-neon.mp3" },
-    { "title": "Into the Light",     "file": "into-the-light.mp3" },
-    { "title": "Lifeline",           "file": "lifeline.mp3" },
-    { "title": "Resurrection",       "file": "resurrection.mp3" },
-    { "title": "Running",            "file": "running.mp3" },
-    { "title": "Heartbeat",          "file": "heartbeat.mp3" },
-    { "title": "Phantom Souls",      "file": "phantom-souls.mp3" },
-    { "title": "End_",               "file": "end.mp3" },
-    { "title": "Hypersonic Dreams",  "file": "hypersonic-dreams.mp3" },
-    { "title": "Neon Surge",         "file": "neon-surge.mp3" }
+    { "title": "Dreams in Neon",    "file": "Dreams-in-Neon.mp3" },
+    { "title": "Into the Light",     "file": "Into-the-Light.mp3" },
+    { "title": "Lifeline",           "file": "Lifeline.mp3" },
+    { "title": "Resurrection",       "file": "Resurrection.mp3" },
+    { "title": "Running",            "file": "Running.mp3" },
+    { "title": "Heartbeat",          "file": "Heartbeat.mp3" },
+    { "title": "Phantom Souls",      "file": "Phantom-Souls.mp3" },
+    { "title": "End_",               "file": "End.mp3" },
+    { "title": "Hypersonic Dreams",  "file": "Hypersonic-Dreams.mp3" },
+    { "title": "Neon Surge",         "file": "Neon-Surge.mp3" }
   ]
 }
