@@ -2,7 +2,7 @@
   "artist": "SpeedyGoWild",
   "spotify": "https://open.spotify.com/artist/47Pj5n2KiZRgKgx4fOnB3x",
   "_howto": "baseUrl is your R2 public bucket URL ending in /Music/. Each track lists a 'file' = the exact filename uploaded to R2 (case-sensitive). Replace REPLACE-WITH-YOUR-R2-URL with your R2 public hostname.",
-  "baseUrl": "https://REPLACE-WITH-YOUR-R2-URL/Music/",
+  "baseUrl": "https://pub-ade1ec4abb664bc9a8d4aa0aa81eacee.r2.dev/Music/",
   "tracks": [
     { "title": "Dreams in Neon",    "file": "dreams-in-neon.mp3" },
     { "title": "Into the Light",     "file": "into-the-light.mp3" },
