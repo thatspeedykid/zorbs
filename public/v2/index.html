@@ -66,10 +66,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=3w"></script>
-<script src="/v2/track.js?v=3w"></script>
-<script src="/v2/physics.js?v=3w"></script>
-<script src="/v2/cosmetics.js?v=3w"></script>
+<script src="/v2/forks.js?v=3x"></script>
+<script src="/v2/track.js?v=3x"></script>
+<script src="/v2/physics.js?v=3x"></script>
+<script src="/v2/cosmetics.js?v=3x"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -80,7 +80,7 @@ const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '3w';
+const BUILD = '3x';
 console.log('[ZORBS] build', BUILD);
 const leaderEl = document.getElementById('leader');
 function setStatus(txt, ok) {
@@ -104,7 +104,7 @@ const scene = new THREE.Scene();
 // fog softened: density 0.006 with a near-BLACK color was fading everything beyond
 // ~100 units to black — a major contributor to the 'black track'. Deep blue + gentle.
 scene.fog = new THREE.FogExp2(0x0a2040, 0.0018);
-const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 2000);
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.3, 12000);
 
 // BLOOM: everything bright (rails, rings, arches, energy bands) gets a real glow halo.
 // Guarded so the page still runs plain if a CDN script fails to load.
@@ -186,6 +186,73 @@ function buildEnvMap() {
     fragmentShader:`varying vec3 p; void main(){ float h=normalize(p).y*0.5+0.5; vec3 top=vec3(0.02,0.05,0.13); vec3 bot=vec3(0.0,0.10,0.18); gl_FragColor=vec4(mix(bot,top,h),1.0); }`
   });
   const mesh = new THREE.Mesh(g, m); mesh.renderOrder = -1000; scene.add(mesh);
+})();
+
+// ---- PLANET OVERWORLD: a giant world suspended far below the track ----
+let _planet = null, _clouds = null;
+(function planet(){
+  // periodic value-noise → fractal terrain, baked to an equirectangular canvas texture
+  const hash = (ix, iy) => { let h = (ix*374761393 + iy*668265263) | 0; h = (h ^ (h>>13)) * 1274126177 | 0; return ((h ^ (h>>16)) >>> 0) / 4294967295; };
+  const P = 8;
+  const vn = (x, y, per) => {
+    const ix = Math.floor(x), iy = Math.floor(y), fx = x-ix, fy = y-iy;
+    const u = fx*fx*(3-2*fx), v = fy*fy*(3-2*fy), w = (i) => ((i%per)+per)%per;
+    const a = hash(w(ix),iy), b = hash(w(ix+1),iy), c2 = hash(w(ix),iy+1), d = hash(w(ix+1),iy+1);
+    return (a*(1-u)+b*u)*(1-v) + (c2*(1-u)+d*u)*v;
+  };
+  const fbm = (x, y) => { let e=0, amp=0.5, fr=1; for (let o=0;o<5;o++){ e += amp*vn(x*fr, y*fr, P*fr); amp*=0.5; fr*=2; } return e; };
+
+  function surfaceCanvas(){
+    const W=1024, H=512, c=document.createElement('canvas'); c.width=W; c.height=H;
+    const ctx=c.getContext('2d'), img=ctx.createImageData(W,H);
+    for (let y=0;y<H;y++){ const lat=y/H, polar=Math.max(0,(Math.abs(lat-0.5)*2-0.82)/0.18);
+      for (let x=0;x<W;x++){ const lon=x/W; const e=fbm(lon*P, lat*(P*0.5));
+        let r,g,b;
+        if (e<0.46){ const d=e/0.46; r=8+d*14; g=34+d*46; b=78+d*74; }
+        else if (e<0.49){ r=38; g=108; b=158; }
+        else if (e<0.515){ r=204; g=194; b=150; }
+        else if (e<0.66){ const d=(e-0.515)/0.145; r=42+d*32; g=112+d*48; b=54+d*26; }
+        else if (e<0.72){ r=108; g=108; b=78; }
+        else { const d=Math.min(1,(e-0.72)/0.1); r=120+d*110; g=120+d*110; b=112+d*110; }
+        if (polar>0){ r+= (235-r)*polar; g+=(240-g)*polar; b+=(248-b)*polar; }
+        const i=(y*W+x)*4; img.data[i]=r; img.data[i+1]=g; img.data[i+2]=b; img.data[i+3]=255;
+      } }
+    ctx.putImageData(img,0,0); return c;
+  }
+  function cloudCanvas(){
+    const W=1024, H=512, c=document.createElement('canvas'); c.width=W; c.height=H;
+    const ctx=c.getContext('2d'), img=ctx.createImageData(W,H);
+    for (let y=0;y<H;y++) for (let x=0;x<W;x++){ const e=fbm((x/W)*P*1.5+11, (y/H)*(P*0.5)*1.5+7);
+      const a=Math.max(0, Math.min(1,(e-0.52)*3.2))*210; const i=(y*W+x)*4;
+      img.data[i]=img.data[i+1]=img.data[i+2]=255; img.data[i+3]=a; }
+    ctx.putImageData(img,0,0); return c;
+  }
+
+  const R = 4000, CY = -4800;                      // radius + center Y (top sits ~-800, below the track)
+  const grp = new THREE.Group(); grp.position.set(0, CY, 0);
+
+  const surfTex = new THREE.CanvasTexture(surfaceCanvas()); surfTex.anisotropy = 4;
+  const globe = new THREE.Mesh(new THREE.SphereGeometry(R, 96, 64),
+    new THREE.MeshStandardMaterial({ map: surfTex, roughness: 0.92, metalness: 0.0,
+      emissive: 0x0a1730, emissiveIntensity: 0.55, fog: false }));
+  grp.add(globe);
+
+  const cloudTex = new THREE.CanvasTexture(cloudCanvas());
+  _clouds = new THREE.Mesh(new THREE.SphereGeometry(R*1.012, 80, 48),
+    new THREE.MeshStandardMaterial({ map: cloudTex, transparent: true, roughness: 1.0,
+      metalness: 0.0, depthWrite: false, fog: false }));
+  grp.add(_clouds);
+
+  // atmosphere: fresnel rim glow on a slightly larger back-faced shell
+  const atm = new THREE.Mesh(new THREE.SphereGeometry(R*1.06, 64, 40),
+    new THREE.ShaderMaterial({ side: THREE.BackSide, blending: THREE.AdditiveBlending,
+      transparent: true, depthWrite: false, fog: false,
+      uniforms: { glowColor: { value: new THREE.Color(0x3aa6ff) } },
+      vertexShader: `varying vec3 vN; varying vec3 vP; void main(){ vN=normalize(normalMatrix*normal); vec4 mv=modelViewMatrix*vec4(position,1.0); vP=mv.xyz; gl_Position=projectionMatrix*mv; }`,
+      fragmentShader: `varying vec3 vN; varying vec3 vP; uniform vec3 glowColor; void main(){ vec3 vd=normalize(-vP); float rim=1.0-max(dot(vN,vd),0.0); rim=pow(rim,2.6); gl_FragColor=vec4(glowColor, rim*0.9); }` }));
+  grp.add(atm);
+
+  scene.add(grp); _planet = grp;
 })();
 
 // ---- build the course ----
@@ -633,6 +700,8 @@ function loop(now) {
   // the music: bass energy drives the center lane, the bloom glow, and the wall emissive,
   // so the track flashes on the beat. (beat is 0 unless self-hosted audio is playing.)
   for (let i = 0; i < _boostMats.length; i++) _boostMats[i].offset.y = (now/1000 * 1.4) % 1;
+  if (_planet) _planet.rotation.y += dt * 0.006;       // world turns slowly below
+  if (_clouds) _clouds.rotation.y += dt * 0.004;       // clouds drift a touch faster
   const beat = sampleBeat();
   if (_beatBar) _beatBar.style.transform = 'scaleX(' + Math.min(1, beat) + ')';
   if (_bloom) _bloom.strength = _bloomBase + beat * 0.5;
