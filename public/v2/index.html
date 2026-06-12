@@ -66,10 +66,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=3t"></script>
-<script src="/v2/track.js?v=3t"></script>
-<script src="/v2/physics.js?v=3t"></script>
-<script src="/v2/cosmetics.js?v=3t"></script>
+<script src="/v2/forks.js?v=3u"></script>
+<script src="/v2/track.js?v=3u"></script>
+<script src="/v2/physics.js?v=3u"></script>
+<script src="/v2/cosmetics.js?v=3u"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -80,7 +80,7 @@ const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '3t';
+const BUILD = '3u';
 console.log('[ZORBS] build', BUILD);
 const leaderEl = document.getElementById('leader');
 function setStatus(txt, ok) {
@@ -193,6 +193,8 @@ let track = null, trackMeshes = [];
 let _pulse = null;                  // streaking-pulse animation state (set in buildCourse)
 let _boostMats = [];                // boost-pad chevron textures (scrolled each frame)
 const _tmpV = new THREE.Vector3();  // scratch vector reused each frame (no per-frame alloc)
+const _tmpV2 = new THREE.Vector3(); // scratch vector 2 (speed-streak orientation)
+const _yUp = new THREE.Vector3(0,1,0);
 const _beatBar = document.getElementById('m-beat');   // live beat meter in the player
 // neon palette the center line cycles through on each beat thud
 let _lastBeat = 0, _hueIdx = 0;
@@ -398,7 +400,7 @@ function buildCourse(seed) {
   if (track.boosts && track.boosts.length) {
     // forward-pointing chevron texture (bright amber on transparent)
     const bc = document.createElement('canvas'); bc.width = 32; bc.height = 32;
-    const bx = bc.getContext('2d'); bx.strokeStyle = '#ffd24a'; bx.lineWidth = 7; bx.lineCap = 'round';
+    const bx = bc.getContext('2d'); bx.strokeStyle = '#5a88ff'; bx.lineWidth = 7; bx.lineCap = 'round';
     bx.beginPath(); bx.moveTo(5,22); bx.lineTo(16,8); bx.lineTo(27,22); bx.stroke();
     for (const z of track.boosts) {
       for (const side of [-1, 1]) {
@@ -413,8 +415,8 @@ function buildCourse(seed) {
         tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
         tex.repeat.set(1, Math.max(2, pts.length * 0.5));
         const geo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), pts.length*2, 0.42, 5, false);
-        const mat = new THREE.MeshBasicMaterial({ map:tex, color:0xffb030, transparent:true,
-          opacity:0.9, blending:THREE.AdditiveBlending, depthWrite:false });
+        const mat = new THREE.MeshBasicMaterial({ map:tex, color:0x2a4cff, transparent:true,
+          opacity:0.95, blending:THREE.AdditiveBlending, depthWrite:false });
         const strip = new THREE.Mesh(geo, mat);
         scene.add(strip); trackMeshes.push(strip);
         _boostMats.push(tex);
@@ -467,6 +469,16 @@ function makeZorb(id, prefs, isSub) {
   }));
   trail.frustumCulled = false; scene.add(trail);
 
+  // SPEED STREAK: a comet tail behind the ball that stretches with speed (sense of speed).
+  // Not parented to the core (so the ball's roll doesn't spin it); oriented to velocity
+  // in the loop. Hidden at low speed, grows + brightens the faster the ball goes.
+  const streak = new THREE.Mesh(
+    new THREE.ConeGeometry(BALL_R * 0.78, 1, 14, 1, true),
+    new THREE.MeshBasicMaterial({ color: accent, transparent:true, opacity:0,
+      blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide })
+  );
+  streak.frustumCulled = false; streak.visible = false; scene.add(streak);
+
   // EQUATORIAL ENERGY BAND hugging the orb (toned down so it accents, not blinds)
   const band = new THREE.Mesh(BAND_GEO, new THREE.MeshBasicMaterial({
     color: accent, transparent:true, opacity:0.55, blending:THREE.AdditiveBlending, depthWrite:false
@@ -496,7 +508,7 @@ function makeZorb(id, prefs, isSub) {
   glow.scale.setScalar(1.18); core.add(glow);
 
   zorbs.set(id, {
-    mesh: core, ring, ringGlow, band, color, trail, trailPos, trailLen: TRAIL_LEN,
+    mesh: core, ring, ringGlow, band, color, trail, trailPos, trailLen: TRAIL_LEN, streak,
     spawnT: 0, spawnAnim: cos.spawn, ringSpin: cos.ring.spin || 2.0,
     ringBob: Math.random()*Math.PI*2, eliminated:false, fallT:0,
     rollQ: new THREE.Quaternion(),
@@ -571,7 +583,7 @@ function startRace(seed, names) {
   _fieldSize = names.length;
   buildCourse(seed);
   ZPHYSICS.clearBalls();
-  zorbs.forEach(z => { scene.remove(z.mesh); if(z.ring) scene.remove(z.ring); if(z.ringGlow) scene.remove(z.ringGlow); if(z.trail) scene.remove(z.trail); });
+  zorbs.forEach(z => { scene.remove(z.mesh); if(z.ring) scene.remove(z.ring); if(z.ringGlow) scene.remove(z.ringGlow); if(z.trail) scene.remove(z.trail); if(z.streak) scene.remove(z.streak); });
   zorbs.clear(); colorIdx = 0; winner = null;
   // queue spawns at the start of the track, staggered for a nice entrance
   spawnQueue = names.map((nm, i) => ({ id: nm.id, prefs: nm.prefs, isSub: nm.isSub, delay: i*0.12 }));
@@ -699,6 +711,19 @@ function loop(now) {
       tp[0] = s.x; tp[1] = s.y; tp[2] = s.z;
       z.trail.geometry.attributes.position.needsUpdate = true;
       z.trail.visible = !z.eliminated && sp > 2;   // only show a streak when actually moving
+      // SPEED STREAK: stretch a comet tail backward along velocity, growing with speed
+      if (z.streak) {
+        const fast = Math.max(0, sp - 7) / 16;     // 0 below ~7 speed, ramps up past it
+        if (fast > 0.03 && !z.eliminated) {
+          const vd = _tmpV.set(s.vx, 0, s.vz); const vl = vd.length() || 1; vd.multiplyScalar(1/vl);
+          const len = BALL_R * (1.4 + fast * 8);
+          z.streak.position.set(s.x - vd.x*len*0.5, s.y, s.z - vd.z*len*0.5);
+          z.streak.quaternion.setFromUnitVectors(_yUp, _tmpV2.set(-vd.x, 0, -vd.z));
+          z.streak.scale.set(1, len, 1);
+          z.streak.material.opacity = Math.min(0.55, fast * 0.7);
+          z.streak.visible = true;
+        } else z.streak.visible = false;
+      }
     }
     // ring follows, stays flat, spins on its own vertical axis
     if (z.ring) {
