@@ -62,10 +62,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=3l"></script>
-<script src="/v2/track.js?v=3l"></script>
-<script src="/v2/physics.js?v=3l"></script>
-<script src="/v2/cosmetics.js?v=3l"></script>
+<script src="/v2/forks.js?v=3m"></script>
+<script src="/v2/track.js?v=3m"></script>
+<script src="/v2/physics.js?v=3m"></script>
+<script src="/v2/cosmetics.js?v=3m"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -76,7 +76,7 @@ const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '3l';
+const BUILD = '3m';
 console.log('[ZORBS] build', BUILD);
 const leaderEl = document.getElementById('leader');
 function setStatus(txt, ok) {
@@ -815,7 +815,7 @@ function shuffle(a){ a=a.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.fl
 
 function noMusic(msg){ const el = document.getElementById('m-song'); if (el) el.textContent = msg || 'music coming soon'; }
 // load the self-hosted playlist and start the player (no YouTube)
-fetch('music/playlist.json', { cache:'no-store' })
+fetch('/v2/music/playlist.json', { cache:'no-store' })
   .then(r => r.ok ? r.json() : null)
   .then(j => {
     if (j && Array.isArray(j.tracks) && j.tracks.length) {
