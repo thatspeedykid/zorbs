@@ -66,10 +66,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=3x"></script>
-<script src="/v2/track.js?v=3x"></script>
-<script src="/v2/physics.js?v=3x"></script>
-<script src="/v2/cosmetics.js?v=3x"></script>
+<script src="/v2/forks.js?v=3y"></script>
+<script src="/v2/track.js?v=3y"></script>
+<script src="/v2/physics.js?v=3y"></script>
+<script src="/v2/cosmetics.js?v=3y"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -80,7 +80,7 @@ const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '3x';
+const BUILD = '3y';
 console.log('[ZORBS] build', BUILD);
 const leaderEl = document.getElementById('leader');
 function setStatus(txt, ok) {
@@ -205,16 +205,15 @@ let _planet = null, _clouds = null;
   function surfaceCanvas(){
     const W=1024, H=512, c=document.createElement('canvas'); c.width=W; c.height=H;
     const ctx=c.getContext('2d'), img=ctx.createImageData(W,H);
-    for (let y=0;y<H;y++){ const lat=y/H, polar=Math.max(0,(Math.abs(lat-0.5)*2-0.82)/0.18);
+    for (let y=0;y<H;y++){ const lat=y/H;
       for (let x=0;x<W;x++){ const lon=x/W; const e=fbm(lon*P, lat*(P*0.5));
         let r,g,b;
-        if (e<0.46){ const d=e/0.46; r=8+d*14; g=34+d*46; b=78+d*74; }
-        else if (e<0.49){ r=38; g=108; b=158; }
-        else if (e<0.515){ r=204; g=194; b=150; }
-        else if (e<0.66){ const d=(e-0.515)/0.145; r=42+d*32; g=112+d*48; b=54+d*26; }
-        else if (e<0.72){ r=108; g=108; b=78; }
-        else { const d=Math.min(1,(e-0.72)/0.1); r=120+d*110; g=120+d*110; b=112+d*110; }
-        if (polar>0){ r+= (235-r)*polar; g+=(240-g)*polar; b+=(248-b)*polar; }
+        if (e<0.46){ const d=e/0.46; r=12+d*18; g=46+d*52; b=104+d*64; }   // deep→shallow ocean
+        else if (e<0.49){ r=40; g=124; b=182; }                            // coastal water
+        else if (e<0.515){ r=212; g=200; b=150; }                          // beach
+        else if (e<0.66){ const d=(e-0.515)/0.145; r=40+d*38; g=122+d*48; b=50+d*26; } // green land
+        else if (e<0.72){ r=98; g=118; b=58; }                             // hills
+        else { const d=Math.min(1,(e-0.72)/0.1); r=120+d*105; g=125+d*102; b=118+d*108; } // peaks/snow
         const i=(y*W+x)*4; img.data[i]=r; img.data[i+1]=g; img.data[i+2]=b; img.data[i+3]=255;
       } }
     ctx.putImageData(img,0,0); return c;
@@ -232,15 +231,15 @@ let _planet = null, _clouds = null;
   const grp = new THREE.Group(); grp.position.set(0, CY, 0);
 
   const surfTex = new THREE.CanvasTexture(surfaceCanvas()); surfTex.anisotropy = 4;
+  // unlit: shows true colors immune to the scene's bright lights + bloom (which whited it out)
   const globe = new THREE.Mesh(new THREE.SphereGeometry(R, 96, 64),
-    new THREE.MeshStandardMaterial({ map: surfTex, roughness: 0.92, metalness: 0.0,
-      emissive: 0x0a1730, emissiveIntensity: 0.55, fog: false }));
+    new THREE.MeshBasicMaterial({ map: surfTex, fog: false }));
   grp.add(globe);
 
   const cloudTex = new THREE.CanvasTexture(cloudCanvas());
   _clouds = new THREE.Mesh(new THREE.SphereGeometry(R*1.012, 80, 48),
-    new THREE.MeshStandardMaterial({ map: cloudTex, transparent: true, roughness: 1.0,
-      metalness: 0.0, depthWrite: false, fog: false }));
+    new THREE.MeshBasicMaterial({ map: cloudTex, transparent: true, opacity: 0.5,
+      depthWrite: false, fog: false }));
   grp.add(_clouds);
 
   // atmosphere: fresnel rim glow on a slightly larger back-faced shell
