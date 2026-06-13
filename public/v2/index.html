@@ -6,7 +6,7 @@
 <title>Zorbs On Stream</title>
 <style>
   html,body { margin:0; height:100%; background:#02050d; overflow:hidden; font-family:'Courier New',monospace; }
-  #c { display:block; position:fixed; top:0; left:0; width:100vw; height:100vh; height:100dvh; }
+  #c { display:block; width:100vw; height:100vh; }
   #hud { position:fixed; top:10px; left:12px; z-index:10; display:flex; flex-direction:column; align-items:flex-start; gap:8px; }
   #hud .dashbtn { font-family:'Courier New',monospace; font-size:11px; letter-spacing:2px; color:#bfefff; text-decoration:none;
     background:rgba(6,12,26,.72); border:1px solid rgba(120,220,255,.55); border-radius:8px; padding:6px 14px; backdrop-filter:blur(3px); transition:.15s; }
@@ -217,10 +217,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=4q"></script>
-<script src="/v2/track.js?v=4q"></script>
-<script src="/v2/physics.js?v=4q"></script>
-<script src="/v2/cosmetics.js?v=4q"></script>
+<script src="/v2/forks.js?v=4r"></script>
+<script src="/v2/track.js?v=4r"></script>
+<script src="/v2/physics.js?v=4r"></script>
+<script src="/v2/cosmetics.js?v=4r"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -235,7 +235,7 @@ const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '4q';
+const BUILD = '4r';
 console.log('[ZORBS] build', BUILD);
 
 // ---- ERROR LOGGER: phone runtime errors home (/api/log) so we can fix the game from real
@@ -278,7 +278,7 @@ function setStatus(txt, ok) {
 const canvas = document.getElementById('c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
 renderer.setPixelRatio(Math.min(2, devicePixelRatio));
-renderer.setSize(innerWidth, innerHeight, false);
+renderer.setSize(innerWidth, innerHeight);
 // FILMIC LOOK: ACES tone mapping + sRGB output. This is the single biggest "game
 // engine" upgrade — highlights roll off like a camera instead of clipping to white.
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -307,15 +307,13 @@ if (THREE.EffectComposer && THREE.UnrealBloomPass) {
 }
 
 function doResize() {
-  const w = canvas.clientWidth || innerWidth, h = canvas.clientHeight || innerHeight;
-  renderer.setSize(w, h, false);            // false: leave CSS sizing (100dvh) alone — no black bar
-  if (composer) composer.setSize(w, h);
-  camera.aspect = w/h; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  if (composer) composer.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
 }
 addEventListener('resize', doResize);
 addEventListener('orientationchange', () => setTimeout(doResize, 200));
 if (window.visualViewport) visualViewport.addEventListener('resize', doResize);
-setTimeout(doResize, 100);
 
 // lights (slightly hotter than before — ACES tone mapping eats some brightness)
 scene.add(new THREE.AmbientLight(0x445577, 0.75));
