@@ -23,6 +23,12 @@
   #arm #playbtn:hover { background:linear-gradient(90deg,rgba(40,140,255,.8),rgba(120,60,255,.8)); }
   #arm .hint { font-size:11px; color:#6b9; letter-spacing:1px; }
   #leader { display:none; }
+  #lobby { position:fixed; inset:0; display:none; align-items:center; justify-content:center; z-index:40; pointer-events:none; }
+  #lobby .lb { text-align:center; background:rgba(4,12,28,.5); backdrop-filter:blur(2px); border:1px solid rgba(80,180,255,.3);
+    border-radius:16px; padding:26px 48px; box-shadow:0 0 40px rgba(20,120,255,.3); }
+  #lobby .t { color:#7fe9ff; letter-spacing:6px; font-size:16px; }
+  #lobby .cd { color:#fff; font-size:64px; font-weight:bold; text-shadow:0 0 28px rgba(120,220,255,.7); line-height:1.1; }
+  #lobby .s { color:#8fc; font-size:12px; letter-spacing:2px; opacity:.85; }
   #rightcol { position:fixed; top:10px; right:12px; width:216px; z-index:10; font-family:'Courier New',monospace; }
   #standings .row { display:flex; align-items:center; gap:7px; padding:3px 8px; margin:2px 0; border-radius:6px;
     background:rgba(6,20,40,.55); font-size:12px; color:#dff3ff; box-shadow:0 0 0 1px rgba(80,160,255,.14); transition:opacity .3s; }
@@ -82,6 +88,11 @@
 <canvas id="c"></canvas>
 <div id="hud">ZORBS v2 — engine test</div>
 <div id="leader"></div>
+<div id="lobby"><div class="lb">
+  <div class="t">NEXT RACE</div>
+  <div class="cd" id="lobbyCd">—</div>
+  <div class="s" id="lobbySub">racers taking their marks…</div>
+</div></div>
 <div id="rightcol"><div id="standings"></div><div id="feed"></div></div>
 <div id="endcard"><div class="panel">
   <h2>RACE COMPLETE</h2>
@@ -122,10 +133,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=4d"></script>
-<script src="/v2/track.js?v=4d"></script>
-<script src="/v2/physics.js?v=4d"></script>
-<script src="/v2/cosmetics.js?v=4d"></script>
+<script src="/v2/forks.js?v=4e"></script>
+<script src="/v2/track.js?v=4e"></script>
+<script src="/v2/physics.js?v=4e"></script>
+<script src="/v2/cosmetics.js?v=4e"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -136,7 +147,7 @@ const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '4d';
+const BUILD = '4e';
 console.log('[ZORBS] build', BUILD);
 
 // ---- ERROR LOGGER: phone runtime errors home (/api/log) so we can fix the game from real
@@ -1061,8 +1072,17 @@ function runMultiplayer(){
   const params = new URLSearchParams(location.search);
   const myName = (_joinName || params.get('name') || ('guest'+Math.floor(1000+Math.random()*9000))).slice(0,16);
   _myMarble = myName; _mpMode = true;
-  let offset = 0, roster = [], curSlot = -1, ws = null;
+  let offset = 0, roster = [], curSlot = -1, ws = null, gotWelcome = false, lobbyTimer = null;
   const serverNow = () => Date.now() + offset;
+  const lobbyEl = document.getElementById('lobby');
+  const lobbyCd = document.getElementById('lobbyCd');
+  function showLobby(localStart){
+    lobbyEl.style.display = 'flex';
+    if (lobbyTimer) clearInterval(lobbyTimer);
+    const tick = () => { lobbyCd.textContent = Math.max(0, Math.ceil((localStart - Date.now())/1000)) + 's'; };
+    tick(); lobbyTimer = setInterval(tick, 200);
+  }
+  function hideLobby(){ lobbyEl.style.display = 'none'; if (lobbyTimer){ clearInterval(lobbyTimer); lobbyTimer = null; } }
 
   function scheduleRace(race){
     // never drop a player into a race already in progress — wait for the next clean start
@@ -1073,8 +1093,11 @@ function runMultiplayer(){
     if (race.slot === curSlot) return; curSlot = race.slot;
     const localStart = race.startTime - offset;              // server time → this machine's clock
     const wait = Math.max(0, localStart - Date.now());
-    setStatus('⬡ race starting in ' + Math.ceil(wait/1000) + 's…', true);
-    setTimeout(() => runMpRace(race), wait);
+    // load the track NOW so the wait shows a real lobby (not blank sky), with a countdown
+    try { buildCourse(race.seed); } catch (e) { ZLOG.report('manual', 'mp buildCourse failed: ' + (e && e.message)); }
+    showLobby(localStart);
+    setStatus('⬡ next race in ' + Math.ceil(wait/1000) + 's', true);
+    setTimeout(() => { hideLobby(); runMpRace(race); }, wait);
   }
   function runMpRace(race){
     const names = []; const used = new Set();
@@ -1091,15 +1114,25 @@ function runMultiplayer(){
     catch(e){ ZLOG.report('manual','mp ws ctor failed: '+(e&&e.message)); setTimeout(connect, 3000); return; }
     ws.onopen = () => ws.send(JSON.stringify({ type:'join', name: myName }));
     ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch(_){ return; }
-      if (m.type === 'welcome') { offset = m.serverTime - Date.now(); roster = m.players || []; scheduleRace(m.race); }
+      if (m.type === 'welcome') { gotWelcome = true; offset = m.serverTime - Date.now(); roster = m.players || []; scheduleRace(m.race); }
       else if (m.type === 'players') { roster = m.players || []; }
       else if (m.type === 'boost' && typeof pushFeed === 'function') pushFeed('boost', '<b>'+esc(m.name)+'</b> used boost!');
     };
     ws.onclose = () => { setStatus('reconnecting…', false); setTimeout(connect, 2500); };
     ws.onerror = () => { try { ws.close(); } catch(_){} };
   }
+  // safety net: if the room never answers, don't hang on blank sky — run a solo race
+  function soloFallback(){
+    hideLobby();
+    const seed = (Math.random()*1e9) >>> 0;
+    const names = mpBots(seed).map(n => ({ id:n, prefs:{}, isSub:false }));
+    names[0] = { id:_myMarble, prefs:{}, isSub:false };
+    setStatus('offline — solo race', false);
+    startRace(seed, names);
+  }
   setStatus('connecting to race room…', false);
   connect();
+  setTimeout(() => { if (!gotWelcome) { ZLOG.report('manual', 'mp no welcome in 9s — solo fallback'); soloFallback(); } }, 9000);
 }
 
 async function boot() {
