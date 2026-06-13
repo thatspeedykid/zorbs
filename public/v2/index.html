@@ -183,10 +183,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=4n"></script>
-<script src="/v2/track.js?v=4n"></script>
-<script src="/v2/physics.js?v=4n"></script>
-<script src="/v2/cosmetics.js?v=4n"></script>
+<script src="/v2/forks.js?v=4o"></script>
+<script src="/v2/track.js?v=4o"></script>
+<script src="/v2/physics.js?v=4o"></script>
+<script src="/v2/cosmetics.js?v=4o"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -200,7 +200,7 @@ const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '4n';
+const BUILD = '4o';
 console.log('[ZORBS] build', BUILD);
 
 // ---- ERROR LOGGER: phone runtime errors home (/api/log) so we can fix the game from real
@@ -1608,15 +1608,19 @@ if (_volEl) {
   // Sign in with Kick (PKCE) — returns to /auth/kick/game-callback then back here with the name
   document.getElementById('kickbtn').addEventListener('click', async () => {
     try {
-      const verifier = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+      const rnd = () => Math.random().toString(36).slice(2);
+      const verifier = rnd() + rnd() + rnd();
+      const state = rnd() + rnd();
       const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
       const challenge = btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
       sessionStorage.setItem('kick_verifier', verifier);
+      sessionStorage.setItem('kick_state', state);
       const p = new URLSearchParams({
         client_id: '01KTMSSQ3PNEAA8EYYX1T6T4CK',
         redirect_uri: 'https://www.playzorbs.xyz/auth/kick/game-callback',
         response_type: 'code',
         scope: 'user:read',
+        state,
         code_challenge: challenge,
         code_challenge_method: 'S256',
       });
