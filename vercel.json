@@ -24,6 +24,11 @@
       ],
       "destination": "https://www.playzorbs.xyz/$1",
       "permanent": true
+    },
+    {
+      "source": "/",
+      "destination": "/v2",
+      "permanent": false
     }
   ],
   "headers": [
