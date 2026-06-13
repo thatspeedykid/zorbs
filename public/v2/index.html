@@ -55,6 +55,11 @@
   #standings .rank { width:18px; text-align:right; color:#7fe9ff; font-weight:bold; }
   #standings .dot { width:10px; height:10px; border-radius:50%; flex:0 0 auto; box-shadow:0 0 6px currentColor; }
   #standings .nm { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #standings .pf { display:inline-flex; align-items:center; justify-content:center; width:13px; height:13px; border-radius:3px;
+    font-size:9px; font-weight:900; margin-right:5px; vertical-align:middle; flex:0 0 auto; }
+  #standings .pf.kick { background:#53fc18; color:#000; }
+  #standings .pf.twitch { background:#9146ff; color:#fff; }
+  #standings .pf.yt { background:#ff0000; color:#fff; font-size:7px; }
   #standings .st { font-size:10px; opacity:.85; }
   #feed { margin-top:8px; display:flex; flex-direction:column; gap:3px; }
   #feed .ev { font-size:11px; padding:3px 8px; border-radius:6px; background:rgba(6,20,40,.5);
@@ -217,10 +222,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=4r"></script>
-<script src="/v2/track.js?v=4r"></script>
-<script src="/v2/physics.js?v=4r"></script>
-<script src="/v2/cosmetics.js?v=4r"></script>
+<script src="/v2/forks.js?v=4s"></script>
+<script src="/v2/track.js?v=4s"></script>
+<script src="/v2/physics.js?v=4s"></script>
+<script src="/v2/cosmetics.js?v=4s"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -235,7 +240,7 @@ const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '4r';
+const BUILD = '4s';
 console.log('[ZORBS] build', BUILD);
 
 // ---- ERROR LOGGER: phone runtime errors home (/api/log) so we can fix the game from real
@@ -712,7 +717,7 @@ function makeLabel(text, isMe){
   return sp;
 }
 
-function makeZorb(id, prefs, isSub) {
+function makeZorb(id, prefs, isSub, platform) {
   const cos = ZCOSMETICS.resolveForPlayer(prefs, isSub, prefs.owned || []);
   const color = (cos.skin.color != null) ? cos.skin.color : PALETTE[(colorIdx++) % PALETTE.length];
   const accent = new THREE.Color(color);
@@ -786,6 +791,7 @@ function makeZorb(id, prefs, isSub) {
 
   zorbs.set(id, {
     mesh: core, ring, ringGlow, band, color, trail, trailPos, trailLen: TRAIL_LEN, streak, label,
+    platform: platform || 'guest',
     spawnT: 0, spawnAnim: cos.spawn, ringSpin: cos.ring.spin || 2.0,
     ringBob: Math.random()*Math.PI*2, eliminated:false, fallT:0,
     rollQ: new THREE.Quaternion(),
@@ -877,6 +883,14 @@ function resetHUD(){
   for (const k in _boostCool) delete _boostCool[k];
   standingsEl.innerHTML = ''; feedEl.innerHTML = ''; endcardEl.style.display = 'none';
 }
+function platformBadge(p){
+  // small platform logo next to real (signed-in) players. Twitch/YouTube light up once those
+  // logins are added; bots and anonymous guests get nothing.
+  if (p === 'kick') return '<span class="pf kick" title="Kick">K</span>';
+  if (p === 'twitch') return '<span class="pf twitch" title="Twitch">T</span>';
+  if (p === 'youtube') return '<span class="pf yt" title="YouTube">▶</span>';
+  return '';
+}
 function updateHUD(snap, nowSec){
   const rows = [];
   zorbs.forEach((z, id) => rows.push({ id, z, s: snap[id], fin: _finishedSet.has(id), out: z.eliminated }));
@@ -890,7 +904,7 @@ function updateHUD(snap, nowSec){
   rows.forEach((r, i) => {
     const cls = (r.fin ? 'fin' : (r.out ? 'out' : (i === 0 ? 'lead' : ''))) + (r.id === _myMarble ? ' you' : '');
     const st = r.fin ? ('#'+(_finishOrder.indexOf(r.id)+1)) : (r.out ? 'OUT' : '');
-    const nm = esc(r.id) + (r.id === _myMarble ? ' <span class="youtag">YOU</span>' : '');
+    const nm = platformBadge(r.z.platform) + esc(r.id) + (r.id === _myMarble ? ' <span class="youtag">YOU</span>' : '');
     html += '<div class="row '+cls+'"><span class="rank">'+(i+1)+'</span><span class="dot" style="color:'+cssColor(r.z.color)+'"></span><span class="nm">'+nm+'</span><span class="st">'+st+'</span></div>';
   });
   standingsEl.innerHTML = html;
@@ -1012,7 +1026,7 @@ function startRace(seed, names) {
 
 let _spawnIndex = 0;
 function spawnOne(item) {
-  makeZorb(item.id, item.prefs, item.isSub);
+  makeZorb(item.id, item.prefs, item.isSub, item.platform);
   // Place in a grid on the platform: rows across the width, columns down its length,
   // starting near the BACK so nobody spawns past the front edge.
   const plat = track.platform;
@@ -1397,9 +1411,9 @@ function runMultiplayer(){
   }
   function runMpRace(race){
     const names = []; const used = new Set();
-    for (const p of roster.slice(0, MP_FIELD)) { if(used.has(p.name)) continue; names.push({ id:p.name, isSub:false, prefs:{} }); used.add(p.name); }
+    for (const p of roster.slice(0, MP_FIELD)) { if(used.has(p.name)) continue; names.push({ id:p.name, isSub:false, prefs:{}, platform: p.platform || 'guest' }); used.add(p.name); }
     const bots = mpBots(race.seed); let bi = 0;
-    while (names.length < MP_FIELD) { let bn = bots[bi++ % bots.length]; while(used.has(bn)) bn += '·'; used.add(bn); names.push({ id:bn, isSub:false, prefs:{} }); }
+    while (names.length < MP_FIELD) { let bn = bots[bi++ % bots.length]; while(used.has(bn)) bn += '·'; used.add(bn); names.push({ id:bn, isSub:false, prefs:{}, platform:'bot' }); }
     startRace(race.seed, names);
     // pre-schedule the next race so it loops forever
     const next = { slot: race.slot+1, seed: mpSeedForSlot(race.slot+1), startTime: (race.slot+1)*MP_SLOT_MS + MP_LOBBY_MS };
@@ -1408,7 +1422,7 @@ function runMultiplayer(){
   function connect(){
     try { ws = new WebSocket('wss://' + MP_HOST + '/parties/main/' + MP_ROOM); _mpWS = ws; }
     catch(e){ ZLOG.report('manual','mp ws ctor failed: '+(e&&e.message)); setTimeout(connect, 3000); return; }
-    ws.onopen = () => ws.send(JSON.stringify({ type:'join', name: myName }));
+    ws.onopen = () => ws.send(JSON.stringify({ type:'join', name: myName, platform: _kickName ? 'kick' : 'guest' }));
     ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch(_){ return; }
       if (m.type === 'welcome') { gotWelcome = true; offset = m.serverTime - Date.now(); _mpOffset = offset; roster = m.players || [];
         if (m.official) { _officialSlot = m.official.slot; _officialOrder = m.official.order; _officialFinished = m.official.finished || 0; }
