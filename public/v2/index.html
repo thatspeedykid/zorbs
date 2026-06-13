@@ -144,10 +144,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=4i"></script>
-<script src="/v2/track.js?v=4i"></script>
-<script src="/v2/physics.js?v=4i"></script>
-<script src="/v2/cosmetics.js?v=4i"></script>
+<script src="/v2/forks.js?v=4j"></script>
+<script src="/v2/track.js?v=4j"></script>
+<script src="/v2/physics.js?v=4j"></script>
+<script src="/v2/cosmetics.js?v=4j"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -161,7 +161,7 @@ const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '4i';
+const BUILD = '4j';
 console.log('[ZORBS] build', BUILD);
 
 // ---- ERROR LOGGER: phone runtime errors home (/api/log) so we can fix the game from real
@@ -1274,11 +1274,22 @@ function runMultiplayer(){
   const serverNow = () => Date.now() + offset;
   const lobbyEl = document.getElementById('lobby');
   const lobbyCd = document.getElementById('lobbyCd');
+  const lobbySub = document.getElementById('lobbySub');
+  function renderLobbyRoster(){
+    if (!lobbySub) return;
+    const real = roster.slice(0, MP_FIELD).map(p => p.name);
+    const fillers = Math.max(0, MP_FIELD - real.length);
+    const shown = real.slice(0, 6).map(n => n === _myMarble ? n + ' (you)' : n).join(' · ');
+    const more = real.length > 6 ? ' +' + (real.length - 6) + ' more' : '';
+    const bots = fillers > 0 ? (real.length ? '  +' + fillers + ' bots' : '') : '';
+    lobbySub.textContent = '👥 ' + real.length + ' racer' + (real.length === 1 ? '' : 's') +
+      (shown ? ' — ' + shown + more : '') + bots;
+  }
   function showLobby(localStart){
     lobbyEl.style.display = 'flex';
     if (lobbyTimer) clearInterval(lobbyTimer);
-    const tick = () => { lobbyCd.textContent = Math.max(0, Math.ceil((localStart - Date.now())/1000)) + 's'; };
-    tick(); lobbyTimer = setInterval(tick, 200);
+    const tick = () => { lobbyCd.textContent = Math.max(0, Math.ceil((localStart - Date.now())/1000)) + 's'; renderLobbyRoster(); };
+    tick(); lobbyTimer = setInterval(tick, 250);
   }
   function hideLobby(){ lobbyEl.style.display = 'none'; if (lobbyTimer){ clearInterval(lobbyTimer); lobbyTimer = null; } }
 
