@@ -13,12 +13,12 @@ else {
     .then(r=>r.json())
     .then(data=>{
       if(data.username){
-        window.location.href='/?kick_join='+encodeURIComponent(data.username)+'&sub='+(data.isSub?'1':'0');
+        window.location.href='/v2?kick_join='+encodeURIComponent(data.username)+'&sub='+(data.isSub?'1':'0');
       } else {
         document.getElementById('s').textContent='Error: '+(data.error||'unknown');
-        setTimeout(()=>window.location.href='/',2500);
+        setTimeout(()=>window.location.href='/v2',2500);
       }
     })
-    .catch(()=>{ setTimeout(()=>window.location.href='/',2000); });
+    .catch(()=>{ setTimeout(()=>window.location.href='/v2',2000); });
 }
 </script></body></html>

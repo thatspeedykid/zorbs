@@ -31,6 +31,11 @@
   #arm #playbtn { width:260px; padding:12px; border-radius:9px; cursor:pointer; font-family:inherit; font-size:16px; letter-spacing:3px;
     background:linear-gradient(90deg,rgba(40,140,255,.5),rgba(120,60,255,.5)); color:#fff; border:1px solid rgba(120,200,255,.6); font-weight:bold; }
   #arm #playbtn:hover { background:linear-gradient(90deg,rgba(40,140,255,.8),rgba(120,60,255,.8)); }
+  #arm .orline { font-size:10px; color:#5b7a96; letter-spacing:2px; }
+  #arm #kickbtn { width:260px; padding:11px; border-radius:9px; cursor:pointer; font-family:inherit; font-size:13px; letter-spacing:2px;
+    background:rgba(83,252,24,.08); color:#53fc18; border:2px solid #53fc18; font-weight:bold; display:flex; align-items:center; justify-content:center; gap:9px; }
+  #arm #kickbtn:hover { background:rgba(83,252,24,.18); box-shadow:0 0 18px rgba(83,252,24,.25); }
+  #arm #kickbtn .ki { background:#53fc18; color:#000; width:20px; height:20px; border-radius:4px; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:12px; }
   #arm .hint { font-size:11px; color:#6b9; letter-spacing:1px; }
   #leader { display:none; }
   #lobby { position:fixed; inset:0; display:none; align-items:center; justify-content:center; z-index:40; pointer-events:none; }
@@ -146,6 +151,8 @@
   <div class="sub">live browser marble racing</div>
   <input id="nick" maxlength="16" placeholder="enter a nickname" autocomplete="off" spellcheck="false" />
   <button id="playbtn">PLAY ▶</button>
+  <div class="orline">— or —</div>
+  <button id="kickbtn"><span class="ki">K</span> SIGN IN WITH KICK</button>
   <div class="hint">races run live — you'll drop into the next one</div>
   <a href="/dashboard" style="font-size:11px;color:#7fb8e0;letter-spacing:1px;text-decoration:none;opacity:.85;border-bottom:1px solid rgba(127,184,224,.3);padding-bottom:1px">📊 my stats &amp; leaderboard</a>
 </div></div>
@@ -176,10 +183,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=4m"></script>
-<script src="/v2/track.js?v=4m"></script>
-<script src="/v2/physics.js?v=4m"></script>
-<script src="/v2/cosmetics.js?v=4m"></script>
+<script src="/v2/forks.js?v=4n"></script>
+<script src="/v2/track.js?v=4n"></script>
+<script src="/v2/physics.js?v=4n"></script>
+<script src="/v2/cosmetics.js?v=4n"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -193,7 +200,7 @@ const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '4m';
+const BUILD = '4n';
 console.log('[ZORBS] build', BUILD);
 
 // ---- ERROR LOGGER: phone runtime errors home (/api/log) so we can fix the game from real
@@ -1288,7 +1295,7 @@ async function fetchRaceSeed(replayId) {
 const MP_HOST = 'zorbs.thatspeedykid.partykit.dev';
 const MP_ROOM = 'public';
 const MP_SLOT_MS = 95000, MP_LOBBY_MS = 9000, MP_FIELD = 8;
-let _myMarble = null, _joinName = null, _mpMode = false;
+let _myMarble = null, _joinName = null, _mpMode = false, _kickName = null;
 // server-authoritative result: the first client to finish a race reports the order; the server
 // locks it and broadcasts it as official so every screen shows the SAME outcome.
 let _mpSlot = -1, _officialOrder = null, _officialFinished = 0, _officialSlot = -1;
@@ -1573,17 +1580,49 @@ if (_volEl) {
   const nickEl = document.getElementById('nick');
   const params = new URLSearchParams(location.search);
   nickEl.value = (params.get('name') || '').slice(0,16);
+
+  // returning from Kick OAuth: ?kick_join=<username>. Pre-fill + mark as signed in.
+  const kj = params.get('kick_join');
+  if (kj) {
+    _kickName = kj.slice(0,24);
+    nickEl.value = kj.slice(0,16);
+    const sub = document.querySelector('#arm .sub');
+    if (sub) { sub.textContent = '✓ signed in with Kick as @' + _kickName; sub.style.color = '#53fc18'; }
+    const kb = document.getElementById('kickbtn'); if (kb) kb.style.display = 'none';
+    const orl = document.querySelector('#arm .orline'); if (orl) orl.style.display = 'none';
+    history.replaceState({}, '', '/v2');   // clean the URL
+  }
   setTimeout(() => nickEl.focus(), 50);
+
   let started = false;
   function go(){
     if (started) return; started = true;
-    _joinName = (nickEl.value || '').trim().slice(0,16) || ('guest'+Math.floor(1000+Math.random()*9000));
+    _joinName = (_kickName || nickEl.value || '').trim().slice(0,16) || ('guest'+Math.floor(1000+Math.random()*9000));
     armEl.remove();
     startMusic();   // the click is the user gesture browsers require for audio
     boot();
   }
   document.getElementById('playbtn').addEventListener('click', go);
   nickEl.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+
+  // Sign in with Kick (PKCE) — returns to /auth/kick/game-callback then back here with the name
+  document.getElementById('kickbtn').addEventListener('click', async () => {
+    try {
+      const verifier = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+      const challenge = btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+      sessionStorage.setItem('kick_verifier', verifier);
+      const p = new URLSearchParams({
+        client_id: '01KTMSSQ3PNEAA8EYYX1T6T4CK',
+        redirect_uri: 'https://www.playzorbs.xyz/auth/kick/game-callback',
+        response_type: 'code',
+        scope: 'user:read',
+        code_challenge: challenge,
+        code_challenge_method: 'S256',
+      });
+      location.href = 'https://id.kick.com/oauth/authorize?' + p.toString();
+    } catch (e) { ZLOG.report('manual', 'kick login failed: ' + (e && e.message)); }
+  });
 })();
 
 // SPACEBAR BOOST — apply locally immediately for instant feel, then tell the server, which
