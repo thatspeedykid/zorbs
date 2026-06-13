@@ -183,10 +183,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=4o"></script>
-<script src="/v2/track.js?v=4o"></script>
-<script src="/v2/physics.js?v=4o"></script>
-<script src="/v2/cosmetics.js?v=4o"></script>
+<script src="/v2/forks.js?v=4p"></script>
+<script src="/v2/track.js?v=4p"></script>
+<script src="/v2/physics.js?v=4p"></script>
+<script src="/v2/cosmetics.js?v=4p"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -200,7 +200,7 @@ const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '4o';
+const BUILD = '4p';
 console.log('[ZORBS] build', BUILD);
 
 // ---- ERROR LOGGER: phone runtime errors home (/api/log) so we can fix the game from real
@@ -1578,21 +1578,38 @@ if (_volEl) {
 (function joinScreen(){
   const armEl = document.getElementById('arm');
   const nickEl = document.getElementById('nick');
+  const kickBtn = document.getElementById('kickbtn');
+  const orline = document.querySelector('#arm .orline');
+  const subEl = document.querySelector('#arm .sub');
   const params = new URLSearchParams(location.search);
-  nickEl.value = (params.get('name') || '').slice(0,16);
 
-  // returning from Kick OAuth: ?kick_join=<username>. Pre-fill + mark as signed in.
-  const kj = params.get('kick_join');
-  if (kj) {
-    _kickName = kj.slice(0,24);
-    nickEl.value = kj.slice(0,16);
-    const sub = document.querySelector('#arm .sub');
-    if (sub) { sub.textContent = '✓ signed in with Kick as @' + _kickName; sub.style.color = '#53fc18'; }
-    const kb = document.getElementById('kickbtn'); if (kb) kb.style.display = 'none';
-    const orl = document.querySelector('#arm .orline'); if (orl) orl.style.display = 'none';
-    history.replaceState({}, '', '/v2');   // clean the URL
+  // SINGLE SIGN-ON: the Kick session is shared across the whole site (same-origin localStorage).
+  // Logging in on the game OR the dashboard logs you into both.
+  let sess = null;
+  try { sess = JSON.parse(localStorage.getItem('zorbs_session') || 'null'); } catch(_){}
+  const kj = params.get('kick_join');   // legacy fallback from older callback
+  if (kj && !(sess && sess.username)) {
+    sess = { username: kj.slice(0,24).toLowerCase(), role:'user', ts:Date.now() };
+    try { localStorage.setItem('zorbs_session', JSON.stringify(sess)); } catch(_){}
+    history.replaceState({}, '', '/v2');
   }
-  setTimeout(() => nickEl.focus(), 50);
+
+  if (sess && sess.username) {
+    // signed in with Kick → race as that account, no nickname needed
+    _kickName = sess.username;
+    nickEl.style.display = 'none';
+    if (kickBtn) kickBtn.style.display = 'none';
+    if (orline) orline.style.display = 'none';
+    if (subEl) { subEl.innerHTML = '✓ signed in with Kick as <b>@' + esc(sess.username) + '</b>'; subEl.style.color = '#53fc18'; }
+    const lo = document.createElement('a');
+    lo.textContent = 'not you? log out';
+    lo.style.cssText = 'font-size:10px;color:#7fb8e0;cursor:pointer;text-decoration:underline;opacity:.75';
+    lo.addEventListener('click', () => { try{ localStorage.removeItem('zorbs_session'); }catch(_){}; location.href = '/v2'; });
+    armEl.querySelector('.box').appendChild(lo);
+  } else {
+    nickEl.value = (params.get('name') || '').slice(0,16);
+    setTimeout(() => nickEl.focus(), 50);
+  }
 
   let started = false;
   function go(){
@@ -1605,8 +1622,9 @@ if (_volEl) {
   document.getElementById('playbtn').addEventListener('click', go);
   nickEl.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
 
-  // Sign in with Kick (PKCE) — returns to /auth/kick/game-callback then back here with the name
-  document.getElementById('kickbtn').addEventListener('click', async () => {
+  // Sign in with Kick (PKCE). Requests the full scope set up front so streamers never have to
+  // re-authorize later. Returns to /auth/kick/game-callback which stores the shared session.
+  if (kickBtn) kickBtn.addEventListener('click', async () => {
     try {
       const rnd = () => Math.random().toString(36).slice(2);
       const verifier = rnd() + rnd() + rnd();
@@ -1619,7 +1637,7 @@ if (_volEl) {
         client_id: '01KTMSSQ3PNEAA8EYYX1T6T4CK',
         redirect_uri: 'https://www.playzorbs.xyz/auth/kick/game-callback',
         response_type: 'code',
-        scope: 'user:read',
+        scope: 'user:read channel:read events:subscribe chat:write',
         state,
         code_challenge: challenge,
         code_challenge_method: 'S256',

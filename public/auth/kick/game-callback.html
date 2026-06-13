@@ -12,8 +12,12 @@ else {
   fetch('/api/kick-game-auth?code='+encodeURIComponent(code)+'&verifier='+encodeURIComponent(verifier))
     .then(r=>r.json())
     .then(data=>{
-      if(data.username){
-        window.location.href='/v2?kick_join='+encodeURIComponent(data.username)+'&sub='+(data.isSub?'1':'0');
+      if(data.session && data.session.username){
+        try { localStorage.setItem('zorbs_session', JSON.stringify(data.session)); } catch(e){}
+        window.location.href='/v2';
+      } else if(data.username){
+        try { localStorage.setItem('zorbs_session', JSON.stringify({username:data.username, role:'user', ts:Date.now()})); } catch(e){}
+        window.location.href='/v2';
       } else {
         document.getElementById('s').textContent='Error: '+(data.error||'unknown');
         setTimeout(()=>window.location.href='/v2',2500);

@@ -1,6 +1,7 @@
 const KICK_CLIENT_ID = process.env.KICK_CLIENT_ID || '01KTMSSQ3PNEAA8EYYX1T6T4CK';
 const KICK_SECRET = process.env.KICK_CLIENT_SECRET || 'c4daf86f9492d0ac466af921c8846e5ed00b6bea0dc4fcda78607db5c0f93ad8';
 const REDIRECT_URI = 'https://www.playzorbs.xyz/auth/kick/game-callback';
+const ADMIN_USERNAMES = ['marsscumbags'];
 
 export default async function handler(req, res) {
   const { code, verifier } = req.query;
@@ -29,7 +30,11 @@ export default async function handler(req, res) {
     });
     const userData = await userRes.json();
     const user = userData.data?.[0] || userData;
-    res.json({ username: user.username || user.name || 'KickUser', isSub: false });
+    const username = (user.username || user.name || 'KickUser').toLowerCase();
+    const role = ADMIN_USERNAMES.includes(username) ? 'admin' : 'user';
+    // return the SAME session shape the dashboard uses → one login works site-wide
+    const session = { username, role, kickId: user.user_id || '', accessToken: token.access_token, ts: Date.now() };
+    res.json({ session, username, isSub: false });
   } catch (e) {
     res.json({ error: e.message });
   }
