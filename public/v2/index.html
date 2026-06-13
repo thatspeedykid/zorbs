@@ -62,6 +62,8 @@
     background:rgba(40,140,255,.25); color:#cfeaff; border:1px solid rgba(80,180,255,.5); letter-spacing:2px; }
   #endcard .again:hover { background:rgba(40,140,255,.45); }
   /* SpeedyGoWild music player */
+  #minimap { position:fixed; bottom:72px; right:12px; z-index:30; width:190px; height:132px; border-radius:10px;
+    background:rgba(6,12,26,.78); border:1px solid rgba(60,180,255,.4); box-shadow:0 0 18px rgba(0,120,255,.25); }
   #music { position:fixed; bottom:10px; right:12px; z-index:30; display:flex; align-items:center; gap:10px;
     background:rgba(6,12,26,.82); border:1px solid rgba(60,180,255,.4); border-radius:10px; padding:8px 10px;
     backdrop-filter:blur(4px); box-shadow:0 0 18px rgba(0,120,255,.25); max-width:300px; }
@@ -111,6 +113,7 @@
 
 <!-- SpeedyGoWild background music: self-hosted playlist (music/playlist.json) when present
      = zero YouTube + zero ad-blocker issues; otherwise falls back to the YouTube embed -->
+<canvas id="minimap" width="190" height="132"></canvas>
 <div id="music">
   <div class="meta">
     <div class="artist">♪ SpeedyGoWild</div>
@@ -133,10 +136,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=4e"></script>
-<script src="/v2/track.js?v=4e"></script>
-<script src="/v2/physics.js?v=4e"></script>
-<script src="/v2/cosmetics.js?v=4e"></script>
+<script src="/v2/forks.js?v=4f"></script>
+<script src="/v2/track.js?v=4f"></script>
+<script src="/v2/physics.js?v=4f"></script>
+<script src="/v2/cosmetics.js?v=4f"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -147,7 +150,7 @@ const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '4e';
+const BUILD = '4f';
 console.log('[ZORBS] build', BUILD);
 
 // ---- ERROR LOGGER: phone runtime errors home (/api/log) so we can fix the game from real
@@ -442,6 +445,7 @@ function buildCourse(seed) {
   const lenRng = (Math.abs((seed * 2654435761) >>> 0) % 200);   // 0..199
   const trackLen = 620 + lenRng;                                  // 620..819
   track = ZTRACK.generate(seed, trackLen, _fieldSize || 20);
+  if (typeof computeMiniBounds === 'function') computeMiniBounds();
   meshFrom(track.mesh.floor, FLOOR_MAT, true);   // weld = smooth-shaded ramp
   meshFrom(track.mesh.walls, WALL_MAT);
   if (track.mesh.roof && track.mesh.roof.indices.length) meshFrom(track.mesh.roof, ROOF_MAT);
@@ -815,6 +819,41 @@ function showEndCard(){
 }
 document.querySelector('#endcard .again').addEventListener('click', () => location.reload());
 
+// ---- MINIMAP: top-down track + live marble positions (bottom-right, above the player) ----
+const miniCv = document.getElementById('minimap');
+const miniCtx = miniCv.getContext('2d');
+let _miniBounds = null;
+function computeMiniBounds(){
+  if (!track || !track.nodes || !track.nodes.length) { _miniBounds = null; return; }
+  let a=1e9,b=-1e9,c=1e9,d=-1e9;
+  for (const n of track.nodes){ const x=n.pos.x, z=n.pos.z; if(x<a)a=x; if(x>b)b=x; if(z<c)c=z; if(z>d)d=z; }
+  _miniBounds = { minx:a, maxx:b, minz:c, maxz:d };
+}
+function drawMinimap(snap){
+  if (!_miniBounds || !track) { miniCtx.clearRect(0,0,miniCv.width,miniCv.height); return; }
+  const W=miniCv.width, H=miniCv.height, pad=12, bn=_miniBounds;
+  const sc = Math.min((W-2*pad)/Math.max(1,bn.maxx-bn.minx), (H-2*pad)/Math.max(1,bn.maxz-bn.minz));
+  const ox = (W-(bn.maxx-bn.minx)*sc)/2, oz = (H-(bn.maxz-bn.minz)*sc)/2;
+  const px = x => ox+(x-bn.minx)*sc, pz = z => oz+(z-bn.minz)*sc;
+  miniCtx.clearRect(0,0,W,H);
+  // track path (break at fork gaps)
+  miniCtx.beginPath(); let pen=false;
+  for (let i=0;i<track.nodes.length;i+=2){ const n=track.nodes[i]; if(n.meshSkip){pen=false;continue;}
+    const X=px(n.pos.x), Z=pz(n.pos.z); if(!pen){miniCtx.moveTo(X,Z);pen=true;} else miniCtx.lineTo(X,Z); }
+  miniCtx.strokeStyle='rgba(130,205,255,.55)'; miniCtx.lineWidth=2.5; miniCtx.lineJoin='round'; miniCtx.stroke();
+  // start (green) + finish (gold)
+  const s0 = track.start || track.nodes[0];
+  const fN = track.finish || track.nodes[track.nodes.length-1];
+  if(s0){ miniCtx.fillStyle='#5fe08a'; miniCtx.beginPath(); miniCtx.arc(px(s0.pos.x),pz(s0.pos.z),3,0,7); miniCtx.fill(); }
+  if(fN){ miniCtx.fillStyle='#ffd24a'; miniCtx.beginPath(); miniCtx.arc(px(fN.pos.x),pz(fN.pos.z),3,0,7); miniCtx.fill(); }
+  // marbles
+  zorbs.forEach((z,id)=>{ const s=snap[id]; if(!s) return; const X=px(s.x), Z=pz(s.z); const me=(id===_myMarble);
+    miniCtx.beginPath(); miniCtx.arc(X,Z, me?4.5:3, 0,7);
+    miniCtx.fillStyle = z.eliminated ? 'rgba(120,120,120,.45)' : cssColor(z.color); miniCtx.fill();
+    if(me){ miniCtx.strokeStyle='#ffe070'; miniCtx.lineWidth=2; miniCtx.stroke(); }
+  });
+}
+
 function startRace(seed, names) {
   _fieldSize = names.length;
   buildCourse(seed);
@@ -860,7 +899,8 @@ function loop(now) {
   frameAcc += elapsed;
   if (frameAcc < FRAME_CAP) return; // skip this RAF tick (high-refresh monitors)
   frameAcc = Math.min(frameAcc - FRAME_CAP, FRAME_CAP); // keep remainder, avoid drift
-  const dt = Math.min(0.05, (now - last)/1000); last = now;
+  const rawDt = (now - last)/1000;    // real elapsed (can be large after a tab pause)
+  const dt = Math.min(0.05, rawDt); last = now;
 
   // streaking energy pulses ride the centerline forward — and the WHOLE TRACK dances to
   // the music: bass energy drives the center lane, the bloom glow, and the wall emissive,
@@ -891,7 +931,10 @@ function loop(now) {
   }
 
   if (phase === 'racing' && ZPHYSICS.isReady()) {
-    ZPHYSICS.step(dt);
+    // fixed-timestep with catch-up: after the tab un-pauses, step enough fixed frames to
+    // cover the elapsed wall-clock time (capped) so the race snaps back into server sync.
+    const FIXED = 1/60; let acc = Math.min(2.0, rawDt), steps = 0;
+    do { ZPHYSICS.step(FIXED); acc -= FIXED; steps++; } while (acc >= FIXED && steps < 120);
     const fallen = ZPHYSICS.checkFalls(_fieldSize);
     for (const id of fallen) {
       const z = zorbs.get(id);
@@ -919,6 +962,7 @@ function loop(now) {
 
   // sync render meshes to physics + run spawn animations
   const snap = ZPHYSICS.isReady() ? ZPHYSICS.snapshot() : {};
+  drawMinimap(snap);
   for (const [id, z] of zorbs) {
     const s = snap[id];
     if (s) {
@@ -1320,6 +1364,16 @@ if (_volEl) {
   document.getElementById('playbtn').addEventListener('click', go);
   nickEl.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
 })();
+
+// when the tab is hidden the browser pauses requestAnimationFrame entirely. drive the
+// physics from a timer in that case so the race keeps running and stays in server sync.
+setInterval(() => {
+  if (!document.hidden) return;
+  if (phase !== 'racing' || !ZPHYSICS.isReady()) { last = performance.now(); return; }
+  const t = performance.now(), FIXED = 1/60; let acc = Math.min(3.0, (t - last)/1000); last = t;
+  let steps = 0; while (acc >= FIXED && steps < 200) { ZPHYSICS.step(FIXED); acc -= FIXED; steps++; }
+  ZPHYSICS.checkFalls(_fieldSize);
+}, 300);
 
 requestAnimationFrame(loop);
 </script>
