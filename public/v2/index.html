@@ -116,6 +116,7 @@
   <input id="nick" maxlength="16" placeholder="enter a nickname" autocomplete="off" spellcheck="false" />
   <button id="playbtn">PLAY ▶</button>
   <div class="hint">races run live — you'll drop into the next one</div>
+  <a href="/dashboard" style="font-size:11px;color:#7fb8e0;letter-spacing:1px;text-decoration:none;opacity:.85;border-bottom:1px solid rgba(127,184,224,.3);padding-bottom:1px">📊 my stats &amp; leaderboard</a>
 </div></div>
 
 <!-- SpeedyGoWild background music: self-hosted playlist (music/playlist.json) when present
@@ -144,10 +145,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=4k"></script>
-<script src="/v2/track.js?v=4k"></script>
-<script src="/v2/physics.js?v=4k"></script>
-<script src="/v2/cosmetics.js?v=4k"></script>
+<script src="/v2/forks.js?v=4l"></script>
+<script src="/v2/track.js?v=4l"></script>
+<script src="/v2/physics.js?v=4l"></script>
+<script src="/v2/cosmetics.js?v=4l"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -161,7 +162,7 @@ const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '4k';
+const BUILD = '4l';
 console.log('[ZORBS] build', BUILD);
 
 // ---- ERROR LOGGER: phone runtime errors home (/api/log) so we can fix the game from real

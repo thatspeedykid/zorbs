@@ -146,6 +146,9 @@ body{background:#05050f;color:#fff;font-family:'Courier New',monospace;min-heigh
       <div class="k-icon">K</div>
       SIGN IN WITH KICK
     </button>
+    <button onclick="guestEnter()" style="width:100%;padding:11px;background:rgba(0,240,255,0.05);border:1px solid rgba(0,240,255,0.25);color:var(--c);border-radius:10px;font-size:11px;letter-spacing:2px;cursor:pointer;font-family:inherit;">
+      VIEW MY STATS (GUEST) →
+    </button>
     <div class="login-note">
       Admins, streamers & chatters all use the same login.<br>
       Your role is determined by your Kick account.<br><br>
@@ -167,10 +170,10 @@ body{background:#05050f;color:#fff;font-family:'Courier New',monospace;min-heigh
       <div class="nav-item" onclick="showPage('races')" id="ni-races"><span class="icon">🏁</span> MY RACES</div>
       <div class="nav-item" onclick="showPage('leaderboard')" id="ni-leaderboard"><span class="icon">◉</span> LEADERBOARD</div>
 
-      <div class="nav-section">STREAM</div>
-      <div class="nav-item" onclick="showPage('race-control')" id="ni-race-control"><span class="icon">▶</span> RACE CONTROL</div>
-      <div class="nav-item" onclick="showPage('obs')" id="ni-obs"><span class="icon">◎</span> OBS LINKS</div>
-      <div class="nav-item" onclick="showPage('bot')" id="ni-bot"><span class="icon">⚙</span> BOT SETUP</div>
+      <div class="nav-section">STREAM <span class="coming-soon" style="margin-left:6px">STREAMER TOOLS</span></div>
+      <div class="nav-item disabled"><span class="icon">▶</span> RACE CONTROL <span class="coming-soon">SOON</span></div>
+      <div class="nav-item disabled"><span class="icon">◎</span> OBS LINKS <span class="coming-soon">SOON</span></div>
+      <div class="nav-item disabled"><span class="icon">⚙</span> BOT SETUP <span class="coming-soon">SOON</span></div>
 
       <div class="nav-section">ACCOUNT</div>
       <div class="nav-item" onclick="showPage('settings')" id="ni-settings"><span class="icon">◧</span> SETTINGS</div>
@@ -227,11 +230,7 @@ body{background:#05050f;color:#fff;font-family:'Courier New',monospace;min-heigh
           <div class="card">
             <h3>GLOBAL TOP PLAYERS</h3>
             <div id="lb-global">
-              <div class="lb-row"><div class="lb-rank gold">1</div><div>StreamKing</div><div style="margin-left:auto;color:var(--c)">47 wins</div></div>
-              <div class="lb-row"><div class="lb-rank silver">2</div><div>DataSurge</div><div style="margin-left:auto;color:var(--c)">31 wins</div></div>
-              <div class="lb-row"><div class="lb-rank bronze">3</div><div>NightFox</div><div style="margin-left:auto;color:var(--c)">18 wins</div></div>
-              <div class="lb-row"><div class="lb-rank">4</div><div>CyberZorb</div><div style="margin-left:auto;color:var(--c)">12 wins</div></div>
-              <div class="lb-row"><div class="lb-rank">5</div><div>VoidRunner</div><div style="margin-left:auto;color:var(--c)">9 wins</div></div>
+              <div class="stat-row"><span style="color:rgba(255,255,255,0.25);line-height:1.7">Global rankings across all players unlock with accounts.<br>Sign in with Kick to compete on the global board — coming soon.</span></div>
             </div>
           </div>
         </div>
@@ -487,6 +486,7 @@ function initFromSession(s){
   document.getElementById('bot-channel').textContent = '@' + s.username;
   document.getElementById('bot-status').textContent = 'READY';
   document.getElementById('bot-status').className = 'badge live';
+  try { populatePersonal(); } catch(_){}
 
   // Auto-register Kick chat webhook if we have an access token
   if(s.accessToken && s.kickId && !localStorage.getItem('zorbs_webhook_registered')){
@@ -557,6 +557,55 @@ function showPage(id){
   const nav  = document.getElementById('ni-'+id);
   if(page) page.classList.add('active');
   if(nav)  nav.classList.add('active');
+}
+
+// ── GUEST / PERSONAL STATS ─────────────────────────────
+// Chatters can view their own leaderboard immediately from the stats the game saves locally
+// (no Kick login required yet). When accounts land, the same panels fill from the server.
+function guestEnter(){
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'block';
+  document.getElementById('nav-username').textContent = 'GUEST';
+  const role = document.getElementById('nav-role'); if(role) role.textContent = 'LOCAL';
+  document.getElementById('user-pill').style.display = 'flex';
+  const lo = document.getElementById('btn-logout'); if(lo) lo.style.display = 'none';
+  populatePersonal();
+  showPage('overview');
+}
+function populatePersonal(){
+  let s = {}; try { s = JSON.parse(localStorage.getItem('zorbs_stats')) || {}; } catch(_){}
+  const races = s.races||0, wins = s.wins||0, podiums = s.podiums||0, best = s.best||0;
+  const winRate = races ? Math.round(wins/races*100) : 0;
+  const podRate = races ? Math.round(podiums/races*100) : 0;
+  const relabel = (id, big, sub) => {
+    const e = document.getElementById(id); if(!e) return;
+    const card = e.closest('.card'); if(!card) return;
+    const h = card.querySelector('h3'); if(h && big) h.textContent = big;
+    const lab = card.querySelector('.stat-label'); if(lab && sub) lab.textContent = sub;
+  };
+  const setVal = (id,v) => { const e=document.getElementById(id); if(e) e.textContent = v; };
+  // Overview cards → personal
+  relabel('ov-races','TOTAL RACES','ALL TIME');            setVal('ov-races', races);
+  relabel('ov-players','PODIUMS','TOP 3 FINISHES');        setVal('ov-players', podiums);
+  relabel('ov-wins','WINS','1ST PLACE FINISHES');          setVal('ov-wins', wins);
+  relabel('ov-channel','BEST FINISH','LOWEST PLACE');      setVal('ov-channel', best ? ('#'+best) : '—');
+  const chEl = document.getElementById('ov-channel'); if(chEl) chEl.style.color = 'var(--c)';
+  // "your rates" card (was TOP CHATTERS)
+  const tc = document.getElementById('ov-top-chatters');
+  if(tc){ const h=tc.closest('.card').querySelector('h3'); if(h) h.textContent='YOUR RATES';
+    tc.innerHTML = races
+      ? '<div class="stat-row"><span>Win rate</span><span style="margin-left:auto;color:var(--c)">'+winRate+'%</span></div>'+
+        '<div class="stat-row"><span>Podium rate</span><span style="margin-left:auto;color:var(--g)">'+podRate+'%</span></div>'
+      : '<div class="stat-row"><span style="color:rgba(255,255,255,0.2)">No races yet</span></div>'; }
+  // personal best-results panel on the Leaderboard page
+  const lb = document.getElementById('lb-personal');
+  if(lb) lb.innerHTML = races
+    ? '<div class="lb-row"><div>Races</div><div style="margin-left:auto;color:var(--c)">'+races+'</div></div>'+
+      '<div class="lb-row"><div>Wins</div><div style="margin-left:auto;color:var(--y)">'+wins+'</div></div>'+
+      '<div class="lb-row"><div>Podiums</div><div style="margin-left:auto;color:var(--g)">'+podiums+'</div></div>'+
+      '<div class="lb-row"><div>Best finish</div><div style="margin-left:auto;color:var(--c)">'+(best?'#'+best:'—')+'</div></div>'+
+      '<div class="lb-row"><div>Win rate</div><div style="margin-left:auto;color:var(--c)">'+winRate+'%</div></div>'
+    : '<div class="stat-row"><span style="color:rgba(255,255,255,0.2)">Play a race to see your stats</span></div>';
 }
 
 // ── RACE CONTROL ───────────────────────────────────────
