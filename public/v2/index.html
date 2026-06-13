@@ -3,11 +3,21 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ZORBS v2 — engine test</title>
+<title>Zorbs On Stream</title>
 <style>
   html,body { margin:0; height:100%; background:#02050d; overflow:hidden; font-family:'Courier New',monospace; }
   #c { display:block; width:100vw; height:100vh; }
-  #hud { position:fixed; top:10px; left:12px; color:#7fe9ff; font-size:12px; letter-spacing:1px; text-shadow:0 0 8px rgba(0,180,255,.5); z-index:10; }
+  #hud { position:fixed; top:10px; left:12px; z-index:10; display:flex; flex-direction:column; align-items:flex-start; gap:8px; }
+  #hud .dashbtn { font-family:'Courier New',monospace; font-size:11px; letter-spacing:2px; color:#bfefff; text-decoration:none;
+    background:rgba(6,12,26,.72); border:1px solid rgba(120,220,255,.55); border-radius:8px; padding:6px 14px; backdrop-filter:blur(3px); transition:.15s; }
+  #hud .dashbtn:hover { background:rgba(40,140,255,.35); color:#fff; }
+  #hud .brand { display:flex; align-items:center; gap:11px; }
+  #hud .brand .logo { width:46px; height:46px; filter:drop-shadow(0 0 8px rgba(60,200,255,.6)); }
+  #hud .brand .txt { display:flex; flex-direction:column; line-height:1.05; }
+  #hud .brand .bt { color:#fff; font-size:17px; font-weight:bold; letter-spacing:2px; text-shadow:0 0 14px rgba(120,220,255,.6); }
+  #hud .brand .bt b { color:#7fe9ff; }
+  #hud .brand .bt small { color:#7fe9ff; font-size:11px; letter-spacing:1px; }
+  #hud .brand .by { color:#7fb8e0; font-size:9px; letter-spacing:3px; margin-top:3px; }
   #status { position:fixed; bottom:8px; left:8px; font-size:10px; font-family:monospace; padding:3px 8px; border-radius:4px; z-index:20; }
   #arm { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(2,5,13,.9); z-index:50; cursor:default; }
   #arm .box { display:flex; flex-direction:column; align-items:center; gap:14px; color:#7fe9ff;
@@ -68,7 +78,7 @@
   #boosthint { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); z-index:30; display:none;
     font-family:'Courier New',monospace; font-size:14px; letter-spacing:3px; color:#bfefff; padding:7px 18px;
     border-radius:20px; background:rgba(6,12,26,.7); border:1px solid rgba(120,220,255,.8); backdrop-filter:blur(3px); }
-  #minimap { position:fixed; bottom:72px; right:12px; z-index:30; width:190px; height:132px; border-radius:10px;
+  #minimap { position:fixed; bottom:40px; left:12px; z-index:30; width:190px; height:132px; border-radius:10px;
     background:rgba(6,12,26,.78); border:1px solid rgba(60,180,255,.4); box-shadow:0 0 18px rgba(0,120,255,.25); }
   #music { position:fixed; bottom:10px; right:12px; z-index:30; display:flex; align-items:center; gap:10px;
     background:rgba(6,12,26,.82); border:1px solid rgba(60,180,255,.4); border-radius:10px; padding:8px 10px;
@@ -94,7 +104,28 @@
 </head>
 <body>
 <canvas id="c"></canvas>
-<div id="hud">ZORBS v2 — engine test</div>
+<div id="hud">
+  <a class="dashbtn" href="/dashboard">📊 DASHBOARD</a>
+  <div class="brand">
+    <svg class="logo" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="zlg" cx="38%" cy="30%" r="72%">
+          <stop offset="0%" stop-color="#cdf6ff"/>
+          <stop offset="38%" stop-color="#2ea8ff"/>
+          <stop offset="100%" stop-color="#0a235e"/>
+        </radialGradient>
+      </defs>
+      <circle cx="32" cy="32" r="23" fill="none" stroke="#3fd0ff" stroke-width="2" opacity="0.45"/>
+      <circle cx="32" cy="32" r="18" fill="url(#zlg)"/>
+      <ellipse cx="25" cy="23" rx="6.5" ry="4" fill="#ffffff" opacity="0.75"/>
+      <path d="M13 41 q19 9 38 0" stroke="#7fe9ff" stroke-width="2.4" fill="none" opacity="0.65" stroke-linecap="round"/>
+    </svg>
+    <div class="txt">
+      <div class="bt">ZORBS <b>On Stream</b> <small>V0.2</small></div>
+      <div class="by">BY MARSSCUMBAGS</div>
+    </div>
+  </div>
+</div>
 <div id="leader"></div>
 <div id="lobby"><div class="lb">
   <div class="t">NEXT RACE</div>
@@ -145,10 +176,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=4l"></script>
-<script src="/v2/track.js?v=4l"></script>
-<script src="/v2/physics.js?v=4l"></script>
-<script src="/v2/cosmetics.js?v=4l"></script>
+<script src="/v2/forks.js?v=4m"></script>
+<script src="/v2/track.js?v=4m"></script>
+<script src="/v2/physics.js?v=4m"></script>
+<script src="/v2/cosmetics.js?v=4m"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -162,7 +193,7 @@ const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '4l';
+const BUILD = '4m';
 console.log('[ZORBS] build', BUILD);
 
 // ---- ERROR LOGGER: phone runtime errors home (/api/log) so we can fix the game from real
