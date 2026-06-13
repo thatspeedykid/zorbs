@@ -1,0 +1,30 @@
+name: Deploy PartyKit
+
+# Auto-deploys the PartyKit race room whenever the server code changes on main.
+# This is how the server gets deployed now — a push that touches party/ runs this,
+# so nobody has to run `partykit deploy` by hand. You can also trigger it manually
+# from the Actions tab (Run workflow).
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'party/**'
+      - 'partykit.json'
+      - 'package.json'
+      - '.github/workflows/deploy-partykit.yml'
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install
+      - name: Deploy to PartyKit
+        run: npx partykit deploy
+        env:
+          PARTYKIT_LOGIN: ${{ secrets.PARTYKIT_LOGIN }}
+          PARTYKIT_TOKEN: ${{ secrets.PARTYKIT_TOKEN }}
