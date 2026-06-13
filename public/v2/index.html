@@ -9,8 +9,19 @@
   #c { display:block; width:100vw; height:100vh; }
   #hud { position:fixed; top:10px; left:12px; color:#7fe9ff; font-size:12px; letter-spacing:1px; text-shadow:0 0 8px rgba(0,180,255,.5); z-index:10; }
   #status { position:fixed; bottom:8px; left:8px; font-size:10px; font-family:monospace; padding:3px 8px; border-radius:4px; z-index:20; }
-  #arm { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(2,5,13,.85); z-index:50; cursor:pointer; }
-  #arm .box { color:#7fe9ff; border:1px solid rgba(0,200,255,.4); padding:18px 30px; border-radius:8px; letter-spacing:2px; font-size:14px; }
+  #arm { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(2,5,13,.9); z-index:50; cursor:default; }
+  #arm .box { display:flex; flex-direction:column; align-items:center; gap:14px; color:#7fe9ff;
+    border:1px solid rgba(0,200,255,.35); padding:34px 44px; border-radius:16px; text-align:center;
+    background:linear-gradient(160deg,rgba(10,26,52,.85),rgba(6,14,32,.85)); box-shadow:0 0 50px rgba(20,120,255,.3); }
+  #arm .title { font-size:42px; letter-spacing:10px; color:#fff; text-shadow:0 0 24px rgba(120,220,255,.7); font-weight:bold; }
+  #arm .sub { font-size:12px; letter-spacing:3px; color:#7fb8e0; margin-top:-6px; }
+  #arm #nick { width:230px; padding:11px 14px; border-radius:9px; font-family:inherit; font-size:15px; text-align:center;
+    background:rgba(0,0,0,.35); border:1px solid rgba(80,180,255,.4); color:#eaf6ff; outline:none; letter-spacing:1px; }
+  #arm #nick:focus { border-color:rgba(120,220,255,.9); box-shadow:0 0 14px rgba(40,160,255,.4); }
+  #arm #playbtn { width:260px; padding:12px; border-radius:9px; cursor:pointer; font-family:inherit; font-size:16px; letter-spacing:3px;
+    background:linear-gradient(90deg,rgba(40,140,255,.5),rgba(120,60,255,.5)); color:#fff; border:1px solid rgba(120,200,255,.6); font-weight:bold; }
+  #arm #playbtn:hover { background:linear-gradient(90deg,rgba(40,140,255,.8),rgba(120,60,255,.8)); }
+  #arm .hint { font-size:11px; color:#6b9; letter-spacing:1px; }
   #leader { display:none; }
   #rightcol { position:fixed; top:10px; right:12px; width:216px; z-index:10; font-family:'Courier New',monospace; }
   #standings .row { display:flex; align-items:center; gap:7px; padding:3px 8px; margin:2px 0; border-radius:6px;
@@ -79,7 +90,13 @@
   <button class="again">RACE AGAIN</button>
 </div></div>
 <div id="status">booting…</div>
-<div id="arm"><div class="box">▶ CLICK TO START</div></div>
+<div id="arm"><div class="box">
+  <div class="title">ZORBS</div>
+  <div class="sub">live browser marble racing</div>
+  <input id="nick" maxlength="16" placeholder="enter a nickname" autocomplete="off" spellcheck="false" />
+  <button id="playbtn">PLAY ▶</button>
+  <div class="hint">races run live — you'll drop into the next one</div>
+</div></div>
 
 <!-- SpeedyGoWild background music: self-hosted playlist (music/playlist.json) when present
      = zero YouTube + zero ad-blocker issues; otherwise falls back to the YouTube embed -->
@@ -105,10 +122,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=4c"></script>
-<script src="/v2/track.js?v=4c"></script>
-<script src="/v2/physics.js?v=4c"></script>
-<script src="/v2/cosmetics.js?v=4c"></script>
+<script src="/v2/forks.js?v=4d"></script>
+<script src="/v2/track.js?v=4d"></script>
+<script src="/v2/physics.js?v=4d"></script>
+<script src="/v2/cosmetics.js?v=4d"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -119,7 +136,7 @@ const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '4c';
+const BUILD = '4d';
 console.log('[ZORBS] build', BUILD);
 
 // ---- ERROR LOGGER: phone runtime errors home (/api/log) so we can fix the game from real
@@ -781,6 +798,8 @@ function showEndCard(){
     html += '<div class="prow '+(medal[i]||'')+'"><span class="p">'+(i+1)+'</span><span class="dot" style="color:'+cssColor(z?z.color:0)+'"></span><span style="flex:1">'+esc(id)+'</span><span style="opacity:.7;font-size:11px">'+(i===0?'WINNER':('#'+(i+1)+tag))+'</span></div>';
   });
   endcardEl.querySelector('.places').innerHTML = html;
+  const againBtn = endcardEl.querySelector('.again');
+  if (_mpMode) { againBtn.textContent = 'NEXT RACE STARTING SOON…'; againBtn.disabled = true; againBtn.style.cursor = 'default'; }
   endcardEl.style.display = 'flex';
 }
 document.querySelector('#endcard .again').addEventListener('click', () => location.reload());
@@ -1033,19 +1052,24 @@ async function fetchRaceSeed(replayId) {
 const MP_HOST = 'zorbs.thatspeedykid.partykit.dev';
 const MP_ROOM = 'public';
 const MP_SLOT_MS = 95000, MP_LOBBY_MS = 9000, MP_FIELD = 8;
-let _myMarble = null;
+let _myMarble = null, _joinName = null, _mpMode = false;
 function mpSeedForSlot(slot){ let h=(slot^0x9e3779b9)>>>0; h=Math.imul(h^(h>>>16),0x45d9f3b)>>>0; h=Math.imul(h^(h>>>16),0x45d9f3b)>>>0; return (h^(h>>>16))>>>0; }
 const MP_BOTS = ['Nitro','Blaze','Comet','Volt','Zephyr','Ember','Sonic','Quartz','Pulse','Rhino','Dash','Bolt','Jet','Onyx','Flux','Rocket'];
 function mpBots(seed){ const a=[]; let s=seed>>>0; for(let i=0;i<MP_FIELD;i++){ s=(Math.imul(s,1664525)+1013904223)>>>0; a.push(MP_BOTS[s%MP_BOTS.length]); } return a; }
 
 function runMultiplayer(){
   const params = new URLSearchParams(location.search);
-  const myName = (params.get('name') || ('guest'+Math.floor(1000+Math.random()*9000))).slice(0,16);
-  _myMarble = myName;
+  const myName = (_joinName || params.get('name') || ('guest'+Math.floor(1000+Math.random()*9000))).slice(0,16);
+  _myMarble = myName; _mpMode = true;
   let offset = 0, roster = [], curSlot = -1, ws = null;
   const serverNow = () => Date.now() + offset;
 
   function scheduleRace(race){
+    // never drop a player into a race already in progress — wait for the next clean start
+    if (serverNow() > race.startTime + 3000) {
+      const ns = race.slot + 1;
+      race = { slot: ns, seed: mpSeedForSlot(ns), startTime: ns*MP_SLOT_MS + MP_LOBBY_MS };
+    }
     if (race.slot === curSlot) return; curSlot = race.slot;
     const localStart = race.startTime - offset;              // server time → this machine's clock
     const wait = Math.max(0, localStart - Date.now());
@@ -1086,9 +1110,9 @@ async function boot() {
   setStatus('⬡ READY · build ' + BUILD, true);
   try { buildEnvMap(); } catch(e){ console.warn('env map skipped', e); }
 
-  // MULTIPLAYER: ?mp=1 connects to the PartyKit race room so everyone sees the SAME race,
-  // each highlighting their own marble. Otherwise run the local demo field below.
-  if (new URLSearchParams(location.search).get('mp') === '1') { runMultiplayer(); return; }
+  // LIVE PUBLIC GAME is the default — connect to the race room. ?demo=1 runs the old local
+  // solo field (handy for engine testing without the server).
+  if (new URLSearchParams(location.search).get('demo') !== '1') { runMultiplayer(); return; }
 
   // SERVER-ASSIGNED RACE: the seed comes from the server (/api/race), not the client, so
   // a player can't host/choose their own race. Falls back to a local seed if the API is
@@ -1245,13 +1269,24 @@ if (_volEl) {
   });
 }
 
-// audio-gesture gate (this is what was spamming the console before: we now ONLY
-// start anything audio-ish AFTER a real click, exactly once)
-document.getElementById('arm').addEventListener('click', () => {
-  document.getElementById('arm').remove();
-  startMusic();   // the click is the user gesture browsers require for audio autoplay
-  boot();
-}, { once:true });
+// join screen: nickname doubles as the audio-start gesture browsers require
+(function joinScreen(){
+  const armEl = document.getElementById('arm');
+  const nickEl = document.getElementById('nick');
+  const params = new URLSearchParams(location.search);
+  nickEl.value = (params.get('name') || '').slice(0,16);
+  setTimeout(() => nickEl.focus(), 50);
+  let started = false;
+  function go(){
+    if (started) return; started = true;
+    _joinName = (nickEl.value || '').trim().slice(0,16) || ('guest'+Math.floor(1000+Math.random()*9000));
+    armEl.remove();
+    startMusic();   // the click is the user gesture browsers require for audio
+    boot();
+  }
+  document.getElementById('playbtn').addEventListener('click', go);
+  nickEl.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+})();
 
 requestAnimationFrame(loop);
 </script>
