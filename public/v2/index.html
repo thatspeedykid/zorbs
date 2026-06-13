@@ -18,6 +18,8 @@
   #standings .row.lead { box-shadow:0 0 0 1px rgba(120,230,255,.65), 0 0 14px rgba(40,180,255,.4); color:#fff; }
   #standings .row.out { opacity:.38; filter:grayscale(.7); }
   #standings .row.fin { box-shadow:0 0 0 1px rgba(120,255,180,.5); }
+  #standings .row.you { box-shadow:0 0 0 1px rgba(255,230,120,.8), 0 0 14px rgba(255,200,60,.4); background:rgba(40,32,8,.6); }
+  #standings .youtag { font-size:9px; background:rgba(255,210,80,.85); color:#1a1300; padding:0 4px; border-radius:4px; margin-left:4px; font-weight:bold; }
   #standings .rank { width:18px; text-align:right; color:#7fe9ff; font-weight:bold; }
   #standings .dot { width:10px; height:10px; border-radius:50%; flex:0 0 auto; box-shadow:0 0 6px currentColor; }
   #standings .nm { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -103,10 +105,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=4b"></script>
-<script src="/v2/track.js?v=4b"></script>
-<script src="/v2/physics.js?v=4b"></script>
-<script src="/v2/cosmetics.js?v=4b"></script>
+<script src="/v2/forks.js?v=4c"></script>
+<script src="/v2/track.js?v=4c"></script>
+<script src="/v2/physics.js?v=4c"></script>
+<script src="/v2/cosmetics.js?v=4c"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -117,7 +119,7 @@ const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '4b';
+const BUILD = '4c';
 console.log('[ZORBS] build', BUILD);
 
 // ---- ERROR LOGGER: phone runtime errors home (/api/log) so we can fix the game from real
@@ -748,9 +750,10 @@ function updateHUD(snap, nowSec){
   });
   let html = '';
   rows.forEach((r, i) => {
-    const cls = r.fin ? 'fin' : (r.out ? 'out' : (i === 0 ? 'lead' : ''));
+    const cls = (r.fin ? 'fin' : (r.out ? 'out' : (i === 0 ? 'lead' : ''))) + (r.id === _myMarble ? ' you' : '');
     const st = r.fin ? ('#'+(_finishOrder.indexOf(r.id)+1)) : (r.out ? 'OUT' : '');
-    html += '<div class="row '+cls+'"><span class="rank">'+(i+1)+'</span><span class="dot" style="color:'+cssColor(r.z.color)+'"></span><span class="nm">'+esc(r.id)+'</span><span class="st">'+st+'</span></div>';
+    const nm = esc(r.id) + (r.id === _myMarble ? ' <span class="youtag">YOU</span>' : '');
+    html += '<div class="row '+cls+'"><span class="rank">'+(i+1)+'</span><span class="dot" style="color:'+cssColor(r.z.color)+'"></span><span class="nm">'+nm+'</span><span class="st">'+st+'</span></div>';
   });
   standingsEl.innerHTML = html;
   // lead-change feed (only among still-racing balls, before anyone wins)
@@ -786,6 +789,7 @@ function startRace(seed, names) {
   _fieldSize = names.length;
   buildCourse(seed);
   ZPHYSICS.clearBalls();
+  ZPHYSICS.setTrack(track.collider, track.nodes, { forks: track.forks, branchColliders: track.branchColliders });  // new track each race
   zorbs.forEach(z => { scene.remove(z.mesh); if(z.ring) scene.remove(z.ring); if(z.ringGlow) scene.remove(z.ringGlow); if(z.trail) scene.remove(z.trail); if(z.streak) scene.remove(z.streak); });
   zorbs.clear(); colorIdx = 0; winner = null;
   // queue spawns at the start of the track, staggered for a nice entrance
@@ -1021,6 +1025,59 @@ async function fetchRaceSeed(replayId) {
   return Math.floor(Math.random()*999999);
 }
 
+// ---- MULTIPLAYER (server-authoritative via the PartyKit race room) ----
+// Everyone connected sees the SAME race: the room hands out a deterministic seed + a shared
+// start time on a fixed schedule, and each browser runs the identical sim locally, syncing to
+// the server clock and highlighting its own marble. Field size is constant so the physics is
+// identical across machines regardless of who's named on which marble.
+const MP_HOST = 'zorbs.thatspeedykid.partykit.dev';
+const MP_ROOM = 'public';
+const MP_SLOT_MS = 95000, MP_LOBBY_MS = 9000, MP_FIELD = 8;
+let _myMarble = null;
+function mpSeedForSlot(slot){ let h=(slot^0x9e3779b9)>>>0; h=Math.imul(h^(h>>>16),0x45d9f3b)>>>0; h=Math.imul(h^(h>>>16),0x45d9f3b)>>>0; return (h^(h>>>16))>>>0; }
+const MP_BOTS = ['Nitro','Blaze','Comet','Volt','Zephyr','Ember','Sonic','Quartz','Pulse','Rhino','Dash','Bolt','Jet','Onyx','Flux','Rocket'];
+function mpBots(seed){ const a=[]; let s=seed>>>0; for(let i=0;i<MP_FIELD;i++){ s=(Math.imul(s,1664525)+1013904223)>>>0; a.push(MP_BOTS[s%MP_BOTS.length]); } return a; }
+
+function runMultiplayer(){
+  const params = new URLSearchParams(location.search);
+  const myName = (params.get('name') || ('guest'+Math.floor(1000+Math.random()*9000))).slice(0,16);
+  _myMarble = myName;
+  let offset = 0, roster = [], curSlot = -1, ws = null;
+  const serverNow = () => Date.now() + offset;
+
+  function scheduleRace(race){
+    if (race.slot === curSlot) return; curSlot = race.slot;
+    const localStart = race.startTime - offset;              // server time → this machine's clock
+    const wait = Math.max(0, localStart - Date.now());
+    setStatus('⬡ race starting in ' + Math.ceil(wait/1000) + 's…', true);
+    setTimeout(() => runMpRace(race), wait);
+  }
+  function runMpRace(race){
+    const names = []; const used = new Set();
+    for (const p of roster.slice(0, MP_FIELD)) { if(used.has(p.name)) continue; names.push({ id:p.name, isSub:false, prefs:{} }); used.add(p.name); }
+    const bots = mpBots(race.seed); let bi = 0;
+    while (names.length < MP_FIELD) { let bn = bots[bi++ % bots.length]; while(used.has(bn)) bn += '·'; used.add(bn); names.push({ id:bn, isSub:false, prefs:{} }); }
+    startRace(race.seed, names);
+    // pre-schedule the next race so it loops forever
+    const next = { slot: race.slot+1, seed: mpSeedForSlot(race.slot+1), startTime: (race.slot+1)*MP_SLOT_MS + MP_LOBBY_MS };
+    setTimeout(() => scheduleRace(next), Math.max(2000, (next.startTime - offset) - Date.now()));
+  }
+  function connect(){
+    try { ws = new WebSocket('wss://' + MP_HOST + '/parties/main/' + MP_ROOM); }
+    catch(e){ ZLOG.report('manual','mp ws ctor failed: '+(e&&e.message)); setTimeout(connect, 3000); return; }
+    ws.onopen = () => ws.send(JSON.stringify({ type:'join', name: myName }));
+    ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch(_){ return; }
+      if (m.type === 'welcome') { offset = m.serverTime - Date.now(); roster = m.players || []; scheduleRace(m.race); }
+      else if (m.type === 'players') { roster = m.players || []; }
+      else if (m.type === 'boost' && typeof pushFeed === 'function') pushFeed('boost', '<b>'+esc(m.name)+'</b> used boost!');
+    };
+    ws.onclose = () => { setStatus('reconnecting…', false); setTimeout(connect, 2500); };
+    ws.onerror = () => { try { ws.close(); } catch(_){} };
+  }
+  setStatus('connecting to race room…', false);
+  connect();
+}
+
 async function boot() {
   setStatus('loading physics…', false);
   const ok = await ZPHYSICS.init(BALL_R);
@@ -1028,6 +1085,11 @@ async function boot() {
     ZLOG.report('manual', 'physics init failed: ' + ZPHYSICS.getError(), ''); return; }
   setStatus('⬡ READY · build ' + BUILD, true);
   try { buildEnvMap(); } catch(e){ console.warn('env map skipped', e); }
+
+  // MULTIPLAYER: ?mp=1 connects to the PartyKit race room so everyone sees the SAME race,
+  // each highlighting their own marble. Otherwise run the local demo field below.
+  if (new URLSearchParams(location.search).get('mp') === '1') { runMultiplayer(); return; }
+
   // SERVER-ASSIGNED RACE: the seed comes from the server (/api/race), not the client, so
   // a player can't host/choose their own race. Falls back to a local seed if the API is
   // unreachable (dev/offline) so the page still runs.
