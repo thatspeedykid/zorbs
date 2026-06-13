@@ -24,12 +24,15 @@ function currentRace(now) {
 }
 
 export default class ZorbsRoom {
-  constructor(party) { this.party = party; this.players = new Map(); }
+  constructor(party) { this.party = party; this.players = new Map(); this.official = null; }
 
   // a browser connected — hand it the current race, the server clock (for sync), and roster
   onConnect(conn) {
-    this.send(conn, { type: 'welcome', id: conn.id, serverTime: Date.now(),
-      race: currentRace(Date.now()), players: [...this.players.values()] });
+    const msg = { type: 'welcome', id: conn.id, serverTime: Date.now(),
+      race: currentRace(Date.now()), players: [...this.players.values()] };
+    // if a result was just locked for the race currently ending, include it so late arrivals agree
+    if (this.official && this.official.slot === currentRace(Date.now()).slot) msg.official = this.official;
+    this.send(conn, msg);
   }
 
   onClose(conn) { if (this.players.delete(conn.id)) this.broadcastPlayers(); }
@@ -42,6 +45,14 @@ export default class ZorbsRoom {
       this.broadcastPlayers();
     } else if (m.type === 'boost') {
       this.party.broadcast(JSON.stringify({ type: 'boost', name: String(m.name || '').slice(0, 16) }));
+    } else if (m.type === 'result') {
+      // FIRST result reported for a given race slot becomes the OFFICIAL outcome for everyone.
+      const slot = m.slot | 0;
+      if (!this.official || this.official.slot !== slot) {
+        const order = Array.isArray(m.order) ? m.order.slice(0, 32).map(s => String(s).slice(0, 16)) : [];
+        this.official = { type: 'official', slot, order, finished: Math.max(0, Math.min(order.length, m.finished | 0)) };
+        this.party.broadcast(JSON.stringify(this.official));
+      }
     } else if (m.type === 'ping') {
       this.send(sender, { type: 'pong', serverTime: Date.now(), race: currentRace(Date.now()) });
     }

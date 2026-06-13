@@ -144,10 +144,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=4h"></script>
-<script src="/v2/track.js?v=4h"></script>
-<script src="/v2/physics.js?v=4h"></script>
-<script src="/v2/cosmetics.js?v=4h"></script>
+<script src="/v2/forks.js?v=4i"></script>
+<script src="/v2/track.js?v=4i"></script>
+<script src="/v2/physics.js?v=4i"></script>
+<script src="/v2/cosmetics.js?v=4i"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -155,13 +155,13 @@
 // ---------------------------------------------------------------------------
 const BALL_R = 0.5;
 // manual (spacebar) boost: forward burst strength + seconds between uses
-const BOOST_AMOUNT = 1.4, BOOST_COOLDOWN = 2.5;
+const BOOST_AMOUNT = 1.8, BOOST_COOLDOWN = 2.5;
 let _boostReadyAt = 0, _mpWS = null, _boostHint = null;
 const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '4h';
+const BUILD = '4i';
 console.log('[ZORBS] build', BUILD);
 
 // ---- ERROR LOGGER: phone runtime errors home (/api/log) so we can fix the game from real
@@ -849,25 +849,33 @@ function statsLine(s){
 }
 
 function showEndCard(){
-  const order = _finishOrder.slice();
-  // append any non-finishers (fell / DNF) after the finishers
-  zorbs.forEach((z, id) => { if (!_finishedSet.has(id)) order.push(id); });
+  // prefer the server's official result so every screen matches; fall back to local.
+  let order, finishedCount;
+  if (_mpMode && _officialOrder && _officialSlot === _mpSlot) {
+    order = _officialOrder.slice(); finishedCount = _officialFinished;
+  } else {
+    order = _finishOrder.slice();
+    zorbs.forEach((z, id) => { if (!_finishedSet.has(id)) order.push(id); });
+    finishedCount = _finishOrder.length;
+  }
   const champ = order[0];
   endcardEl.querySelector('.champ').innerHTML = champ ? ('<span class="c">🏆</span><br>'+esc(champ)) : '—';
   const medal = ['gold','silver','bronze'];
   let html = '';
   order.forEach((id, i) => {
-    const z = zorbs.get(id); const tag = _finishedSet.has(id) ? '' : ' · DNF';
+    const z = zorbs.get(id); const isFin = i < finishedCount; const tag = isFin ? '' : ' · DNF';
     html += '<div class="prow '+(medal[i]||'')+'"><span class="p">'+(i+1)+'</span><span class="dot" style="color:'+cssColor(z?z.color:0)+'"></span><span style="flex:1">'+esc(id)+'</span><span style="opacity:.7;font-size:11px">'+(i===0?'WINNER':('#'+(i+1)+tag))+'</span></div>';
   });
   endcardEl.querySelector('.places').innerHTML = html;
-  // record + show THIS browser-player's running stats
+  // record + show THIS browser-player's running stats — once per race
   const statsEl = endcardEl.querySelector('.mystats');
-  if (_myMarble && zorbs.has(_myMarble)) {
-    const myPlace = _finishedSet.has(_myMarble) ? (order.indexOf(_myMarble) + 1) : 0;  // 0 = DNF
+  if (_myMarble && zorbs.has(_myMarble) && _recordedSlot !== _mpSlot) {
+    _recordedSlot = _mpSlot;
+    const idx = order.indexOf(_myMarble);
+    const myPlace = (idx >= 0 && idx < finishedCount) ? (idx + 1) : 0;  // 0 = DNF
     const s = recordResult(myPlace);
     if (statsEl) statsEl.textContent = 'YOUR RECORD — ' + statsLine(s);
-  } else if (statsEl) statsEl.textContent = '';
+  }
   const againBtn = endcardEl.querySelector('.again');
   if (_mpMode) { againBtn.textContent = 'NEXT RACE STARTING SOON…'; againBtn.disabled = true; againBtn.style.cursor = 'default'; }
   endcardEl.style.display = 'flex';
@@ -915,6 +923,8 @@ function startRace(seed, names) {
   ZPHYSICS.clearBalls();
   ZPHYSICS.setTrack(track.collider, track.nodes, { forks: track.forks, branchColliders: track.branchColliders });  // new track each race
   zorbs.forEach(z => { scene.remove(z.mesh); if(z.ring) scene.remove(z.ring); if(z.ringGlow) scene.remove(z.ringGlow); if(z.trail) scene.remove(z.trail); if(z.streak) scene.remove(z.streak); if(z.label) scene.remove(z.label); });
+  _explosions.forEach(e => { scene.remove(e.pts); scene.remove(e.flash); }); _explosions.length = 0;
+  _resultSent = false; _officialOrder = null; _officialSlot = -1;
   zorbs.clear(); colorIdx = 0; winner = null;
   // queue spawns at the start of the track, staggered for a nice entrance
   spawnQueue = names.map((nm, i) => ({ id: nm.id, prefs: nm.prefs, isSub: nm.isSub, delay: i*0.12 }));
@@ -941,6 +951,64 @@ function spawnOne(item) {
   const sx = n.pos.x + n.right.x * lateral;
   const sz = n.pos.z + n.right.z * lateral;
   ZPHYSICS.addBall(item.id, { x: sx, y: n.pos.y + BALL_R*1.5, z: sz }); // sit ON the surface
+}
+
+// ---- EXPLOSIONS: a burst of particles in the ball's color when it finishes or falls off ----
+const _explosions = [];
+function explode(x, y, z, color){
+  const N = 44;
+  const pos = new Float32Array(N*3), vel = [];
+  for (let i=0;i<N;i++){
+    pos[i*3]=x; pos[i*3+1]=y; pos[i*3+2]=z;
+    const a=Math.random()*Math.PI*2, p=Math.random()*Math.PI - Math.PI/2, sp=5+Math.random()*10;
+    vel.push(new THREE.Vector3(Math.cos(a)*Math.cos(p)*sp, Math.abs(Math.sin(p))*sp+4, Math.sin(a)*Math.cos(p)*sp));
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const mat = new THREE.PointsMaterial({ color, size:0.55, transparent:true, opacity:1,
+    blending:THREE.AdditiveBlending, depthWrite:false });
+  const pts = new THREE.Points(g, mat); pts.frustumCulled = false; scene.add(pts);
+  // a quick bright flash sphere at the center
+  const flash = new THREE.Mesh(SPHERE_GEO, new THREE.MeshBasicMaterial({ color, transparent:true,
+    opacity:0.9, blending:THREE.AdditiveBlending, depthWrite:false }));
+  flash.position.set(x,y,z); flash.scale.setScalar(0.6); scene.add(flash);
+  _explosions.push({ pts, vel, flash, t:0, life:1.15 });
+}
+function explodeBall(z){
+  if (!z || z.exploded) return;
+  z.exploded = true;
+  const p = z.mesh.position;
+  explode(p.x, p.y, p.z, z.color);
+  // hide everything belonging to this ball — it "blew up"
+  z.mesh.visible = false;
+  if (z.label) z.label.visible = false;
+  if (z.trail) z.trail.visible = false;
+  if (z.streak) z.streak.visible = false;
+  if (z.ring) z.ring.visible = false;
+  if (z.ringGlow) z.ringGlow.visible = false;
+}
+function updateExplosions(dt){
+  for (let i=_explosions.length-1;i>=0;i--){
+    const e = _explosions[i]; e.t += dt;
+    const arr = e.pts.geometry.attributes.position.array;
+    for (let j=0;j<e.vel.length;j++){
+      e.vel[j].y -= 20*dt;                          // gravity
+      arr[j*3]   += e.vel[j].x*dt;
+      arr[j*3+1] += e.vel[j].y*dt;
+      arr[j*3+2] += e.vel[j].z*dt;
+    }
+    e.pts.geometry.attributes.position.needsUpdate = true;
+    const k = e.t/e.life;
+    e.pts.material.opacity = Math.max(0, 1-k);
+    e.pts.material.size = 0.55*(1+k*1.5);
+    e.flash.scale.setScalar(0.6 + k*5);
+    e.flash.material.opacity = Math.max(0, 0.9*(1-k*2.2));
+    if (e.t >= e.life){
+      scene.remove(e.pts); e.pts.geometry.dispose(); e.pts.material.dispose();
+      scene.remove(e.flash); e.flash.material.dispose();
+      _explosions.splice(i,1);
+    }
+  }
 }
 
 // ---- main loop ----
@@ -993,7 +1061,7 @@ function loop(now) {
     const fallen = ZPHYSICS.checkFalls(_fieldSize);
     for (const id of fallen) {
       const z = zorbs.get(id);
-      if (z && !z.eliminated) { z.eliminated = true;
+      if (z && !z.eliminated) { z.eliminated = true; explodeBall(z);   // blow up when it falls off
         if (!_finishedSet.has(id)) { _fellSet.add(id); pushFeed('fell', '<b>'+esc(id)+'</b> fell off!'); } }
     }
     // detect EVERY finisher in order (not just the winner) for full standings
@@ -1002,7 +1070,7 @@ function loop(now) {
     for (const id in snapR) {
       const z = zorbs.get(id);
       if (snapR[id].hint >= endHint && !_finishedSet.has(id) && z && !z.eliminated) {
-        _finishedSet.add(id); _finishOrder.push(id);
+        _finishedSet.add(id); _finishOrder.push(id); explodeBall(z);   // blow up at the finish line
         if (_finishOrder.length === 1) { winner = id; _winAt = now; pushFeed('lead', '🏆 <b>'+esc(id)+'</b> WINS!'); }
         else pushFeed('lead', '<b>'+esc(id)+'</b> finished #'+_finishOrder.length);
       }
@@ -1011,12 +1079,13 @@ function loop(now) {
     // end the race a few seconds after the winner (lets stragglers place), or when all done
     const total = zorbs.size;
     if (winner && ((now - _winAt > 4000) || (_finishedSet.size + _fellSet.size >= total))) {
-      phase = 'done'; showEndCard();
+      phase = 'done'; reportResult(); showEndCard();
     }
   }
 
   // sync render meshes to physics + run spawn animations
   const snap = ZPHYSICS.isReady() ? ZPHYSICS.snapshot() : {};
+  updateExplosions(dt);
   drawMinimap(snap);
   if (_boostHint) {
     const mz = _myMarble && zorbs.get(_myMarble);
@@ -1029,6 +1098,7 @@ function loop(now) {
     } else _boostHint.style.display = 'none';
   }
   for (const [id, z] of zorbs) {
+    if (z.exploded) continue;               // blown up — its visuals are hidden, skip
     const s = snap[id];
     if (s) {
       z.mesh.position.set(s.x, s.y, s.z);
@@ -1115,7 +1185,7 @@ const lookAt = new THREE.Vector3();
 let camLeadIdx = 0;
 function pickCameraTarget(){
   // in the live game, follow the marble belonging to THIS browser's player...
-  if (_mpMode && _myMarble) { const z = zorbs.get(_myMarble); if (z && !z.eliminated) return _myMarble; }
+  if (_mpMode && _myMarble) { const z = zorbs.get(_myMarble); if (z && !z.eliminated && !z.exploded) return _myMarble; }
   // ...otherwise (solo, or once your marble has fallen/finished) follow the race leader.
   return ZPHYSICS.isReady() ? ZPHYSICS.leader() : null;
 }
@@ -1180,6 +1250,18 @@ const MP_HOST = 'zorbs.thatspeedykid.partykit.dev';
 const MP_ROOM = 'public';
 const MP_SLOT_MS = 95000, MP_LOBBY_MS = 9000, MP_FIELD = 8;
 let _myMarble = null, _joinName = null, _mpMode = false;
+// server-authoritative result: the first client to finish a race reports the order; the server
+// locks it and broadcasts it as official so every screen shows the SAME outcome.
+let _mpSlot = -1, _officialOrder = null, _officialFinished = 0, _officialSlot = -1;
+let _resultSent = false, _recordedSlot = null;
+function reportResult(){
+  if (!_mpMode || _resultSent) return;
+  _resultSent = true;
+  const order = _finishOrder.slice();
+  zorbs.forEach((z, id) => { if (!_finishedSet.has(id)) order.push(id); });
+  if (_mpWS && _mpWS.readyState === 1)
+    _mpWS.send(JSON.stringify({ type:'result', slot:_mpSlot, order, finished:_finishOrder.length }));
+}
 function mpSeedForSlot(slot){ let h=(slot^0x9e3779b9)>>>0; h=Math.imul(h^(h>>>16),0x45d9f3b)>>>0; h=Math.imul(h^(h>>>16),0x45d9f3b)>>>0; return (h^(h>>>16))>>>0; }
 const MP_BOTS = ['Nitro','Blaze','Comet','Volt','Zephyr','Ember','Sonic','Quartz','Pulse','Rhino','Dash','Bolt','Jet','Onyx','Flux','Rocket'];
 function mpBots(seed){ const a=[]; let s=seed>>>0; for(let i=0;i<MP_FIELD;i++){ s=(Math.imul(s,1664525)+1013904223)>>>0; a.push(MP_BOTS[s%MP_BOTS.length]); } return a; }
@@ -1206,7 +1288,7 @@ function runMultiplayer(){
       const ns = race.slot + 1;
       race = { slot: ns, seed: mpSeedForSlot(ns), startTime: ns*MP_SLOT_MS + MP_LOBBY_MS };
     }
-    if (race.slot === curSlot) return; curSlot = race.slot;
+    if (race.slot === curSlot) return; curSlot = race.slot; _mpSlot = race.slot;
     const localStart = race.startTime - offset;              // server time → this machine's clock
     const wait = Math.max(0, localStart - Date.now());
     // load the track NOW so the wait shows a real lobby (not blank sky), with a countdown
@@ -1230,8 +1312,16 @@ function runMultiplayer(){
     catch(e){ ZLOG.report('manual','mp ws ctor failed: '+(e&&e.message)); setTimeout(connect, 3000); return; }
     ws.onopen = () => ws.send(JSON.stringify({ type:'join', name: myName }));
     ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch(_){ return; }
-      if (m.type === 'welcome') { gotWelcome = true; offset = m.serverTime - Date.now(); roster = m.players || []; scheduleRace(m.race); }
+      if (m.type === 'welcome') { gotWelcome = true; offset = m.serverTime - Date.now(); roster = m.players || [];
+        if (m.official) { _officialSlot = m.official.slot; _officialOrder = m.official.order; _officialFinished = m.official.finished || 0; }
+        scheduleRace(m.race); }
       else if (m.type === 'players') { roster = m.players || []; }
+      else if (m.type === 'official') {
+        // the server has locked the canonical result for a race — show it on the end card so
+        // every machine agrees on the winner/order regardless of local sim drift.
+        _officialSlot = m.slot; _officialOrder = Array.isArray(m.order) ? m.order : null; _officialFinished = m.finished || 0;
+        if (phase === 'done') showEndCard();   // re-render if the card is already up
+      }
       else if (m.type === 'boost') {
         // every client applies the boost off this same broadcast → stays in sync. The presser
         // already applied it locally for responsiveness, so skip re-applying to our own marble.
