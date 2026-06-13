@@ -58,6 +58,9 @@
   #endcard .prow .p { width:24px; color:#7fe9ff; font-weight:bold; text-align:right; }
   #endcard .prow.gold{ background:rgba(255,210,80,.14);} #endcard .prow.silver{ background:rgba(200,220,255,.12);} #endcard .prow.bronze{ background:rgba(255,160,90,.12);}
   #endcard .dot { width:11px; height:11px; border-radius:50%; box-shadow:0 0 6px currentColor; }
+  #endcard .mystats { margin-top:10px; padding-top:8px; border-top:1px solid rgba(80,160,255,.2);
+    color:#9fd8c4; font-size:11px; letter-spacing:1px; text-align:center; }
+  #endcard .mystats:empty { display:none; }
   #endcard .again { margin-top:14px; width:100%; padding:9px; border-radius:8px; cursor:pointer; font-family:inherit;
     background:rgba(40,140,255,.25); color:#cfeaff; border:1px solid rgba(80,180,255,.5); letter-spacing:2px; }
   #endcard .again:hover { background:rgba(40,140,255,.45); }
@@ -103,6 +106,7 @@
   <h2>RACE COMPLETE</h2>
   <div class="champ"></div>
   <div class="places"></div>
+  <div class="mystats"></div>
   <button class="again">RACE AGAIN</button>
 </div></div>
 <div id="status">booting…</div>
@@ -140,10 +144,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=4g"></script>
-<script src="/v2/track.js?v=4g"></script>
-<script src="/v2/physics.js?v=4g"></script>
-<script src="/v2/cosmetics.js?v=4g"></script>
+<script src="/v2/forks.js?v=4h"></script>
+<script src="/v2/track.js?v=4h"></script>
+<script src="/v2/physics.js?v=4h"></script>
+<script src="/v2/cosmetics.js?v=4h"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -157,7 +161,7 @@ const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '4g';
+const BUILD = '4h';
 console.log('[ZORBS] build', BUILD);
 
 // ---- ERROR LOGGER: phone runtime errors home (/api/log) so we can fix the game from real
@@ -204,7 +208,7 @@ renderer.setSize(innerWidth, innerHeight);
 // FILMIC LOOK: ACES tone mapping + sRGB output. This is the single biggest "game
 // engine" upgrade — highlights roll off like a camera instead of clipping to white.
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.15;
+renderer.toneMappingExposure = 1.08;
 renderer.outputEncoding = THREE.sRGBEncoding;
 const scene = new THREE.Scene();
 // fog softened: density 0.006 with a near-BLACK color was fading everything beyond
@@ -214,7 +218,7 @@ const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.3, 1600
 
 // BLOOM: everything bright (rails, rings, arches, energy bands) gets a real glow halo.
 // Guarded so the page still runs plain if a CDN script fails to load.
-let composer = null, _bloom = null, _bloomBase = 0.46;
+let composer = null, _bloom = null, _bloomBase = 0.40;
 if (THREE.EffectComposer && THREE.UnrealBloomPass) {
   composer = new THREE.EffectComposer(renderer);
   composer.addPass(new THREE.RenderPass(scene, camera));
@@ -825,6 +829,25 @@ function updateHUD(snap, nowSec){
     _boostState[id] = boosting;
   });
 }
+// ---- PERSISTENT PLAYER STATS (per browser, localStorage) so returning players see their
+// overall record. A server-side GLOBAL leaderboard comes with the DB/dashboard phase; this
+// is the local tracker we'll wire into that later. ----
+function loadStats(){ try { return JSON.parse(localStorage.getItem('zorbs_stats')) || {}; } catch(_){ return {}; } }
+function saveStats(s){ try { localStorage.setItem('zorbs_stats', JSON.stringify(s)); } catch(_){} }
+function recordResult(place){
+  const s = loadStats();
+  s.races = (s.races||0) + 1;
+  if (place === 1) s.wins = (s.wins||0) + 1;
+  if (place >= 1 && place <= 3) s.podiums = (s.podiums||0) + 1;
+  if (place >= 1 && (!s.best || place < s.best)) s.best = place;
+  if (_myMarble) s.name = _myMarble;
+  saveStats(s); return s;
+}
+function statsLine(s){
+  if (!s || !s.races) return '';
+  return s.races + ' races · ' + (s.wins||0) + ' wins · ' + (s.podiums||0) + ' podiums · best ' + (s.best ? '#'+s.best : '—');
+}
+
 function showEndCard(){
   const order = _finishOrder.slice();
   // append any non-finishers (fell / DNF) after the finishers
@@ -838,6 +861,13 @@ function showEndCard(){
     html += '<div class="prow '+(medal[i]||'')+'"><span class="p">'+(i+1)+'</span><span class="dot" style="color:'+cssColor(z?z.color:0)+'"></span><span style="flex:1">'+esc(id)+'</span><span style="opacity:.7;font-size:11px">'+(i===0?'WINNER':('#'+(i+1)+tag))+'</span></div>';
   });
   endcardEl.querySelector('.places').innerHTML = html;
+  // record + show THIS browser-player's running stats
+  const statsEl = endcardEl.querySelector('.mystats');
+  if (_myMarble && zorbs.has(_myMarble)) {
+    const myPlace = _finishedSet.has(_myMarble) ? (order.indexOf(_myMarble) + 1) : 0;  // 0 = DNF
+    const s = recordResult(myPlace);
+    if (statsEl) statsEl.textContent = 'YOUR RECORD — ' + statsLine(s);
+  } else if (statsEl) statsEl.textContent = '';
   const againBtn = endcardEl.querySelector('.again');
   if (_mpMode) { againBtn.textContent = 'NEXT RACE STARTING SOON…'; againBtn.disabled = true; againBtn.style.cursor = 'default'; }
   endcardEl.style.display = 'flex';
@@ -1078,16 +1108,22 @@ function loop(now) {
   if (composer) composer.render(); else renderer.render(scene, camera);
 }
 
-// ---- camera: follow the leader smoothly from behind & above ----
+// ---- camera: follow YOUR marble (public mode) or the leader (solo / after you're out) ----
 const camTarget = new THREE.Vector3();
 const camPos = new THREE.Vector3();
 const lookAt = new THREE.Vector3();
 let camLeadIdx = 0;
+function pickCameraTarget(){
+  // in the live game, follow the marble belonging to THIS browser's player...
+  if (_mpMode && _myMarble) { const z = zorbs.get(_myMarble); if (z && !z.eliminated) return _myMarble; }
+  // ...otherwise (solo, or once your marble has fallen/finished) follow the race leader.
+  return ZPHYSICS.isReady() ? ZPHYSICS.leader() : null;
+}
 function updateCamera(dt) {
   if (!track) return;
-  // Follow the leader's PROGRESS (a centerline node index), not the ball's jittery
+  // Follow the target's PROGRESS (a centerline node index), not the ball's jittery
   // position. The node is smooth, so the camera is smooth.
-  const lead = ZPHYSICS.isReady() ? ZPHYSICS.leader() : null;
+  const lead = pickCameraTarget();
   let idx = camLeadIdx;
   if (lead != null) {
     const snap = ZPHYSICS.snapshot()[lead];
