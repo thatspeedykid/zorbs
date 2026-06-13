@@ -44,7 +44,9 @@ export default class ZorbsRoom {
       this.players.set(sender.id, { id: sender.id, name });
       this.broadcastPlayers();
     } else if (m.type === 'boost') {
-      this.party.broadcast(JSON.stringify({ type: 'boost', name: String(m.name || '').slice(0, 16) }));
+      // stamp a shared apply-time ~220ms out so every client applies it at the SAME synced
+      // moment (keeps their sims + leaderboards identical instead of drifting on net latency).
+      this.party.broadcast(JSON.stringify({ type: 'boost', name: String(m.name || '').slice(0, 16), at: Date.now() + 220 }));
     } else if (m.type === 'result') {
       // FIRST result reported for a given race slot becomes the OFFICIAL outcome for everyone.
       const slot = m.slot | 0;

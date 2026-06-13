@@ -144,10 +144,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=4j"></script>
-<script src="/v2/track.js?v=4j"></script>
-<script src="/v2/physics.js?v=4j"></script>
-<script src="/v2/cosmetics.js?v=4j"></script>
+<script src="/v2/forks.js?v=4k"></script>
+<script src="/v2/track.js?v=4k"></script>
+<script src="/v2/physics.js?v=4k"></script>
+<script src="/v2/cosmetics.js?v=4k"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -161,7 +161,7 @@ const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '4j';
+const BUILD = '4k';
 console.log('[ZORBS] build', BUILD);
 
 // ---- ERROR LOGGER: phone runtime errors home (/api/log) so we can fix the game from real
@@ -924,7 +924,7 @@ function startRace(seed, names) {
   ZPHYSICS.setTrack(track.collider, track.nodes, { forks: track.forks, branchColliders: track.branchColliders });  // new track each race
   zorbs.forEach(z => { scene.remove(z.mesh); if(z.ring) scene.remove(z.ring); if(z.ringGlow) scene.remove(z.ringGlow); if(z.trail) scene.remove(z.trail); if(z.streak) scene.remove(z.streak); if(z.label) scene.remove(z.label); });
   _explosions.forEach(e => { scene.remove(e.pts); scene.remove(e.flash); }); _explosions.length = 0;
-  _resultSent = false; _officialOrder = null; _officialSlot = -1;
+  _resultSent = false; _officialOrder = null; _officialSlot = -1; _boostQueue.length = 0;
   zorbs.clear(); colorIdx = 0; winner = null;
   // queue spawns at the start of the track, staggered for a nice entrance
   spawnQueue = names.map((nm, i) => ({ id: nm.id, prefs: nm.prefs, isSub: nm.isSub, delay: i*0.12 }));
@@ -1054,6 +1054,13 @@ function loop(now) {
   }
 
   if (phase === 'racing' && ZPHYSICS.isReady()) {
+    // apply any boosts whose shared server-stamped time has arrived (keeps all sims identical)
+    if (_boostQueue.length) {
+      const sNow = Date.now() + _mpOffset;
+      for (let i = _boostQueue.length - 1; i >= 0; i--) {
+        if (_boostQueue[i].at <= sNow) { ZPHYSICS.giveBoost(_boostQueue[i].name, BOOST_AMOUNT); _boostQueue.splice(i, 1); }
+      }
+    }
     // fixed-timestep with catch-up: after the tab un-pauses, step enough fixed frames to
     // cover the elapsed wall-clock time (capped) so the race snaps back into server sync.
     const FIXED = 1/60; let acc = Math.min(2.0, rawDt), steps = 0;
@@ -1254,6 +1261,9 @@ let _myMarble = null, _joinName = null, _mpMode = false;
 // locks it and broadcasts it as official so every screen shows the SAME outcome.
 let _mpSlot = -1, _officialOrder = null, _officialFinished = 0, _officialSlot = -1;
 let _resultSent = false, _recordedSlot = null;
+// boosts are applied at a SHARED server-stamped time on every client so the live sims (and the
+// leaderboard) stay locked together instead of drifting on per-machine network timing.
+let _mpOffset = 0, _boostQueue = [];
 function reportResult(){
   if (!_mpMode || _resultSent) return;
   _resultSent = true;
@@ -1323,7 +1333,7 @@ function runMultiplayer(){
     catch(e){ ZLOG.report('manual','mp ws ctor failed: '+(e&&e.message)); setTimeout(connect, 3000); return; }
     ws.onopen = () => ws.send(JSON.stringify({ type:'join', name: myName }));
     ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch(_){ return; }
-      if (m.type === 'welcome') { gotWelcome = true; offset = m.serverTime - Date.now(); roster = m.players || [];
+      if (m.type === 'welcome') { gotWelcome = true; offset = m.serverTime - Date.now(); _mpOffset = offset; roster = m.players || [];
         if (m.official) { _officialSlot = m.official.slot; _officialOrder = m.official.order; _officialFinished = m.official.finished || 0; }
         scheduleRace(m.race); }
       else if (m.type === 'players') { roster = m.players || []; }
@@ -1334,9 +1344,10 @@ function runMultiplayer(){
         if (phase === 'done') showEndCard();   // re-render if the card is already up
       }
       else if (m.type === 'boost') {
-        // every client applies the boost off this same broadcast → stays in sync. The presser
-        // already applied it locally for responsiveness, so skip re-applying to our own marble.
-        if (m.name !== _myMarble && ZPHYSICS.isReady()) ZPHYSICS.giveBoost(m.name, BOOST_AMOUNT);
+        // apply at the server-stamped time on EVERY client (so all sims stay identical). If an
+        // older server sent no timestamp, fall back to applying on receipt.
+        if (m.at) _boostQueue.push({ name: m.name, at: m.at });
+        else if (m.name !== _myMarble && ZPHYSICS.isReady()) ZPHYSICS.giveBoost(m.name, BOOST_AMOUNT);
         if (typeof pushFeed === 'function') pushFeed('boost', '<b>'+esc(m.name)+'</b> used boost!');
       }
     };
@@ -1555,9 +1566,12 @@ window.addEventListener('keydown', (e) => {
   const t = performance.now();
   if (t < _boostReadyAt) return;
   _boostReadyAt = t + BOOST_COOLDOWN*1000;
-  ZPHYSICS.giveBoost(_myMarble, BOOST_AMOUNT);
-  if (_mpWS && _mpWS.readyState === 1) _mpWS.send(JSON.stringify({ type:'boost', name:_myMarble }));
-  else if (typeof pushFeed === 'function') pushFeed('boost', '<b>'+esc(_myMarble)+'</b> used boost!');
+  if (_mpWS && _mpWS.readyState === 1) {
+    _mpWS.send(JSON.stringify({ type:'boost', name:_myMarble }));   // applied for everyone at the server-stamped time
+  } else {
+    ZPHYSICS.giveBoost(_myMarble, BOOST_AMOUNT);                    // solo: instant
+    if (typeof pushFeed === 'function') pushFeed('boost', '<b>'+esc(_myMarble)+'</b> used boost!');
+  }
 });
 
 // when the tab is hidden the browser pauses requestAnimationFrame entirely. drive the
