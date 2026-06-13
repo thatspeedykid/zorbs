@@ -1,13 +1,20 @@
 {
   "name": "zorbs",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Zorbs — Browser Stream Racing Game",
   "scripts": {
     "dev": "npx serve public -p 3000",
-    "start": "npx serve public"
+    "start": "npx serve public",
+    "party:login": "npx partykit login",
+    "party:deploy": "npx partykit deploy",
+    "party:dev": "npx partykit dev"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.19.3",
     "serve": "^14.2.1"
+  },
+  "devDependencies": {
+    "partykit": "^0.0.111",
+    "partysocket": "^1.0.2"
   }
 }
