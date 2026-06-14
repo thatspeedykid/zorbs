@@ -267,10 +267,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=v04"></script>
-<script src="/v2/track.js?v=v04"></script>
-<script src="/v2/physics.js?v=v04"></script>
-<script src="/v2/cosmetics.js?v=v04"></script>
+<script src="/v2/forks.js?v=v05"></script>
+<script src="/v2/track.js?v=v05"></script>
+<script src="/v2/physics.js?v=v05"></script>
+<script src="/v2/cosmetics.js?v=v05"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -285,7 +285,7 @@ const statusEl = document.getElementById('nextrace');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = 'v0.4';
+const BUILD = 'v0.5';
 console.log('[ZORBS] build', BUILD);
 
 // ---- MOBILE UX: mark touch devices, block pinch/double-tap zoom, wire fullscreen button ----
@@ -786,14 +786,15 @@ function makeLabel(text, isMe){
   return sp;
 }
 
-function makeZorb(id, prefs, isSub, platform) {
+function makeZorb(id, prefs, isSub, platform, founder) {
   const cos = ZCOSMETICS.resolveForPlayer(prefs, isSub, prefs.owned || []);
-  const color = (cos.skin.color != null) ? cos.skin.color : PALETTE[(colorIdx++) % PALETTE.length];
+  let color = (cos.skin.color != null) ? cos.skin.color : PALETTE[(colorIdx++) % PALETTE.length];
+  if (founder) color = 0xFFC83A;   // FOUNDERS BALL — shared gold skin for all beta testers
   const accent = new THREE.Color(color);
   const baseCol = new THREE.Color(color);
 
   // ---- skin material builder (procedural textures, no external assets) ----
-  const core = new THREE.Mesh(SPHERE_GEO, buildCoreMaterial(cos.skin, baseCol, accent));
+  const core = new THREE.Mesh(SPHERE_GEO, founder ? buildFounderMaterial() : buildCoreMaterial(cos.skin, baseCol, accent));
   scene.add(core);
 
   // DARK OUTLINE: a slightly larger back-face black shell behind the ball gives a thin
@@ -837,8 +838,8 @@ function makeZorb(id, prefs, isSub, platform) {
   // LASER SATURN RING: bright thin ring + a soft glow. Both dialed back hard — the
   // bloom pass now supplies the glow, so the source pixels don't need to be pure white.
   let ring = null, ringGlow = null;
-  if (cos.ring.enabled) {
-    const rc = (cos.ring.color != null) ? new THREE.Color(cos.ring.color) : accent;
+  if (cos.ring.enabled || founder) {
+    const rc = founder ? new THREE.Color(0xFFE08A) : ((cos.ring.color != null) ? new THREE.Color(cos.ring.color) : accent);
     ring = new THREE.Mesh(RING_GEO, new THREE.MeshBasicMaterial({
       color: rc, transparent:true, opacity:0.55, blending:THREE.AdditiveBlending, depthWrite:false
     }));
@@ -861,6 +862,7 @@ function makeZorb(id, prefs, isSub, platform) {
   zorbs.set(id, {
     mesh: core, ring, ringGlow, band, color, trail, trailPos, trailLen: TRAIL_LEN, streak, label,
     platform: platform || 'guest',
+    founder: !!founder,
     spawnT: 0, spawnAnim: cos.spawn, ringSpin: cos.ring.spin || 2.0,
     ringBob: Math.random()*Math.PI*2, eliminated:false, fallT:0,
     rollQ: new THREE.Quaternion(),
@@ -921,6 +923,20 @@ function buildCoreMaterial(skin, baseCol, accent) {
     envMap: _envMap || null, envMapIntensity: 1.0,
   };
   if (THREE.MeshPhysicalMaterial) { params.clearcoat = 0.6; params.clearcoatRoughness = 0.15;
+    return new THREE.MeshPhysicalMaterial(params); }
+  return new THREE.MeshStandardMaterial(params);
+}
+
+// FOUNDERS BALL — the shared beta-tester skin. Premium polished gold with a warm glow so it
+// blooms and reads as special. (When ball customization ships, this becomes the first owned
+// skin in ZCOSMETICS and player-chosen skins layer on top the same way.)
+function buildFounderMaterial() {
+  const params = {
+    color: 0xFFC83A, metalness: 0.95, roughness: 0.16,
+    emissive: 0xFF8A00, emissiveIntensity: 0.45,
+    envMap: _envMap || null, envMapIntensity: 1.25,
+  };
+  if (THREE.MeshPhysicalMaterial) { params.clearcoat = 1.0; params.clearcoatRoughness = 0.06;
     return new THREE.MeshPhysicalMaterial(params); }
   return new THREE.MeshStandardMaterial(params);
 }
@@ -1102,7 +1118,7 @@ function startRace(seed, names) {
   _resultSent = false; _officialOrder = null; _officialSlot = -1; _boostQueue.length = 0;
   zorbs.clear(); colorIdx = 0; winner = null;
   // queue spawns at the start of the track, staggered for a nice entrance
-  spawnQueue = names.map((nm, i) => ({ id: nm.id, prefs: nm.prefs, isSub: nm.isSub, delay: i*0.12 }));
+  spawnQueue = names.map((nm, i) => ({ id: nm.id, prefs: nm.prefs, isSub: nm.isSub, platform: nm.platform, founder: nm.founder, delay: i*0.12 }));
   spawnTimer = 0; _spawnIndex = 0;
   phase = 'spawning';
   resetHUD();
@@ -1110,7 +1126,7 @@ function startRace(seed, names) {
 
 let _spawnIndex = 0;
 function spawnOne(item) {
-  makeZorb(item.id, item.prefs, item.isSub, item.platform);
+  makeZorb(item.id, item.prefs, item.isSub, item.platform, item.founder);
   // Place in a grid on the platform: rows across the width, columns down its length,
   // starting near the BACK so nobody spawns past the front edge.
   const plat = track.platform;
@@ -1431,7 +1447,7 @@ async function fetchRaceSeed(replayId) {
 const MP_HOST = 'zorbs.thatspeedykid.partykit.dev';
 const MP_ROOM = 'public';
 const MP_SLOT_MS = 95000, MP_LOBBY_MS = 9000, MP_FIELD = 8;
-let _myMarble = null, _joinName = null, _mpMode = false, _kickName = null;
+let _myMarble = null, _joinName = null, _mpMode = false, _kickName = null, _isFounder = false;
 // server-authoritative result: the first client to finish a race reports the order; the server
 // locks it and broadcasts it as official so every screen shows the SAME outcome.
 let _mpSlot = -1, _officialOrder = null, _officialFinished = 0, _officialSlot = -1;
@@ -1495,7 +1511,7 @@ function runMultiplayer(){
   }
   function runMpRace(race){
     const names = []; const used = new Set();
-    for (const p of roster.slice(0, MP_FIELD)) { if(used.has(p.name)) continue; names.push({ id:p.name, isSub:false, prefs:{}, platform: p.platform || 'guest' }); used.add(p.name); }
+    for (const p of roster.slice(0, MP_FIELD)) { if(used.has(p.name)) continue; names.push({ id:p.name, isSub:false, prefs:{}, platform: p.platform || 'guest', founder: !!p.founder }); used.add(p.name); }
     const bots = mpBots(race.seed); let bi = 0;
     while (names.length < MP_FIELD) { let bn = bots[bi++ % bots.length]; while(used.has(bn)) bn += '·'; used.add(bn); names.push({ id:bn, isSub:false, prefs:{}, platform:'bot' }); }
     startRace(race.seed, names);
@@ -1507,7 +1523,7 @@ function runMultiplayer(){
   function connect(){
     try { ws = new WebSocket('wss://' + MP_HOST + '/parties/main/' + MP_ROOM); _mpWS = ws; }
     catch(e){ ZLOG.report('manual','mp ws ctor failed: '+(e&&e.message)); setTimeout(connect, 3000); return; }
-    ws.onopen = () => ws.send(JSON.stringify({ type:'join', name: myName, platform: _kickName ? 'kick' : 'guest' }));
+    ws.onopen = () => ws.send(JSON.stringify({ type:'join', name: myName, platform: _kickName ? 'kick' : 'guest', founder: _isFounder }));
     ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch(_){ return; }
       if (m.type === 'welcome') { gotWelcome = true; offset = m.serverTime - Date.now(); _mpOffset = offset; roster = m.players || [];
         if (m.official) { _officialSlot = m.official.slot; _officialOrder = m.official.order; _officialFinished = m.official.finished || 0; }
@@ -1535,7 +1551,7 @@ function runMultiplayer(){
     hideLobby();
     const seed = (Math.random()*1e9) >>> 0;
     const names = mpBots(seed).map(n => ({ id:n, prefs:{}, isSub:false }));
-    names[0] = { id:_myMarble, prefs:{}, isSub:false };
+    names[0] = { id:_myMarble, prefs:{}, isSub:false, platform: _kickName ? 'kick' : 'guest', founder: _isFounder };
     setStatus('offline — solo race', false);
     startRace(seed, names);
   }
@@ -1734,6 +1750,16 @@ if (_volEl) {
   if (sess && sess.username) {
     // signed in with Kick → race as that account, no nickname needed
     _kickName = sess.username;
+    // am I a beta tester? → render the gold founders ball. Re-send to the room if it
+    // resolves after we've already joined, so others see the founders ball too.
+    if (sess.kickId) {
+      fetch('/api/leaderboard?user=' + encodeURIComponent(sess.kickId)).then(r => r.json()).then(d => {
+        if (d && d.you && d.you.beta) {
+          _isFounder = true;
+          if (_mpWS && _mpWS.readyState === 1) _mpWS.send(JSON.stringify({ type:'join', name: _kickName, platform:'kick', founder:true }));
+        }
+      }).catch(()=>{});
+    }
     nickEl.style.display = 'none';
     if (kickBtn) kickBtn.style.display = 'none';
     if (orline) orline.style.display = 'none';

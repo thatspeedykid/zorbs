@@ -41,8 +41,10 @@ export default class ZorbsRoom {
     let m; try { m = JSON.parse(raw); } catch (_) { return; }
     if (m.type === 'join') {
       const name = String(m.name || 'guest').slice(0, 16).replace(/[<>"]/g, '');
-      const platform = ['kick','twitch','youtube'].includes(m.platform) ? m.platform : 'guest';
-      this.players.set(sender.id, { id: sender.id, name, platform });
+      const platform = ['kick','twitch','youtube','tiktok'].includes(m.platform) ? m.platform : 'guest';
+      const prev = this.players.get(sender.id);
+      const founder = !!m.founder || !!(prev && prev.founder);   // never lose founder on re-join
+      this.players.set(sender.id, { id: sender.id, name, platform, founder });
       this.broadcastPlayers();
     } else if (m.type === 'boost') {
       // stamp a shared apply-time ~220ms out so every client applies it at the SAME synced
