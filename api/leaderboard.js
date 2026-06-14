@@ -1,24 +1,39 @@
-// PERSISTENT GLOBAL LEADERBOARD — backed by Vercel KV (Upstash Redis REST API).
+// PERSISTENT GLOBAL LEADERBOARD — backed by Vercel KV / Upstash Redis (REST API).
 //
 //   POST /api/leaderboard   body { kickId, username, place }   -> record one race result
 //   GET  /api/leaderboard                                      -> global top players
 //   GET  /api/leaderboard?user=<kickId>                        -> top players + that user's record
+//   GET  /api/leaderboard?status=1                             -> { configured: true|false }
 //
-// To enable: create a KV store in the Vercel dashboard (Storage -> Create -> KV) and connect
-// it to this project. Vercel auto-injects KV_REST_API_URL + KV_REST_API_TOKEN. Until then this
-// endpoint returns { configured:false } and the game/dashboard degrade gracefully (local stats
-// still work). Nothing here can ever break gameplay — the client calls are fire-and-forget.
+// Works with any Upstash/KV integration regardless of the env-var PREFIX Vercel assigns:
+// it first checks the common names, then auto-discovers the Upstash REST URL + token from
+// the environment. No-ops gracefully (configured:false) until a DB is connected, so the
+// game and dashboard never break.
 
-const KV_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
-  || process.env.STORAGE_KV_REST_API_URL || process.env.STORAGE_REDIS_REST_URL || process.env.REDIS_REST_URL;
-const KV_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
-  || process.env.STORAGE_KV_REST_API_TOKEN || process.env.STORAGE_REDIS_REST_TOKEN || process.env.REDIS_REST_TOKEN;
+function kvEnv() {
+  let url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
+    || process.env.STORAGE_REDIS_REST_URL || process.env.STORAGE_KV_REST_API_URL
+    || process.env.REDIS_REST_URL;
+  let token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
+    || process.env.STORAGE_REDIS_REST_TOKEN || process.env.STORAGE_KV_REST_API_TOKEN
+    || process.env.REDIS_REST_TOKEN;
+  // Auto-discover: any *_URL that is an https upstash REST endpoint, plus a long *_TOKEN.
+  if (!url || !token) {
+    for (const [k, v] of Object.entries(process.env)) {
+      if (typeof v !== 'string') continue;
+      if (!url && /URL$/i.test(k) && v.startsWith('https://') && v.includes('upstash.io')) url = v;
+      if (!token && /TOKEN$/i.test(k) && v.length > 24 && !/\s/.test(v)) token = v;
+    }
+  }
+  return { url, token };
+}
 
 async function redis(cmd) {
-  if (!KV_URL || !KV_TOKEN) return null;
-  const r = await fetch(KV_URL, {
+  const { url, token } = kvEnv();
+  if (!url || !token) return null;
+  const r = await fetch(url, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${KV_TOKEN}`, 'Content-Type': 'application/json' },
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(cmd),
   });
   if (!r.ok) return null;
@@ -27,10 +42,11 @@ async function redis(cmd) {
 }
 
 async function pipeline(cmds) {
-  if (!KV_URL || !KV_TOKEN || !cmds.length) return [];
-  const r = await fetch(KV_URL + '/pipeline', {
+  const { url, token } = kvEnv();
+  if (!url || !token || !cmds.length) return [];
+  const r = await fetch(url + '/pipeline', {
     method: 'POST',
-    headers: { Authorization: `Bearer ${KV_TOKEN}`, 'Content-Type': 'application/json' },
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(cmds),
   });
   if (!r.ok) return [];
@@ -49,7 +65,14 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  if (!KV_URL || !KV_TOKEN) {
+  const { url, token } = kvEnv();
+  const configured = !!(url && token);
+
+  if (req.query && req.query.status) {
+    return res.status(200).json({ ok: true, configured });
+  }
+
+  if (!configured) {
     return res.status(200).json({ ok: false, configured: false, leaderboard: [], you: null });
   }
 
@@ -84,7 +107,6 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, you: u });
     }
 
-    // GET — global top 25 (by wins) + optional specific user record
     const top = (await redis(['ZREVRANGE', 'zlb', '0', '24', 'WITHSCORES'])) || [];
     const ids = [];
     for (let i = 0; i < top.length; i += 2) ids.push(top[i]);
