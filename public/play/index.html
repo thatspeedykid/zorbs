@@ -1,0 +1,1748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zorbs On Stream</title>
+<style>
+  html,body { margin:0; height:100%; background:#02050d; overflow:hidden; font-family:'Courier New',monospace; }
+  #c { display:block; width:100vw; height:100vh; }
+  #hud { position:fixed; top:10px; left:12px; z-index:10; display:flex; flex-direction:column; align-items:flex-start; gap:8px; }
+  #hud .dashbtn { font-family:'Courier New',monospace; font-size:11px; letter-spacing:2px; color:#bfefff; text-decoration:none;
+    background:rgba(6,12,26,.72); border:1px solid rgba(120,220,255,.55); border-radius:8px; padding:6px 14px; backdrop-filter:blur(3px); transition:.15s; }
+  #hud .dashbtn:hover { background:rgba(40,140,255,.35); color:#fff; }
+  #hud .brand { display:flex; align-items:center; gap:11px; }
+  #hud .brand .logo { width:46px; height:46px; filter:drop-shadow(0 0 8px rgba(60,200,255,.6)); }
+  #hud .brand .txt { display:flex; flex-direction:column; line-height:1.05; }
+  #hud .brand .bt { color:#fff; font-size:17px; font-weight:bold; letter-spacing:2px; text-shadow:0 0 14px rgba(120,220,255,.6); }
+  #hud .brand .bt b { color:#7fe9ff; }
+  #hud .brand .bt small { color:#7fe9ff; font-size:11px; letter-spacing:1px; }
+  #hud .brand .by { color:#7fb8e0; font-size:9px; letter-spacing:3px; margin-top:3px; }
+  #nextrace { font-family:'Courier New',monospace; font-size:11px; letter-spacing:1px; padding:5px 9px; margin-bottom:6px;
+    border-radius:7px; text-align:center; font-weight:bold; }
+  #nextrace:empty { display:none; }
+  #arm { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(2,5,13,.9); z-index:50; cursor:default; }
+  #arm .box { display:flex; flex-direction:column; align-items:center; gap:14px; color:#7fe9ff;
+    border:1px solid rgba(0,200,255,.35); padding:34px 44px; border-radius:16px; text-align:center;
+    background:linear-gradient(160deg,rgba(10,26,52,.85),rgba(6,14,32,.85)); box-shadow:0 0 50px rgba(20,120,255,.3); }
+  #arm .title { font-size:42px; letter-spacing:10px; color:#fff; text-shadow:0 0 24px rgba(120,220,255,.7); font-weight:bold; }
+  #arm .sub { font-size:12px; letter-spacing:3px; color:#7fb8e0; margin-top:-6px; }
+  #arm #nick { width:230px; padding:11px 14px; border-radius:9px; font-family:inherit; font-size:15px; text-align:center;
+    background:rgba(0,0,0,.35); border:1px solid rgba(80,180,255,.4); color:#eaf6ff; outline:none; letter-spacing:1px; }
+  #arm #nick:focus { border-color:rgba(120,220,255,.9); box-shadow:0 0 14px rgba(40,160,255,.4); }
+  #arm #playbtn { width:260px; padding:12px; border-radius:9px; cursor:pointer; font-family:inherit; font-size:16px; letter-spacing:3px;
+    background:linear-gradient(90deg,rgba(40,140,255,.5),rgba(120,60,255,.5)); color:#fff; border:1px solid rgba(120,200,255,.6); font-weight:bold; }
+  #arm #playbtn:hover { background:linear-gradient(90deg,rgba(40,140,255,.8),rgba(120,60,255,.8)); }
+  #arm .orline { font-size:10px; color:#5b7a96; letter-spacing:2px; }
+  #arm #kickbtn { width:260px; padding:11px; border-radius:9px; cursor:pointer; font-family:inherit; font-size:13px; letter-spacing:2px;
+    background:rgba(83,252,24,.08); color:#53fc18; border:2px solid #53fc18; font-weight:bold; display:flex; align-items:center; justify-content:center; gap:9px; }
+  #arm #kickbtn:hover { background:rgba(83,252,24,.18); box-shadow:0 0 18px rgba(83,252,24,.25); }
+  #arm #kickbtn .ki { background:#53fc18; color:#000; width:20px; height:20px; border-radius:4px; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:12px; }
+  #arm .hint { font-size:11px; color:#6b9; letter-spacing:1px; }
+  #leader { display:none; }
+  #lobby { position:fixed; inset:0; display:none; align-items:center; justify-content:center; z-index:40; pointer-events:none; }
+  #lobby .lb { text-align:center; background:rgba(4,12,28,.5); backdrop-filter:blur(2px); border:1px solid rgba(80,180,255,.3);
+    border-radius:16px; padding:26px 48px; box-shadow:0 0 40px rgba(20,120,255,.3); }
+  #lobby .t { color:#7fe9ff; letter-spacing:6px; font-size:16px; }
+  #lobby .cd { color:#fff; font-size:64px; font-weight:bold; text-shadow:0 0 28px rgba(120,220,255,.7); line-height:1.1; }
+  #lobby .s { color:#8fc; font-size:12px; letter-spacing:2px; opacity:.85; }
+  #rightcol { position:fixed; top:10px; right:12px; width:216px; z-index:10; font-family:'Courier New',monospace; }
+  #standings .row { display:flex; align-items:center; gap:7px; padding:3px 8px; margin:2px 0; border-radius:6px;
+    background:rgba(6,20,40,.55); font-size:12px; color:#dff3ff; box-shadow:0 0 0 1px rgba(80,160,255,.14); transition:opacity .3s; }
+  #standings .row.lead { box-shadow:0 0 0 1px rgba(120,230,255,.65), 0 0 14px rgba(40,180,255,.4); color:#fff; }
+  #standings .row.out { opacity:.38; filter:grayscale(.7); }
+  #standings .row.fin { box-shadow:0 0 0 1px rgba(120,255,180,.5); }
+  #standings .row.you { box-shadow:0 0 0 1px rgba(255,230,120,.8), 0 0 14px rgba(255,200,60,.4); background:rgba(40,32,8,.6); }
+  #standings .youtag { font-size:9px; background:rgba(255,210,80,.85); color:#1a1300; padding:0 4px; border-radius:4px; margin-left:4px; font-weight:bold; }
+  #standings .rank { width:18px; text-align:right; color:#7fe9ff; font-weight:bold; }
+  #standings .dot { width:10px; height:10px; border-radius:50%; flex:0 0 auto; box-shadow:0 0 6px currentColor; }
+  #standings .nm { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #standings .pf { display:inline-flex; align-items:center; justify-content:center; width:13px; height:13px; border-radius:3px;
+    font-size:9px; font-weight:900; margin-right:5px; vertical-align:middle; flex:0 0 auto; }
+  #standings .pf.kick { background:#53fc18; color:#000; }
+  #standings .pf.twitch { background:#9146ff; color:#fff; }
+  #standings .pf.yt { background:#ff0000; color:#fff; font-size:7px; }
+  #standings .st { font-size:10px; opacity:.85; }
+  #feed { margin-top:8px; display:flex; flex-direction:column; gap:3px; }
+  #feed .ev { font-size:11px; padding:3px 8px; border-radius:6px; background:rgba(6,20,40,.5);
+    color:#bfeaff; box-shadow:0 0 0 1px rgba(80,160,255,.12); animation:evin .28s ease; }
+  #feed .ev b { color:#fff; }
+  #feed .ev.boost b { color:#7fb0ff; }  #feed .ev.fell b { color:#ff7a8a; }  #feed .ev.lead b { color:#8effc8; }
+  @keyframes evin { from{opacity:0; transform:translateX(14px);} to{opacity:1; transform:none;} }
+  #endcard { position:fixed; inset:0; display:none; align-items:center; justify-content:center; z-index:50;
+    background:rgba(2,8,20,.55); backdrop-filter:blur(3px); font-family:'Courier New',monospace; }
+  #endcard .panel { width:340px; max-height:80vh; overflow:auto; background:linear-gradient(160deg,rgba(10,26,52,.96),rgba(6,14,32,.96));
+    border:1px solid rgba(80,180,255,.45); border-radius:14px; padding:20px 22px; box-shadow:0 0 50px rgba(20,120,255,.35); }
+  #endcard h2 { margin:0 0 4px; color:#7fe9ff; letter-spacing:3px; font-size:15px; text-align:center; }
+  #endcard .champ { text-align:center; font-size:22px; color:#fff; margin:8px 0 14px; text-shadow:0 0 16px rgba(120,220,255,.7); }
+  #endcard .champ .c { font-size:30px; }
+  #endcard .prow { display:flex; align-items:center; gap:9px; padding:5px 8px; margin:3px 0; border-radius:7px; background:rgba(255,255,255,.04); }
+  #endcard .prow .p { width:24px; color:#7fe9ff; font-weight:bold; text-align:right; }
+  #endcard .prow.gold{ background:rgba(255,210,80,.14);} #endcard .prow.silver{ background:rgba(200,220,255,.12);} #endcard .prow.bronze{ background:rgba(255,160,90,.12);}
+  #endcard .dot { width:11px; height:11px; border-radius:50%; box-shadow:0 0 6px currentColor; }
+  #endcard .mystats { margin-top:10px; padding-top:8px; border-top:1px solid rgba(80,160,255,.2);
+    color:#9fd8c4; font-size:11px; letter-spacing:1px; text-align:center; }
+  #endcard .mystats:empty { display:none; }
+  #endcard .again { margin-top:14px; width:100%; padding:9px; border-radius:8px; cursor:pointer; font-family:inherit;
+    background:rgba(40,140,255,.25); color:#cfeaff; border:1px solid rgba(80,180,255,.5); letter-spacing:2px; }
+  #endcard .again:hover { background:rgba(40,140,255,.45); }
+  /* SpeedyGoWild music player */
+  #boosthint { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); z-index:31; display:none;
+    cursor:pointer; pointer-events:auto; user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent;
+    font-family:'Courier New',monospace; font-size:14px; letter-spacing:3px; color:#bfefff; padding:7px 18px;
+    border-radius:20px; background:rgba(6,12,26,.7); border:1px solid rgba(120,220,255,.8); backdrop-filter:blur(3px); }
+  #dashlink { position:fixed; bottom:226px; left:12px; z-index:30; font-family:'Courier New',monospace; font-size:11px;
+    letter-spacing:2px; color:#bfefff; text-decoration:none; background:rgba(6,12,26,.78); border:1px solid rgba(120,220,255,.55);
+    border-radius:8px; padding:7px 14px; backdrop-filter:blur(3px); display:inline-block; }
+  #dashlink:hover { background:rgba(40,140,255,.35); color:#fff; }
+  #minimap { position:fixed; bottom:84px; left:12px; z-index:30; width:190px; height:132px; border-radius:10px;
+    background:rgba(6,12,26,.78); border:1px solid rgba(60,180,255,.4); box-shadow:0 0 18px rgba(0,120,255,.25); }
+  #music { position:fixed; bottom:10px; right:12px; z-index:30; display:flex; align-items:center; gap:10px;
+    background:rgba(6,12,26,.82); border:1px solid rgba(60,180,255,.4); border-radius:10px; padding:8px 10px;
+    backdrop-filter:blur(4px); box-shadow:0 0 18px rgba(0,120,255,.25); max-width:300px; }
+  #music .meta { min-width:0; flex:1; }
+  #music .artist { color:#7fe9ff; font-size:11px; letter-spacing:1px; }
+  #music .song { color:#fff; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  /* volume slider */
+  #music .vol { -webkit-appearance:none; appearance:none; width:100%; height:4px; margin-top:6px;
+    border-radius:3px; background:linear-gradient(90deg,#00e5ff,#0a2a4a); cursor:pointer; outline:none; }
+  #music .vol::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; width:12px; height:12px;
+    border-radius:50%; background:#9fefff; box-shadow:0 0 6px rgba(0,200,255,.9); border:none; cursor:pointer; }
+  #music .vol::-moz-range-thumb { width:12px; height:12px; border-radius:50%; background:#9fefff;
+    box-shadow:0 0 6px rgba(0,200,255,.9); border:none; cursor:pointer; }
+  #music .btns { display:flex; gap:6px; flex:0 0 auto; }
+  #music #m-beat-wrap { height:3px; margin-top:5px; border-radius:2px; overflow:hidden; background:rgba(0,80,140,.35); }
+  #music #m-beat { height:100%; width:100%; transform:scaleX(0); transform-origin:left;
+    background:linear-gradient(90deg,#00e5ff,#ff66cc); box-shadow:0 0 6px rgba(0,220,255,.8); }
+  #music button { background:rgba(0,150,255,.15); color:#9fefff; border:1px solid rgba(60,180,255,.5);
+    border-radius:6px; width:30px; height:30px; cursor:pointer; font-size:13px; line-height:1; }
+  #music button:hover { background:rgba(0,150,255,.35); }
+  /* ---- MOBILE: scale everything down so the track stays the star ---- */
+  @media (max-width: 768px) {
+    #hud { top:6px; left:8px; gap:4px; }
+    #hud .brand { gap:8px; }
+    #hud .brand .logo { width:30px; height:30px; }
+    #hud .brand .bt { font-size:12px; letter-spacing:1px; }
+    #hud .brand .bt small { font-size:8px; }
+    #hud .brand .by { font-size:7px; letter-spacing:2px; margin-top:1px; }
+
+    #rightcol { width:148px; top:6px; right:8px; }
+    #standings .row { padding:2px 6px; gap:5px; margin:1.5px 0; }
+    #standings .nm { font-size:10px; }
+    #standings .dot { width:8px; height:8px; }
+    #standings .rank { width:13px; }
+    #standings .youtag { font-size:8px; padding:0 3px; }
+    #standings .st { display:none; }
+    #feed { font-size:9px; }
+
+    #minimap { width:100px; height:70px; bottom:60px; left:8px; }
+    #dashlink { bottom:138px; left:8px; font-size:9px; padding:5px 10px; letter-spacing:1px; }
+    #nextrace { font-size:9px; padding:4px 7px; margin-bottom:4px; }
+
+    #music { max-width:184px; right:8px; bottom:8px; padding:6px 8px; gap:7px; }
+    #music .artist { font-size:9px; }
+    #music .song { font-size:10px; }
+    #music #m-beat-wrap { display:none; }
+
+    /* big, obvious tap target for boost */
+    #boosthint { bottom:96px; font-size:17px; padding:13px 34px; letter-spacing:3px; border-width:2px; }
+  }
+</head>
+<body>
+<div id="buildtag" style="position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:99999;background:#0a0;color:#fff;font:bold 11px monospace;padding:2px 10px;border-radius:0 0 6px 6px;letter-spacing:1px;">PLAY1</div>
+<canvas id="c"></canvas>
+<div id="hud">
+  <div class="brand">
+    <svg class="logo" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="zlg" cx="38%" cy="30%" r="72%">
+          <stop offset="0%" stop-color="#cdf6ff"/>
+          <stop offset="38%" stop-color="#2ea8ff"/>
+          <stop offset="100%" stop-color="#0a235e"/>
+        </radialGradient>
+      </defs>
+      <circle cx="32" cy="32" r="23" fill="none" stroke="#3fd0ff" stroke-width="2" opacity="0.45"/>
+      <circle cx="32" cy="32" r="18" fill="url(#zlg)"/>
+      <ellipse cx="25" cy="23" rx="6.5" ry="4" fill="#ffffff" opacity="0.75"/>
+      <path d="M13 41 q19 9 38 0" stroke="#7fe9ff" stroke-width="2.4" fill="none" opacity="0.65" stroke-linecap="round"/>
+    </svg>
+    <div class="txt">
+      <div class="bt">ZORBS <b>On Stream</b> <small>V0.2</small></div>
+      <div class="by">BY MARSSCUMBAGS</div>
+    </div>
+  </div>
+</div>
+<div id="leader"></div>
+<div id="lobby"><div class="lb">
+  <div class="t">NEXT RACE</div>
+  <div class="cd" id="lobbyCd">—</div>
+  <div class="s" id="lobbySub">racers taking their marks…</div>
+</div></div>
+<div id="rightcol"><div id="nextrace"></div><div id="standings"></div><div id="feed"></div></div>
+<div id="endcard"><div class="panel">
+  <h2>RACE COMPLETE</h2>
+  <div class="champ"></div>
+  <div class="places"></div>
+  <div class="mystats"></div>
+  <button class="again">RACE AGAIN</button>
+</div></div>
+<div id="arm"><div class="box">
+  <div class="title">ZORBS</div>
+  <div class="sub">live browser marble racing</div>
+  <input id="nick" maxlength="16" placeholder="enter a nickname" autocomplete="off" spellcheck="false" />
+  <button id="playbtn">PLAY ▶</button>
+  <div class="orline">— or —</div>
+  <button id="kickbtn"><span class="ki">K</span> SIGN IN WITH KICK</button>
+  <div class="hint">races run live — you'll drop into the next one</div>
+  <a href="/dashboard" style="font-size:11px;color:#7fb8e0;letter-spacing:1px;text-decoration:none;opacity:.85;border-bottom:1px solid rgba(127,184,224,.3);padding-bottom:1px">📊 my stats &amp; leaderboard</a>
+</div></div>
+
+<!-- SpeedyGoWild background music: self-hosted playlist (music/playlist.json) when present
+     = zero YouTube + zero ad-blocker issues; otherwise falls back to the YouTube embed -->
+<div id="boosthint">␣ BOOST</div>
+<a id="dashlink" href="/dashboard">📊 DASHBOARD</a>
+<canvas id="minimap" width="190" height="132"></canvas>
+<div id="music">
+  <div class="meta">
+    <div class="artist">♪ SpeedyGoWild</div>
+    <div class="song" id="m-song">loading…</div>
+    <input id="m-vol" class="vol" type="range" min="0" max="100" value="60" title="volume">
+    <div id="m-beat-wrap" title="live beat"><div id="m-beat"></div></div>
+  </div>
+  <div class="btns">
+    <button id="m-play" title="play / pause">▶</button>
+    <button id="m-mute" title="mute">🔊</button>
+  </div>
+  <audio id="m-audio" crossorigin="anonymous" preload="auto"></audio>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<!-- post-processing for the AAA glow pass (these attach to the THREE global) -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+<script src="/v2/forks.js?v=PLAY1"></script>
+<script src="/v2/track.js?v=PLAY1"></script>
+<script src="/v2/physics.js?v=PLAY1"></script>
+<script src="/v2/cosmetics.js?v=PLAY1"></script>
+<script>
+// ---------------------------------------------------------------------------
+// ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
+// Host runs physics; this test page is always host. Multiplayer wiring comes next.
+// ---------------------------------------------------------------------------
+const BALL_R = 0.5;
+// manual (spacebar) boost: forward burst strength + seconds between uses
+const BOOST_AMOUNT = 1.8, BOOST_COOLDOWN = 2.5;
+const _isTouch = (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches) || ('ontouchstart' in window);
+let _boostReadyAt = 0, _mpWS = null, _boostHint = null;
+const statusEl = document.getElementById('nextrace');
+// BUILD STAMP: shown in the HUD + console so there is never any question about which
+// version the browser is actually running. If the stamp doesn't match the latest
+// commit, the problem is deployment/caching — not the code.
+const BUILD = 'PLAY1';
+console.log('[ZORBS] build', BUILD);
+
+// ---- ERROR LOGGER: phone runtime errors home (/api/log) so we can fix the game from real
+// data as it runs in the wild. Deduped + capped so it never spams. Pure additive safety net.
+const ZLOG = (() => {
+  const seen = new Map(); let sent = 0;
+  const safe = (fn) => { try { return fn(); } catch (_) { return ''; } };
+  function report(kind, msg, stack, extra) {
+    try {
+      if (sent > 40) return;                                  // cap per page load
+      const key = kind + '|' + String(msg || '').slice(0, 120) + '|' + ((extra && extra.line) || 0);
+      const now = Date.now();
+      if (seen.get(key) && now - seen.get(key) < 10000) return; // dedupe within 10s
+      seen.set(key, now); sent++;
+      const payload = Object.assign({
+        kind, msg: String(msg || ''), stack: String(stack || ''),
+        build: safe(() => BUILD) || '?',
+        raceId: safe(() => _raceId) || '',
+        phase: safe(() => phase) || '',
+        url: location.href,
+      }, extra || {});
+      const data = JSON.stringify(payload);
+      if (navigator.sendBeacon) navigator.sendBeacon('/api/log', new Blob([data], { type: 'application/json' }));
+      else fetch('/api/log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: data, keepalive: true }).catch(() => {});
+    } catch (_) {}
+  }
+  window.addEventListener('error', e => report('error', e.message, e.error && e.error.stack, { line: e.lineno, col: e.colno, url: e.filename || location.href }));
+  window.addEventListener('unhandledrejection', e => { const r = e.reason; report('promise', (r && r.message) || String(r), r && r.stack); });
+  return { report };
+})();
+const leaderEl = document.getElementById('leader');
+function setStatus(txt, ok) {
+  statusEl.textContent = txt;
+  statusEl.style.background = ok ? 'rgba(0,255,136,.15)' : 'rgba(255,90,90,.15)';
+  statusEl.style.color = ok ? '#00ff88' : '#ff7676';
+  statusEl.style.border = '1px solid ' + (ok ? 'rgba(0,255,136,.4)' : 'rgba(255,90,90,.4)');
+}
+
+// ---- renderer / scene ----
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
+renderer.setPixelRatio(Math.min(2, devicePixelRatio));
+renderer.setSize(innerWidth, innerHeight);
+// FILMIC LOOK: ACES tone mapping + sRGB output. This is the single biggest "game
+// engine" upgrade — highlights roll off like a camera instead of clipping to white.
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.08;
+renderer.outputEncoding = THREE.sRGBEncoding;
+const scene = new THREE.Scene();
+// fog softened: density 0.006 with a near-BLACK color was fading everything beyond
+// ~100 units to black — a major contributor to the 'black track'. Deep blue + gentle.
+scene.fog = new THREE.FogExp2(0x0a2040, 0.0018);
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.3, 16000);
+
+// BLOOM: everything bright (rails, rings, arches, energy bands) gets a real glow halo.
+// Guarded so the page still runs plain if a CDN script fails to load.
+let composer = null, _bloom = null, _bloomBase = 0.40;
+if (THREE.EffectComposer && THREE.UnrealBloomPass) {
+  composer = new THREE.EffectComposer(renderer);
+  composer.addPass(new THREE.RenderPass(scene, camera));
+  const bloom = new THREE.UnrealBloomPass(
+    new THREE.Vector2(innerWidth, innerHeight),
+    0.46,   // strength — richer neon glow on rails/arches/pulses
+    0.5,    // radius — softer, wider halo
+    0.82    // threshold — the brightest pixels (rails/pulses) bloom
+  );
+  composer.addPass(bloom);
+  _bloom = bloom;
+}
+
+function doResize() {
+  renderer.setSize(innerWidth, innerHeight);
+  if (composer) composer.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+}
+addEventListener('resize', doResize);
+addEventListener('orientationchange', () => setTimeout(doResize, 200));
+if (window.visualViewport) visualViewport.addEventListener('resize', doResize);
+
+// lights (slightly hotter than before — ACES tone mapping eats some brightness)
+scene.add(new THREE.AmbientLight(0x445577, 0.75));
+const key = new THREE.DirectionalLight(0xaaccff, 1.6); key.position.set(20, 60, 10); scene.add(key);
+const rim = new THREE.DirectionalLight(0xff66cc, 0.6); rim.position.set(-30, 20, -20); scene.add(rim);
+const fill = new THREE.DirectionalLight(0x00e5ff, 0.5); fill.position.set(0, 10, -40); scene.add(fill);
+// HEMISPHERE LIGHT: sky color from above, deep-blue bounce from below. This is what
+// stops the balls going pure black when their lit side faces away from the camera —
+// every surface now gets some colored ambient, so the metal reads as metal, not a
+// silhouette. Big readability win for a dark scene.
+scene.add(new THREE.HemisphereLight(0x9fc8ff, 0x16203a, 0.7));
+
+// STARFIELD: a sphere of additive points behind everything — instant depth + scale.
+(function stars(){
+  const COUNT = 1400;
+  const pos = new Float32Array(COUNT * 3);
+  for (let i = 0; i < COUNT; i++) {
+    // random direction, pushed out near the sky dome
+    const u = Math.random()*2-1, th = Math.random()*Math.PI*2;
+    const r = 650 + Math.random()*200;
+    const s = Math.sqrt(1-u*u);
+    pos[i*3]   = s*Math.cos(th)*r;
+    pos[i*3+1] = Math.abs(u)*r*0.9 + 20;      // keep stars above the horizon
+    pos[i*3+2] = s*Math.sin(th)*r;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const m = new THREE.PointsMaterial({ color:0x99ccff, size:2.2, sizeAttenuation:false,
+    transparent:true, opacity:0.85, blending:THREE.AdditiveBlending, depthWrite:false, fog:false });
+  const pts = new THREE.Points(g, m); pts.renderOrder = -999; scene.add(pts);
+})();
+// Environment map: render the gradient sky to a cube so metal balls reflect it (sci-fi sheen)
+let _envMap = null;
+function buildEnvMap() {
+  if (!THREE.PMREMGenerator) return;
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  if (pmrem.compileEquirectangularShader) pmrem.compileEquirectangularShader();
+  // simple gradient scene captured as env
+  const envScene = new THREE.Scene();
+  const g = new THREE.SphereGeometry(50, 16, 12);
+  // brighter gradient: metal reflects this, so a DARK env = black metal (the bug).
+  // Warm top, cool horizon, with enough luminance to give chrome real highlights.
+  const m = new THREE.ShaderMaterial({ side:THREE.BackSide,
+    vertexShader:'varying vec3 p; void main(){ p=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
+    fragmentShader:'varying vec3 p; void main(){ float h=normalize(p).y*0.5+0.5; vec3 lo=vec3(0.12,0.20,0.42); vec3 hi=vec3(0.85,0.78,0.95); gl_FragColor=vec4(mix(lo,hi,h),1.0); }' });
+  envScene.add(new THREE.Mesh(g, m));
+  _envMap = pmrem.fromScene(envScene).texture;
+  // do NOT set scene.environment (it over-lights the whole track). Ball-only below.
+}
+
+// gradient sky dome (always behind everything)
+(function sky(){
+  const g = new THREE.SphereGeometry(900, 24, 16);
+  const m = new THREE.ShaderMaterial({
+    side: THREE.BackSide, depthWrite:false, depthTest:false, fog:false,
+    uniforms:{}, vertexShader:`varying vec3 p; void main(){ p=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+    fragmentShader:`varying vec3 p; void main(){ float h=normalize(p).y*0.5+0.5; vec3 top=vec3(0.02,0.05,0.13); vec3 bot=vec3(0.0,0.10,0.18); gl_FragColor=vec4(mix(bot,top,h),1.0); }`
+  });
+  const mesh = new THREE.Mesh(g, m); mesh.renderOrder = -1000; scene.add(mesh);
+})();
+
+// ---- PLANET OVERWORLD: a giant world suspended far below the track ----
+let _planet = null, _clouds = null;
+(function planet(){
+  // periodic value-noise → fractal terrain, baked to an equirectangular canvas texture
+  const hash = (ix, iy) => { let h = (ix*374761393 + iy*668265263) | 0; h = (h ^ (h>>13)) * 1274126177 | 0; return ((h ^ (h>>16)) >>> 0) / 4294967295; };
+  const P = 8;
+  const vn = (x, y, per) => {
+    const ix = Math.floor(x), iy = Math.floor(y), fx = x-ix, fy = y-iy;
+    const u = fx*fx*(3-2*fx), v = fy*fy*(3-2*fy), w = (i) => ((i%per)+per)%per;
+    const a = hash(w(ix),iy), b = hash(w(ix+1),iy), c2 = hash(w(ix),iy+1), d = hash(w(ix+1),iy+1);
+    return (a*(1-u)+b*u)*(1-v) + (c2*(1-u)+d*u)*v;
+  };
+  const fbm = (x, y) => { let e=0, amp=0.5, fr=1; for (let o=0;o<5;o++){ e += amp*vn(x*fr, y*fr, P*fr); amp*=0.5; fr*=2; } return e; };
+
+  function surfaceCanvas(){
+    const W=1024, H=512, c=document.createElement('canvas'); c.width=W; c.height=H;
+    const ctx=c.getContext('2d'), img=ctx.createImageData(W,H);
+    for (let y=0;y<H;y++){ const lat=y/H;
+      for (let x=0;x<W;x++){ const lon=x/W; let e=fbm(lon*P, lat*(P*0.5));
+        e = 0.5 + (e - 0.5) * 1.7;                                          // more contrast → real continents
+        let r,g,b;
+        if (e<0.45){ const d=e/0.45; r=12+d*18; g=46+d*52; b=104+d*64; }    // deep→shallow ocean
+        else if (e<0.475){ r=40; g=124; b=182; }                           // coastal water
+        else if (e<0.5){ r=210; g=198; b=148; }                            // beach
+        else if (e<0.67){ const d=(e-0.5)/0.17; r=44+d*40; g=128+d*46; b=52+d*24; } // GREEN land (wide band)
+        else if (e<0.74){ r=96; g=116; b=56; }                             // hills
+        else { const d=Math.min(1,(e-0.74)/0.1); r=120+d*105; g=125+d*102; b=118+d*108; } // peaks/snow
+        const i=(y*W+x)*4; img.data[i]=r; img.data[i+1]=g; img.data[i+2]=b; img.data[i+3]=255;
+      } }
+    ctx.putImageData(img,0,0); return c;
+  }
+  function cloudCanvas(){
+    const W=1024, H=512, c=document.createElement('canvas'); c.width=W; c.height=H;
+    const ctx=c.getContext('2d'), img=ctx.createImageData(W,H);
+    for (let y=0;y<H;y++) for (let x=0;x<W;x++){ const e=fbm((x/W)*P*1.5+11, (y/H)*(P*0.5)*1.5+7);
+      const a=Math.max(0, Math.min(1,(e-0.52)*3.2))*210; const i=(y*W+x)*4;
+      img.data[i]=img.data[i+1]=img.data[i+2]=255; img.data[i+3]=a; }
+    ctx.putImageData(img,0,0); return c;
+  }
+
+  const R = 5000, CY = -7500;                     // bigger + farther → reads as a full globe
+  const grp = new THREE.Group(); grp.position.set(0, CY, 0);
+
+  const surfTex = new THREE.CanvasTexture(surfaceCanvas()); surfTex.anisotropy = 4;
+  // unlit: shows true colors immune to the scene's bright lights + bloom (which whited it out)
+  const globe = new THREE.Mesh(new THREE.SphereGeometry(R, 96, 64),
+    new THREE.MeshBasicMaterial({ map: surfTex, fog: false }));
+  grp.add(globe);
+
+  const cloudTex = new THREE.CanvasTexture(cloudCanvas());
+  _clouds = new THREE.Mesh(new THREE.SphereGeometry(R*1.012, 80, 48),
+    new THREE.MeshBasicMaterial({ map: cloudTex, transparent: true, opacity: 0.5,
+      depthWrite: false, fog: false }));
+  grp.add(_clouds);
+
+  // atmosphere: fresnel rim glow on a slightly larger back-faced shell
+  const atm = new THREE.Mesh(new THREE.SphereGeometry(R*1.06, 64, 40),
+    new THREE.ShaderMaterial({ side: THREE.BackSide, blending: THREE.AdditiveBlending,
+      transparent: true, depthWrite: false, fog: false,
+      uniforms: { glowColor: { value: new THREE.Color(0x3aa6ff) } },
+      vertexShader: `varying vec3 vN; varying vec3 vP; void main(){ vN=normalize(normalMatrix*normal); vec4 mv=modelViewMatrix*vec4(position,1.0); vP=mv.xyz; gl_Position=projectionMatrix*mv; }`,
+      fragmentShader: `varying vec3 vN; varying vec3 vP; uniform vec3 glowColor; void main(){ vec3 vd=normalize(-vP); float rim=1.0-max(dot(vN,vd),0.0); rim=pow(rim,2.6); gl_FragColor=vec4(glowColor, rim*0.9); }` }));
+  grp.add(atm);
+
+  scene.add(grp); _planet = grp;
+})();
+
+// ---- build the course ----
+let track = null, trackMeshes = [];
+let _pulse = null;                  // streaking-pulse animation state (set in buildCourse)
+let _boostMats = [];                // boost-pad chevron textures (scrolled each frame)
+const _tmpV = new THREE.Vector3();  // scratch vector reused each frame (no per-frame alloc)
+const _tmpV2 = new THREE.Vector3(); // scratch vector 2 (speed-streak orientation)
+const _yUp = new THREE.Vector3(0,1,0);
+const _beatBar = document.getElementById('m-beat');   // live beat meter in the player
+// neon palette the center line cycles through on each beat thud
+let _lastBeat = 0, _hueIdx = 0;
+const BEAT_COLORS = [[0.0,0.9,1.0],[1.0,0.25,0.8],[0.4,1.0,0.5],[1.0,0.6,0.15],[0.6,0.35,1.0]];
+// FUTURISTIC GRID FLOOR: a dark glossy panel with glowing cyan grid lines (Tron look
+// from the reference shots). The grid is a procedural canvas texture used as BOTH the
+// emissive map (lines glow + bloom) and a subtle base map. Brightened from before so
+// the floor NEVER renders near-black: lighter base, real emissive floor, moderate metal.
+let _gridCanvas = null;
+function gridTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d');
+  _gridCanvas = c;
+  // PANEL BACKGROUND must be clearly visible — a near-black panel (my earlier bug) made
+  // the whole floor read black, since this drives both the base color and the emissive.
+  const g = x.createLinearGradient(0,0,0,128);
+  g.addColorStop(0,'#2b4a8f'); g.addColorStop(1,'#1c3263');   // visible medium blue panel
+  x.fillStyle = g; x.fillRect(0,0,128,128);
+  // bright cyan grid lines (these bloom into glowing seams)
+  x.shadowColor = '#5cf0ff'; x.shadowBlur = 7;
+  x.strokeStyle = '#7df6ff'; x.lineWidth = 4; x.strokeRect(3,3,122,122);
+  x.lineWidth = 2; x.strokeStyle = 'rgba(120,230,255,0.7)';
+  for (let i=32;i<128;i+=32){ x.beginPath(); x.moveTo(i,0); x.lineTo(i,128); x.moveTo(0,i); x.lineTo(128,i); x.stroke(); }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(3, 1);
+  return t;
+}
+const _gridTex = gridTexture(), _gridEmis = gridTexture();
+// FLOOR IS NOW UNLIT (MeshBasicMaterial). Evidence from build 3c screenshot: every
+// UNLIT material (rails, rings, trails) renders correctly while every LIT material
+// (floor, walls, ball cores) renders near-black. Unlit = texture color straight to
+// screen — immune to lights, env maps, and ACES shadow-crushing. If THIS still shows
+// black, the texture/UVs are broken and the on-screen diagnostic will prove it.
+const FLOOR_MAT = new THREE.MeshBasicMaterial({ map:_gridTex, side:THREE.DoubleSide });
+const WALL_MAT  = new THREE.MeshStandardMaterial({ color:0x12244e, metalness:0.2, roughness:0.5, transparent:true, opacity:0.55, side:THREE.DoubleSide, emissive:0x1099ee, emissiveIntensity:0.8 });
+const ROOF_MAT  = new THREE.MeshStandardMaterial({ color:0x0a1a3a, metalness:0.6, roughness:0.3, transparent:true, opacity:0.28, side:THREE.DoubleSide, emissive:0x0066aa, emissiveIntensity:0.25, depthWrite:false });
+
+function meshFrom(buffers, mat, weld) {
+  let g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(buffers.positions, 3));
+  if (buffers.uvs) g.setAttribute('uv', new THREE.BufferAttribute(buffers.uvs, 2));
+  g.setIndex(new THREE.BufferAttribute(buffers.indices, 1));
+  if (weld) g = weldVertices(g);   // merge shared verts so shading is smooth, not faceted
+  g.computeVertexNormals();
+  const m = new THREE.Mesh(g, mat); scene.add(m); trackMeshes.push(m); return m;
+}
+
+// Weld vertices that share a position so computeVertexNormals averages across faces
+// = smooth shading (no visible facet edges on the ramp).
+function weldVertices(geo) {
+  const pos = geo.attributes.position.array;
+  const uv = geo.attributes.uv ? geo.attributes.uv.array : null;
+  const oldIdx = geo.index.array;
+  const map = new Map(); const newPos = []; const newUV = []; const remap = new Int32Array(pos.length/3);
+  const key = (x,y,z) => Math.round(x*100)+'_'+Math.round(y*100)+'_'+Math.round(z*100);
+  for (let i=0;i<pos.length/3;i++){
+    const x=pos[i*3],y=pos[i*3+1],z=pos[i*3+2]; const k=key(x,y,z);
+    if (map.has(k)) { remap[i]=map.get(k); }
+    else { const ni=newPos.length/3; map.set(k,ni); newPos.push(x,y,z);
+      if (uv) newUV.push(uv[i*2], uv[i*2+1]); remap[i]=ni; }
+  }
+  const newIdx = new Uint32Array(oldIdx.length);
+  for (let i=0;i<oldIdx.length;i++) newIdx[i]=remap[oldIdx[i]];
+  const ng = new THREE.BufferGeometry();
+  ng.setAttribute('position', new THREE.Float32BufferAttribute(newPos,3));
+  if (uv) ng.setAttribute('uv', new THREE.Float32BufferAttribute(newUV,2));
+  ng.setIndex(new THREE.BufferAttribute(newIdx,1));
+  return ng;
+}
+
+function buildCourse(seed) {
+  trackMeshes.forEach(m => scene.remove(m)); trackMeshes = [];
+  // EXPERIMENTAL: ?forks=divergent enables the true divergent-route forks (two separate
+  // ribbons that bow apart and rejoin). Default is the clean side-by-side lane forks.
+  if (typeof ZFORK !== 'undefined' && ZFORK.setDivergent)
+    ZFORK.setDivergent(new URLSearchParams(location.search).get('forks') === 'divergent');
+  // wire the (now-built) env map into the glossy floor/wall so they reflect the sky+rails
+  if (_envMap) { WALL_MAT.envMap = _envMap; ROOF_MAT.envMap = _envMap;
+    WALL_MAT.needsUpdate = ROOF_MAT.needsUpdate = true; }
+  // Track length randomized per seed but DETERMINISTIC (same seed = same race, required
+  // for fair/wagered races). ~620–820 nodes targets roughly a 2–3 min completion;
+  // was a flat 1100 which felt too long. Derived from the seed, never Math.random.
+  const lenRng = (Math.abs((seed * 2654435761) >>> 0) % 200);   // 0..199
+  const trackLen = 620 + lenRng;                                  // 620..819
+  track = ZTRACK.generate(seed, trackLen, _fieldSize || 20);
+  if (typeof computeMiniBounds === 'function') computeMiniBounds();
+  meshFrom(track.mesh.floor, FLOOR_MAT, true);   // weld = smooth-shaded ramp
+  meshFrom(track.mesh.walls, WALL_MAT);
+  if (track.mesh.roof && track.mesh.roof.indices.length) meshFrom(track.mesh.roof, ROOF_MAT);
+  // draw each fork branch ribbon
+  if (track.branchMeshes) {
+    for (const bm of track.branchMeshes) {
+      meshFrom(bm.mesh.floor, FLOOR_MAT, true);
+      meshFrom(bm.mesh.walls, WALL_MAT);
+      if (bm.mesh.roof && bm.mesh.roof.indices.length) meshFrom(bm.mesh.roof, ROOF_MAT);
+    }
+  }
+  // GLOWING TUBE RAILS along both track edges. The old rails were 1-pixel lines —
+  // tubes have real thickness, catch the bloom pass, and read as the Tron light-edge
+  // from any distance. Sampled every 4th node to keep the geometry cheap.
+  function buildRail(side, color) {
+    const pts = [];
+    for (let i = 0; i < track.nodes.length; i += 4) {
+      const n = track.nodes[i];
+      pts.push(new THREE.Vector3(
+        n.pos.x + n.right.x * n.halfW * side,
+        n.pos.y + 0.12,
+        n.pos.z + n.right.z * n.halfW * side
+      ));
+    }
+    const curve = new THREE.CatmullRomCurve3(pts);
+    const geo = new THREE.TubeGeometry(curve, pts.length * 2, 0.11, 6, false);
+    const mat = new THREE.MeshBasicMaterial({ color });   // unlit = full brightness = blooms
+    const mesh = new THREE.Mesh(geo, mat);
+    scene.add(mesh); trackMeshes.push(mesh);
+  }
+  buildRail(-1, 0x00e5ff);   // left: cyan
+  buildRail( 1, 0xff8800);   // right: orange
+
+  // CENTER ENERGY LANE + RAIL HALOS + STREAKING PULSES — these add depth and *motion*
+  // (the thing a static glowing track lacks). The centerline curve is reused for all
+  // three and stored on `_pulse` so the render loop can animate the streaks forward.
+  const cpts = [];
+  for (let i = 0; i < track.nodes.length; i += 3) {
+    const n = track.nodes[i];
+    cpts.push(new THREE.Vector3(n.pos.x, n.pos.y + 0.14, n.pos.z));
+  }
+  const centerCurve = new THREE.CatmullRomCurve3(cpts);
+  // bright center lane down the middle of the floor
+  const laneGeo = new THREE.TubeGeometry(centerCurve, cpts.length * 2, 0.09, 6, false);
+  const lane = new THREE.Mesh(laneGeo, new THREE.MeshBasicMaterial({
+    color:0x39c8e0, transparent:true, opacity:0.26, blending:THREE.AdditiveBlending, depthWrite:false }));
+  scene.add(lane); trackMeshes.push(lane);
+  // faint wide HALO around each edge rail (makes the rails read thick + glowy)
+  for (const [side, col] of [[-1,0x0090ff],[1,0xff5500]]) {
+    const hp = [];
+    for (let i = 0; i < track.nodes.length; i += 4) {
+      const n = track.nodes[i];
+      hp.push(new THREE.Vector3(n.pos.x + n.right.x*n.halfW*side, n.pos.y+0.12, n.pos.z + n.right.z*n.halfW*side));
+    }
+    const hgeo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(hp), hp.length*2, 0.34, 6, false);
+    const halo = new THREE.Mesh(hgeo, new THREE.MeshBasicMaterial({
+      color:col, transparent:true, opacity:0.16, blending:THREE.AdditiveBlending, depthWrite:false }));
+    scene.add(halo); trackMeshes.push(halo);
+  }
+  _pulse = { lane, laneBaseOpacity: 0.26 };
+
+  // NEON ARCH GATES spanning the track every ~70 nodes. archR = halfW so the two legs
+  // of the half-torus land exactly on the left/right floor edges (they were at 1.3x =
+  // floating outside the track = 'not attached'). Lowered slightly so legs touch floor.
+  for (let i = track.platform.endIdx + 40; i < track.nodes.length - 10; i += 70) {
+    const n = track.nodes[i];
+    if (n.kind === 'spiral' || n.kind === 'tunnel') continue;   // skip messy sections
+    const archR = n.halfW * 1.02;
+    const arch = new THREE.Mesh(
+      new THREE.TorusGeometry(archR, 0.22, 10, 32, Math.PI),  // half torus = arch
+      new THREE.MeshStandardMaterial({ color:0x0a2a4a, metalness:0.8, roughness:0.3,
+        emissive:0x00e5ff, emissiveIntensity:2.2 })   // hot enough to bloom
+    );
+    arch.position.set(n.pos.x, n.pos.y - 0.1, n.pos.z);
+    // The half-torus arcs over the top half of its local XY plane. We want that plane to
+    // face along the track direction so the arch spans left-right and rises overhead.
+    // Build a basis: across = n.right (arch width), up = world up, forward = n.dir.
+    const m4 = new THREE.Matrix4();
+    const across = new THREE.Vector3(n.right.x, 0, n.right.z).normalize();
+    const up = new THREE.Vector3(0,1,0);
+    const fwd = new THREE.Vector3().crossVectors(across, up).normalize();
+    m4.makeBasis(across, up, fwd);
+    arch.quaternion.setFromRotationMatrix(m4);
+    scene.add(arch); trackMeshes.push(arch);
+  }
+
+  // FINISH LINE: a checkered banner on two glowing posts, placed at the win node (where a
+  // ball is counted as finished). Faces back up the track so it reads as you approach.
+  (function finishLine(){
+    const fi = Math.max(1, track.nodes.length - 3);
+    const n = track.nodes[fi];
+    const across = new THREE.Vector3(n.right.x, 0, n.right.z).normalize();
+    const up = new THREE.Vector3(0, 1, 0);
+    const fwd = new THREE.Vector3().crossVectors(across, up).normalize();
+    const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(across, up, fwd));
+    const W = n.halfW + 0.4, postH = 5;
+    const grp = new THREE.Group();
+    grp.position.set(n.pos.x, n.pos.y - 0.1, n.pos.z);
+    grp.quaternion.copy(q);
+    // checkered banner texture
+    const cv = document.createElement('canvas'); cv.width = 256; cv.height = 32;
+    const cx = cv.getContext('2d'); const NX = 16, NY = 2, sx = cv.width/NX, sy = cv.height/NY;
+    for (let a=0;a<NX;a++) for (let b=0;b<NY;b++){ cx.fillStyle = ((a+b)%2)?'#ffffff':'#0b0b14'; cx.fillRect(a*sx,b*sy,sx,sy); }
+    const tex = new THREE.CanvasTexture(cv);
+    // glowing posts + top bar (hot emissive = catches bloom)
+    const glowMat = new THREE.MeshStandardMaterial({ color:0x0a2a4a, metalness:0.8, roughness:0.3, emissive:0x00ffcc, emissiveIntensity:2.5 });
+    for (const s of [-1, 1]) {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, postH, 10), glowMat);
+      post.position.set(s*W, postH/2 - 0.1, 0); grp.add(post);
+    }
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(W*2, 0.2, 0.2), glowMat);
+    bar.position.set(0, postH - 0.1, 0); grp.add(bar);
+    // checkered banner just under the top bar
+    const banner = new THREE.Mesh(new THREE.PlaneGeometry(W*2, 1.5),
+      new THREE.MeshBasicMaterial({ map:tex, side:THREE.DoubleSide, transparent:true }));
+    banner.position.set(0, postH - 0.95, 0); grp.add(banner);
+    scene.add(grp); trackMeshes.push(grp);
+  })();
+
+  // BOOST PADS — glowing chevron strips along BOTH edges of each boost zone (F-Zero style).
+  // Chevron texture scrolls forward (animated in the loop) to read as "speed this way".
+  _boostMats = [];
+  if (track.boosts && track.boosts.length) {
+    // forward-pointing chevron texture (bright amber on transparent)
+    const bc = document.createElement('canvas'); bc.width = 32; bc.height = 32;
+    const bx = bc.getContext('2d'); bx.strokeStyle = '#5a88ff'; bx.lineWidth = 7; bx.lineCap = 'round';
+    bx.beginPath(); bx.moveTo(5,22); bx.lineTo(16,8); bx.lineTo(27,22); bx.stroke();
+    for (const z of track.boosts) {
+      for (const side of [-1, 1]) {
+        const pts = [];
+        for (let i = z.startIdx; i <= z.endIdx; i++) {
+          const n = track.nodes[i];
+          const off = n.halfW * 0.82 * side;
+          pts.push(new THREE.Vector3(n.pos.x + n.right.x*off, n.pos.y + 0.16, n.pos.z + n.right.z*off));
+        }
+        if (pts.length < 2) continue;
+        const tex = new THREE.CanvasTexture(bc);
+        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(1, Math.max(2, pts.length * 0.5));
+        const geo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), pts.length*2, 0.42, 5, false);
+        const mat = new THREE.MeshBasicMaterial({ map:tex, color:0x2a4cff, transparent:true,
+          opacity:0.95, blending:THREE.AdditiveBlending, depthWrite:false });
+        const strip = new THREE.Mesh(geo, mat);
+        scene.add(strip); trackMeshes.push(strip);
+        _boostMats.push(tex);
+      }
+    }
+  }
+}
+
+// ---- balls: SCI-FI metallic orb + glowing laser saturn ring ----
+const SPHERE_GEO = new THREE.SphereGeometry(BALL_R, 40, 28);          // smooth metallic core
+const RING_GEO   = new THREE.TorusGeometry(BALL_R*1.55, 0.06, 16, 64); // thin bright laser ring
+const RING_GLOW_GEO = new THREE.TorusGeometry(BALL_R*1.55, 0.16, 16, 64); // fat soft glow
+const BAND_GEO   = new THREE.TorusGeometry(BALL_R*1.02, 0.10, 12, 48); // equatorial energy band
+// shared environment so metal actually reflects something (cheap cubemap-less reflection)
+const _envColor = new THREE.Color(0x223355);
+const zorbs = new Map(); // id -> { mesh, ring, color, spawnT, spawnAnim, eliminated }
+
+const PALETTE = [0xff3366,0x33ddff,0xffcc00,0x66ff88,0xcc66ff,0xff8844,0x44ffdd,0xff66aa];
+let colorIdx = 0;
+
+// floating nameplate above each marble. Rendered to a canvas, shown as a camera-facing
+// sprite. Not parented to the ball (the ball rolls — a child would tumble); it follows
+// the ball's position each frame in the render loop instead.
+function makeLabel(text, isMe){
+  text = String(text).slice(0, 12);
+  const cv = document.createElement('canvas'); cv.width = 256; cv.height = 64;
+  const x = cv.getContext('2d');
+  x.font = 'bold 34px "Courier New",monospace'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.lineWidth = 7; x.strokeStyle = 'rgba(0,0,0,.9)'; x.strokeText(text, 128, 36);
+  x.fillStyle = isMe ? '#ffe070' : '#eaf6ff'; x.fillText(text, 128, 36);
+  const tex = new THREE.CanvasTexture(cv); tex.minFilter = THREE.LinearFilter;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false }));
+  sp.scale.set(2.4, 0.6, 1); sp.renderOrder = 999;
+  return sp;
+}
+
+function makeZorb(id, prefs, isSub, platform) {
+  const cos = ZCOSMETICS.resolveForPlayer(prefs, isSub, prefs.owned || []);
+  const color = (cos.skin.color != null) ? cos.skin.color : PALETTE[(colorIdx++) % PALETTE.length];
+  const accent = new THREE.Color(color);
+  const baseCol = new THREE.Color(color);
+
+  // ---- skin material builder (procedural textures, no external assets) ----
+  const core = new THREE.Mesh(SPHERE_GEO, buildCoreMaterial(cos.skin, baseCol, accent));
+  scene.add(core);
+
+  // DARK OUTLINE: a slightly larger back-face black shell behind the ball gives a thin
+  // dark rim so pale colors (yellow/cyan) pop against the light floor. Cheap, huge
+  // readability win — classic toon/outline trick.
+  const outline = new THREE.Mesh(SPHERE_GEO, new THREE.MeshBasicMaterial({
+    color: 0x0a1428, side: THREE.BackSide
+  }));
+  outline.scale.setScalar(1.035); core.add(outline);
+
+  // MOTION TRAIL: a short fading streak of the ball's recent positions, in its color,
+  // additive so it blooms into a speed-light. Faster ball = longer visible streak.
+  const TRAIL_LEN = 14;
+  // prefilled at first physics sync (see loop) — a zero-filled buffer drew giant lines
+  // from each ball to the world origin (the huge red streak across the screen).
+  const trailPos = new Float32Array(TRAIL_LEN * 3);
+  trailPos._unset = true;
+  const trailGeo = new THREE.BufferGeometry();
+  trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPos, 3));
+  const trail = new THREE.Line(trailGeo, new THREE.LineBasicMaterial({
+    color: accent, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false
+  }));
+  trail.frustumCulled = false; scene.add(trail);
+
+  // SPEED STREAK: a comet tail behind the ball that stretches with speed (sense of speed).
+  // Not parented to the core (so the ball's roll doesn't spin it); oriented to velocity
+  // in the loop. Hidden at low speed, grows + brightens the faster the ball goes.
+  const streak = new THREE.Mesh(
+    new THREE.ConeGeometry(BALL_R * 0.78, 1, 14, 1, true),
+    new THREE.MeshBasicMaterial({ color: accent, transparent:true, opacity:0,
+      blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide })
+  );
+  streak.frustumCulled = false; streak.visible = false; scene.add(streak);
+
+  // EQUATORIAL ENERGY BAND hugging the orb (toned down so it accents, not blinds)
+  const band = new THREE.Mesh(BAND_GEO, new THREE.MeshBasicMaterial({
+    color: accent, transparent:true, opacity:0.55, blending:THREE.AdditiveBlending, depthWrite:false
+  }));
+  band.rotation.x = Math.PI/2; core.add(band);
+
+  // LASER SATURN RING: bright thin ring + a soft glow. Both dialed back hard — the
+  // bloom pass now supplies the glow, so the source pixels don't need to be pure white.
+  let ring = null, ringGlow = null;
+  if (cos.ring.enabled) {
+    const rc = (cos.ring.color != null) ? new THREE.Color(cos.ring.color) : accent;
+    ring = new THREE.Mesh(RING_GEO, new THREE.MeshBasicMaterial({
+      color: rc, transparent:true, opacity:0.55, blending:THREE.AdditiveBlending, depthWrite:false
+    }));
+    ring.rotation.x = Math.PI/2; ring.renderOrder = 6; scene.add(ring);
+    ringGlow = new THREE.Mesh(RING_GLOW_GEO, new THREE.MeshBasicMaterial({
+      color: rc, transparent:true, opacity:0.1, blending:THREE.AdditiveBlending, depthWrite:false
+    }));
+    ringGlow.rotation.x = Math.PI/2; ringGlow.renderOrder = 5; scene.add(ringGlow);
+  }
+
+  // soft fresnel rim glow — much fainter (was 0.28, the main culprit in the white blob)
+  const glow = new THREE.Mesh(SPHERE_GEO, new THREE.MeshBasicMaterial({
+    color: accent, transparent:true, opacity:0.12, side:THREE.BackSide,
+    blending:THREE.AdditiveBlending, depthWrite:false
+  }));
+  glow.scale.setScalar(1.18); core.add(glow);
+
+  const label = makeLabel(id, id === _myMarble); scene.add(label);
+
+  zorbs.set(id, {
+    mesh: core, ring, ringGlow, band, color, trail, trailPos, trailLen: TRAIL_LEN, streak, label,
+    platform: platform || 'guest',
+    spawnT: 0, spawnAnim: cos.spawn, ringSpin: cos.ring.spin || 2.0,
+    ringBob: Math.random()*Math.PI*2, eliminated:false, fallT:0,
+    rollQ: new THREE.Quaternion(),
+  });
+}
+
+// Build the core material for a skin style. Procedural canvas textures so there are no
+// external asset downloads — works offline, deterministic, cheap.
+const _texCache = {};
+function galaxyTexture() {
+  if (_texCache.galaxy) return _texCache.galaxy;
+  const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d');
+  const g = x.createLinearGradient(0,0,256,256);
+  g.addColorStop(0,'#1a0b3a'); g.addColorStop(0.5,'#3a1b6a'); g.addColorStop(1,'#0a0520');
+  x.fillStyle = g; x.fillRect(0,0,256,256);
+  for (let i=0;i<60;i++){ x.globalAlpha=0.1+Math.random()*0.3; x.fillStyle=['#ff66cc','#66ccff','#ffffff'][i%3];
+    x.beginPath(); x.arc(Math.random()*256,Math.random()*256,8+Math.random()*30,0,7); x.fill(); }
+  x.globalAlpha=1; for (let i=0;i<140;i++){ x.fillStyle='#ffffff';
+    x.fillRect(Math.random()*256,Math.random()*256,Math.random()<0.2?2:1,1); }
+  const t = new THREE.CanvasTexture(c); _texCache.galaxy = t; return t;
+}
+function lavaTexture() {
+  if (_texCache.lava) return _texCache.lava;
+  const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d');
+  x.fillStyle='#1a0500'; x.fillRect(0,0,256,256);
+  for (let i=0;i<28;i++){ const gx=Math.random()*256, gy=Math.random()*256;
+    const g=x.createRadialGradient(gx,gy,0,gx,gy,30+Math.random()*40);
+    g.addColorStop(0,'#fff2a0'); g.addColorStop(0.4,'#ff7a18'); g.addColorStop(1,'rgba(60,5,0,0)');
+    x.fillStyle=g; x.fillRect(0,0,256,256); }
+  const t = new THREE.CanvasTexture(c); _texCache.lava = t; return t;
+}
+function buildCoreMaterial(skin, baseCol, accent) {
+  const style = skin.style || 'metal';
+  if (style === 'galaxy') {
+    return new THREE.MeshStandardMaterial({ map: galaxyTexture(), color: 0xffffff,
+      metalness: 0.3, roughness: 0.4, emissive: 0x6633cc, emissiveIntensity: 0.5,
+      emissiveMap: galaxyTexture(), envMap: _envMap || null, envMapIntensity: 0.8 });
+  }
+  if (style === 'lava') {
+    return new THREE.MeshStandardMaterial({ map: lavaTexture(), color: 0xffffff,
+      metalness: 0.2, roughness: 0.6, emissive: 0xff5500, emissiveIntensity: 0.9,
+      emissiveMap: lavaTexture() });
+  }
+  if (style === 'glass' && THREE.MeshPhysicalMaterial) {
+    return new THREE.MeshPhysicalMaterial({ color: baseCol, metalness: 0.0, roughness: 0.04,
+      transmission: 0.92, thickness: 0.6, ior: 1.4, transparent: true,
+      emissive: accent, emissiveIntensity: 0.12,
+      clearcoat: 1.0, clearcoatRoughness: 0.05, envMap: _envMap || null, envMapIntensity: 1.0 });
+  }
+  // default: metallic sci-fi orb (clearcoat sheen if available). Emissive floored so it
+  // never renders as a black silhouette regardless of light angle.
+  const params = {
+    color: baseCol,
+    metalness: skin.metalness != null ? skin.metalness : 0.55,
+    roughness: skin.roughness != null ? skin.roughness : 0.3,
+    emissive: accent,
+    emissiveIntensity: Math.max(0.32, skin.emissive != null ? skin.emissive : 0),
+    envMap: _envMap || null, envMapIntensity: 1.0,
+  };
+  if (THREE.MeshPhysicalMaterial) { params.clearcoat = 0.6; params.clearcoatRoughness = 0.15;
+    return new THREE.MeshPhysicalMaterial(params); }
+  return new THREE.MeshStandardMaterial(params);
+}
+
+// ---- game state ----
+let phase = 'idle';   // idle | spawning | racing | done
+let _fieldSize = 20;
+let spawnQueue = [], spawnTimer = 0;
+let winner = null;
+
+// ---- live HUD: standings, action feed, end podium ----
+const standingsEl = document.getElementById('standings');
+const feedEl = document.getElementById('feed');
+const endcardEl = document.getElementById('endcard');
+let _finishOrder = [], _winAt = 0, _lastLeaderId = null;
+const _finishedSet = new Set(), _fellSet = new Set(), _boostState = {}, _boostCool = {};
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function cssColor(c){ const n = (c==null)?0x8899aa : (typeof c==='number'? c : (c.getHex? c.getHex():0x8899aa)); return '#'+(n>>>0 & 0xffffff).toString(16).padStart(6,'0'); }
+function pushFeed(cls, html){
+  const d = document.createElement('div'); d.className = 'ev '+cls; d.innerHTML = html;
+  feedEl.prepend(d);
+  while (feedEl.children.length > 6) feedEl.removeChild(feedEl.lastChild);
+  setTimeout(() => { if (d.parentNode){ d.style.transition='opacity .5s'; d.style.opacity='0'; setTimeout(()=>d.remove(), 500); } }, 6500);
+}
+function resetHUD(){
+  _finishOrder = []; _winAt = 0; _lastLeaderId = null;
+  _finishedSet.clear(); _fellSet.clear();
+  for (const k in _boostState) delete _boostState[k];
+  for (const k in _boostCool) delete _boostCool[k];
+  standingsEl.innerHTML = ''; feedEl.innerHTML = ''; endcardEl.style.display = 'none';
+}
+function platformBadge(p){
+  // small platform logo next to real (signed-in) players. Twitch/YouTube light up once those
+  // logins are added; bots and anonymous guests get nothing.
+  if (p === 'kick') return '<span class="pf kick" title="Kick">K</span>';
+  if (p === 'twitch') return '<span class="pf twitch" title="Twitch">T</span>';
+  if (p === 'youtube') return '<span class="pf yt" title="YouTube">▶</span>';
+  return '';
+}
+function updateHUD(snap, nowSec){
+  const rows = [];
+  zorbs.forEach((z, id) => rows.push({ id, z, s: snap[id], fin: _finishedSet.has(id), out: z.eliminated }));
+  rows.sort((a,b) => {
+    if (a.fin && b.fin) return _finishOrder.indexOf(a.id) - _finishOrder.indexOf(b.id);
+    if (a.fin !== b.fin) return a.fin ? -1 : 1;
+    if (a.out !== b.out) return a.out ? 1 : -1;
+    return (b.s ? b.s.progress : 0) - (a.s ? a.s.progress : 0);
+  });
+  let html = '';
+  rows.forEach((r, i) => {
+    const cls = (r.fin ? 'fin' : (r.out ? 'out' : (i === 0 ? 'lead' : ''))) + (r.id === _myMarble ? ' you' : '');
+    const st = r.fin ? ('#'+(_finishOrder.indexOf(r.id)+1)) : (r.out ? 'OUT' : '');
+    const nm = platformBadge(r.z.platform) + esc(r.id) + (r.id === _myMarble ? ' <span class="youtag">YOU</span>' : '');
+    html += '<div class="row '+cls+'"><span class="rank">'+(i+1)+'</span><span class="dot" style="color:'+cssColor(r.z.color)+'"></span><span class="nm">'+nm+'</span><span class="st">'+st+'</span></div>';
+  });
+  standingsEl.innerHTML = html;
+  // lead-change feed (only among still-racing balls, before anyone wins)
+  const top = rows.find(r => !r.fin && !r.out);
+  if (top && !winner && _lastLeaderId && top.id !== _lastLeaderId) pushFeed('lead', '<b>'+esc(top.id)+'</b> took the lead!');
+  if (top && !winner) _lastLeaderId = top.id;
+  // boost feed (rising edge, per-ball cooldown)
+  zorbs.forEach((z, id) => {
+    const s = snap[id]; if (!s || z.eliminated) return;
+    const boosting = s.boost > 0.5;
+    if (boosting && !_boostState[id] && (nowSec - (_boostCool[id]||0)) > 4) { pushFeed('boost', '<b>'+esc(id)+'</b> used boost!'); _boostCool[id] = nowSec; }
+    _boostState[id] = boosting;
+  });
+}
+// ---- PERSISTENT PLAYER STATS (per browser, localStorage) so returning players see their
+// overall record. A server-side GLOBAL leaderboard comes with the DB/dashboard phase; this
+// is the local tracker we'll wire into that later. ----
+function loadStats(){ try { return JSON.parse(localStorage.getItem('zorbs_stats')) || {}; } catch(_){ return {}; } }
+function saveStats(s){ try { localStorage.setItem('zorbs_stats', JSON.stringify(s)); } catch(_){} }
+function recordResult(place){
+  const s = loadStats();
+  s.races = (s.races||0) + 1;
+  if (place === 1) s.wins = (s.wins||0) + 1;
+  if (place >= 1 && place <= 3) s.podiums = (s.podiums||0) + 1;
+  if (place >= 1 && (!s.best || place < s.best)) s.best = place;
+  if (_myMarble) s.name = _myMarble;
+  saveStats(s); return s;
+}
+function statsLine(s){
+  if (!s || !s.races) return '';
+  return s.races + ' races · ' + (s.wins||0) + ' wins · ' + (s.podiums||0) + ' podiums · best ' + (s.best ? '#'+s.best : '—');
+}
+
+function showEndCard(){
+  // prefer the server's official result so every screen matches; fall back to local.
+  let order, finishedCount;
+  if (_mpMode && _officialOrder && _officialSlot === _mpSlot) {
+    order = _officialOrder.slice(); finishedCount = _officialFinished;
+  } else {
+    order = _finishOrder.slice();
+    zorbs.forEach((z, id) => { if (!_finishedSet.has(id)) order.push(id); });
+    finishedCount = _finishOrder.length;
+  }
+  const champ = order[0];
+  endcardEl.querySelector('.champ').innerHTML = champ ? ('<span class="c">🏆</span><br>'+esc(champ)) : '—';
+  const medal = ['gold','silver','bronze'];
+  let html = '';
+  order.forEach((id, i) => {
+    const z = zorbs.get(id); const isFin = i < finishedCount; const tag = isFin ? '' : ' · DNF';
+    html += '<div class="prow '+(medal[i]||'')+'"><span class="p">'+(i+1)+'</span><span class="dot" style="color:'+cssColor(z?z.color:0)+'"></span><span style="flex:1">'+esc(id)+'</span><span style="opacity:.7;font-size:11px">'+(i===0?'WINNER':('#'+(i+1)+tag))+'</span></div>';
+  });
+  endcardEl.querySelector('.places').innerHTML = html;
+  // record + show THIS browser-player's running stats — once per race
+  const statsEl = endcardEl.querySelector('.mystats');
+  if (_myMarble && zorbs.has(_myMarble) && _recordedSlot !== _mpSlot) {
+    _recordedSlot = _mpSlot;
+    const idx = order.indexOf(_myMarble);
+    const myPlace = (idx >= 0 && idx < finishedCount) ? (idx + 1) : 0;  // 0 = DNF
+    const s = recordResult(myPlace);
+    if (statsEl) statsEl.textContent = 'YOUR RECORD — ' + statsLine(s);
+  }
+  const againBtn = endcardEl.querySelector('.again');
+  if (_mpMode) { againBtn.textContent = 'NEXT RACE STARTING SOON…'; againBtn.disabled = true; againBtn.style.cursor = 'default'; }
+  endcardEl.style.display = 'flex';
+}
+document.querySelector('#endcard .again').addEventListener('click', () => location.reload());
+
+// ---- MINIMAP: top-down track + live marble positions (bottom-right, above the player) ----
+const miniCv = document.getElementById('minimap');
+const miniCtx = miniCv.getContext('2d');
+let _miniBounds = null;
+function computeMiniBounds(){
+  if (!track || !track.nodes || !track.nodes.length) { _miniBounds = null; return; }
+  let a=1e9,b=-1e9,c=1e9,d=-1e9;
+  for (const n of track.nodes){ const x=n.pos.x, z=n.pos.z; if(x<a)a=x; if(x>b)b=x; if(z<c)c=z; if(z>d)d=z; }
+  _miniBounds = { minx:a, maxx:b, minz:c, maxz:d };
+}
+function drawMinimap(snap){
+  if (!_miniBounds || !track) { miniCtx.clearRect(0,0,miniCv.width,miniCv.height); return; }
+  const W=miniCv.width, H=miniCv.height, pad=12, bn=_miniBounds;
+  const sc = Math.min((W-2*pad)/Math.max(1,bn.maxx-bn.minx), (H-2*pad)/Math.max(1,bn.maxz-bn.minz));
+  const ox = (W-(bn.maxx-bn.minx)*sc)/2, oz = (H-(bn.maxz-bn.minz)*sc)/2;
+  const px = x => ox+(x-bn.minx)*sc, pz = z => oz+(z-bn.minz)*sc;
+  miniCtx.clearRect(0,0,W,H);
+  // track path (break at fork gaps)
+  miniCtx.beginPath(); let pen=false;
+  for (let i=0;i<track.nodes.length;i+=2){ const n=track.nodes[i]; if(n.meshSkip){pen=false;continue;}
+    const X=px(n.pos.x), Z=pz(n.pos.z); if(!pen){miniCtx.moveTo(X,Z);pen=true;} else miniCtx.lineTo(X,Z); }
+  miniCtx.strokeStyle='rgba(130,205,255,.55)'; miniCtx.lineWidth=2.5; miniCtx.lineJoin='round'; miniCtx.stroke();
+  // start (green) + finish (gold)
+  const s0 = track.start || track.nodes[0];
+  const fN = track.finish || track.nodes[track.nodes.length-1];
+  if(s0){ miniCtx.fillStyle='#5fe08a'; miniCtx.beginPath(); miniCtx.arc(px(s0.pos.x),pz(s0.pos.z),3,0,7); miniCtx.fill(); }
+  if(fN){ miniCtx.fillStyle='#ffd24a'; miniCtx.beginPath(); miniCtx.arc(px(fN.pos.x),pz(fN.pos.z),3,0,7); miniCtx.fill(); }
+  // marbles
+  zorbs.forEach((z,id)=>{ const s=snap[id]; if(!s) return; const X=px(s.x), Z=pz(s.z); const me=(id===_myMarble);
+    miniCtx.beginPath(); miniCtx.arc(X,Z, me?4.5:3, 0,7);
+    miniCtx.fillStyle = z.eliminated ? 'rgba(120,120,120,.45)' : cssColor(z.color); miniCtx.fill();
+    if(me){ miniCtx.strokeStyle='#ffe070'; miniCtx.lineWidth=2; miniCtx.stroke(); }
+  });
+}
+
+function startRace(seed, names) {
+  _fieldSize = names.length;
+  buildCourse(seed);
+  ZPHYSICS.clearBalls();
+  ZPHYSICS.setTrack(track.collider, track.nodes, { forks: track.forks, branchColliders: track.branchColliders });  // new track each race
+  zorbs.forEach(z => { scene.remove(z.mesh); if(z.ring) scene.remove(z.ring); if(z.ringGlow) scene.remove(z.ringGlow); if(z.trail) scene.remove(z.trail); if(z.streak) scene.remove(z.streak); if(z.label) scene.remove(z.label); });
+  _explosions.forEach(e => { scene.remove(e.pts); scene.remove(e.flash); }); _explosions.length = 0;
+  _resultSent = false; _officialOrder = null; _officialSlot = -1; _boostQueue.length = 0;
+  zorbs.clear(); colorIdx = 0; winner = null;
+  // queue spawns at the start of the track, staggered for a nice entrance
+  spawnQueue = names.map((nm, i) => ({ id: nm.id, prefs: nm.prefs, isSub: nm.isSub, delay: i*0.12 }));
+  spawnTimer = 0; _spawnIndex = 0;
+  phase = 'spawning';
+  resetHUD();
+}
+
+let _spawnIndex = 0;
+function spawnOne(item) {
+  makeZorb(item.id, item.prefs, item.isSub, item.platform);
+  // Place in a grid on the platform: rows across the width, columns down its length,
+  // starting near the BACK so nobody spawns past the front edge.
+  const plat = track.platform;
+  const perRow = 6;
+  const row = Math.floor(_spawnIndex / perRow);
+  const col = _spawnIndex % perRow;
+  _spawnIndex++;
+  // node near the back third of the platform for this row
+  const backNodeIdx = Math.max(1, Math.min(plat.endIdx - 2, 2 + row * 2));
+  const n = track.nodes[backNodeIdx];
+  // spread columns across the width
+  const lateral = ((col + 0.5) / perRow - 0.5) * n.halfW * 1.7;
+  const sx = n.pos.x + n.right.x * lateral;
+  const sz = n.pos.z + n.right.z * lateral;
+  ZPHYSICS.addBall(item.id, { x: sx, y: n.pos.y + BALL_R*1.5, z: sz }); // sit ON the surface
+}
+
+// ---- EXPLOSIONS: a burst of particles in the ball's color when it finishes or falls off ----
+const _explosions = [];
+function explode(x, y, z, color){
+  const N = 44;
+  const pos = new Float32Array(N*3), vel = [];
+  for (let i=0;i<N;i++){
+    pos[i*3]=x; pos[i*3+1]=y; pos[i*3+2]=z;
+    const a=Math.random()*Math.PI*2, p=Math.random()*Math.PI - Math.PI/2, sp=5+Math.random()*10;
+    vel.push(new THREE.Vector3(Math.cos(a)*Math.cos(p)*sp, Math.abs(Math.sin(p))*sp+4, Math.sin(a)*Math.cos(p)*sp));
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const mat = new THREE.PointsMaterial({ color, size:0.55, transparent:true, opacity:1,
+    blending:THREE.AdditiveBlending, depthWrite:false });
+  const pts = new THREE.Points(g, mat); pts.frustumCulled = false; scene.add(pts);
+  // a quick bright flash sphere at the center
+  const flash = new THREE.Mesh(SPHERE_GEO, new THREE.MeshBasicMaterial({ color, transparent:true,
+    opacity:0.9, blending:THREE.AdditiveBlending, depthWrite:false }));
+  flash.position.set(x,y,z); flash.scale.setScalar(0.6); scene.add(flash);
+  _explosions.push({ pts, vel, flash, t:0, life:1.15 });
+}
+function explodeBall(z){
+  if (!z || z.exploded) return;
+  z.exploded = true;
+  const p = z.mesh.position;
+  explode(p.x, p.y, p.z, z.color);
+  // hide everything belonging to this ball — it "blew up"
+  z.mesh.visible = false;
+  if (z.label) z.label.visible = false;
+  if (z.trail) z.trail.visible = false;
+  if (z.streak) z.streak.visible = false;
+  if (z.ring) z.ring.visible = false;
+  if (z.ringGlow) z.ringGlow.visible = false;
+}
+function updateExplosions(dt){
+  for (let i=_explosions.length-1;i>=0;i--){
+    const e = _explosions[i]; e.t += dt;
+    const arr = e.pts.geometry.attributes.position.array;
+    for (let j=0;j<e.vel.length;j++){
+      e.vel[j].y -= 20*dt;                          // gravity
+      arr[j*3]   += e.vel[j].x*dt;
+      arr[j*3+1] += e.vel[j].y*dt;
+      arr[j*3+2] += e.vel[j].z*dt;
+    }
+    e.pts.geometry.attributes.position.needsUpdate = true;
+    const k = e.t/e.life;
+    e.pts.material.opacity = Math.max(0, 1-k);
+    e.pts.material.size = 0.55*(1+k*1.5);
+    e.flash.scale.setScalar(0.6 + k*5);
+    e.flash.material.opacity = Math.max(0, 0.9*(1-k*2.2));
+    if (e.t >= e.life){
+      scene.remove(e.pts); e.pts.geometry.dispose(); e.pts.material.dispose();
+      scene.remove(e.flash); e.flash.material.dispose();
+      _explosions.splice(i,1);
+    }
+  }
+}
+
+// ---- main loop ----
+let last = performance.now();
+const FRAME_CAP = 1000 / 60;        // target 60fps
+let frameAcc = 0, prevRaf = performance.now();
+function loop(now) {
+  requestAnimationFrame(loop);      // always re-queue
+  // frame limiter: only run the sim+render when ~1/60s has elapsed
+  const elapsed = now - prevRaf; prevRaf = now;
+  frameAcc += elapsed;
+  if (frameAcc < FRAME_CAP) return; // skip this RAF tick (high-refresh monitors)
+  frameAcc = Math.min(frameAcc - FRAME_CAP, FRAME_CAP); // keep remainder, avoid drift
+  const rawDt = (now - last)/1000;    // real elapsed (can be large after a tab pause)
+  const dt = Math.min(0.05, rawDt); last = now;
+
+  // streaking energy pulses ride the centerline forward — and the WHOLE TRACK dances to
+  // the music: bass energy drives the center lane, the bloom glow, and the wall emissive,
+  // so the track flashes on the beat. (beat is 0 unless self-hosted audio is playing.)
+  for (let i = 0; i < _boostMats.length; i++) _boostMats[i].offset.y = (now/1000 * 1.4) % 1;
+  if (_planet) _planet.rotation.y += dt * 0.006;       // world turns slowly below
+  if (_clouds) _clouds.rotation.y += dt * 0.004;       // clouds drift a touch faster
+  const beat = sampleBeat();
+  if (_beatBar) _beatBar.style.transform = 'scaleX(' + Math.min(1, beat) + ')';
+  if (_bloom) _bloom.strength = _bloomBase + beat * 0.5;
+  if (typeof WALL_MAT !== 'undefined') WALL_MAT.emissiveIntensity = 0.55 + beat * 1.4;
+  if (typeof ROOF_MAT !== 'undefined') ROOF_MAT.emissiveIntensity = 0.25 + beat * 0.6;
+  // each beat THUD (rising edge) advances the center line to the next neon color
+  if (beat > 0.5 && _lastBeat <= 0.5) _hueIdx = (_hueIdx + 1) % BEAT_COLORS.length;
+  _lastBeat = beat;
+  if (_pulse && _pulse.lane) {
+    const c = BEAT_COLORS[_hueIdx];
+    _pulse.lane.material.color.setRGB(c[0], c[1], c[2]);
+    _pulse.lane.material.opacity = Math.min(0.85, _pulse.laneBaseOpacity + beat * 0.6);
+  }
+
+  if (phase === 'spawning') {
+    spawnTimer += dt;
+    while (spawnQueue.length && spawnTimer >= spawnQueue[0].delay) {
+      spawnOne(spawnQueue.shift());
+    }
+    if (!spawnQueue.length) phase = 'racing';
+  }
+
+  if (phase === 'racing' && ZPHYSICS.isReady()) {
+    // apply any boosts whose shared server-stamped time has arrived (keeps all sims identical)
+    if (_boostQueue.length) {
+      const sNow = Date.now() + _mpOffset;
+      for (let i = _boostQueue.length - 1; i >= 0; i--) {
+        if (_boostQueue[i].at <= sNow) { ZPHYSICS.giveBoost(_boostQueue[i].name, BOOST_AMOUNT); _boostQueue.splice(i, 1); }
+      }
+    }
+    // fixed-timestep with catch-up: after the tab un-pauses, step enough fixed frames to
+    // cover the elapsed wall-clock time (capped) so the race snaps back into server sync.
+    const FIXED = 1/60; let acc = Math.min(2.0, rawDt), steps = 0;
+    do { ZPHYSICS.step(FIXED); acc -= FIXED; steps++; } while (acc >= FIXED && steps < 120);
+    const fallen = ZPHYSICS.checkFalls(_fieldSize);
+    for (const id of fallen) {
+      const z = zorbs.get(id);
+      if (z && !z.eliminated) { z.eliminated = true; explodeBall(z);   // blow up when it falls off
+        if (!_finishedSet.has(id)) { _fellSet.add(id); pushFeed('fell', '<b>'+esc(id)+'</b> fell off!'); } }
+    }
+    // detect EVERY finisher in order (not just the winner) for full standings
+    const snapR = ZPHYSICS.snapshot();
+    const endHint = track.nodes.length - 3;
+    for (const id in snapR) {
+      const z = zorbs.get(id);
+      if (snapR[id].hint >= endHint && !_finishedSet.has(id) && z && !z.eliminated) {
+        _finishedSet.add(id); _finishOrder.push(id); explodeBall(z);   // blow up at the finish line
+        if (_finishOrder.length === 1) { winner = id; _winAt = now; pushFeed('lead', '🏆 <b>'+esc(id)+'</b> WINS!'); }
+        else pushFeed('lead', '<b>'+esc(id)+'</b> finished #'+_finishOrder.length);
+      }
+    }
+    updateHUD(snapR, now/1000);
+    // end the race a few seconds after the winner (lets stragglers place), or when all done
+    const total = zorbs.size;
+    if (winner && ((now - _winAt > 4000) || (_finishedSet.size + _fellSet.size >= total))) {
+      phase = 'done'; reportResult(); showEndCard();
+    }
+  }
+
+  // sync render meshes to physics + run spawn animations
+  const snap = ZPHYSICS.isReady() ? ZPHYSICS.snapshot() : {};
+  updateExplosions(dt);
+  drawMinimap(snap);
+  if (_boostHint) {
+    const mz = _myMarble && zorbs.get(_myMarble);
+    if (phase === 'racing' && mz && !mz.eliminated) {
+      const ready = performance.now() >= _boostReadyAt;
+      _boostHint.style.display = 'block';
+      _boostHint.style.opacity = ready ? '1' : '0.35';
+      _boostHint.textContent = ready ? (_isTouch ? '⚡ BOOST' : '␣ BOOST') : 'BOOST…';
+      _boostHint.style.borderColor = ready ? 'rgba(120,220,255,.8)' : 'rgba(120,120,140,.4)';
+    } else _boostHint.style.display = 'none';
+  }
+  for (const [id, z] of zorbs) {
+    if (z.exploded) continue;               // blown up — its visuals are hidden, skip
+    const s = snap[id];
+    if (s) {
+      z.mesh.position.set(s.x, s.y, s.z);
+      if (z.label) { z.label.position.set(s.x, s.y + BALL_R + 0.95, s.z); z.label.material.opacity = z.eliminated ? 0.35 : 1; }
+    }
+    // spawn animation
+    if (z.spawnT < 1) {
+      z.spawnT = Math.min(1, z.spawnT + dt*1.8);
+      const a = z.spawnAnim.fn(z.spawnT);
+      z.mesh.scale.setScalar(a.scale != null ? a.scale : 1);
+      z.mesh.position.y += (a.yOffset || 0);
+      z.mesh.material.opacity = a.opacity != null ? a.opacity : 1;
+      z.mesh.material.transparent = a.opacity != null && a.opacity < 1;
+    } else {
+      z.mesh.scale.setScalar(1);
+    }
+    // ROLL AT TRAVEL SPEED: spin = distance/radius about the axis perpendicular to
+    // motion, so a fast ball visibly spins fast and a slow one barely turns. (The old
+    // code spun every ball at a constant rate, which read as slow-motion sliding.)
+    if (s) {
+      const sp = Math.hypot(s.vx || 0, s.vz || 0);
+      if (sp > 0.05) {
+        const dirx = s.vx / sp, dirz = s.vz / sp;
+        // roll axis = worldUp × travelDir  (horizontal, perpendicular to motion)
+        const ax = dirz, az = -dirx;             // (0,1,0)×(dirx,0,dirz) = (dirz,0,-dirx)
+        const angle = (sp * dt) / BALL_R;        // arc length / radius
+        z.rollQ.setFromAxisAngle(new THREE.Vector3(ax, 0, az).normalize(), angle);
+        z.mesh.quaternion.premultiply(z.rollQ);
+      }
+      // MOTION TRAIL: shift positions back one slot, write current at the head.
+      const tp = z.trailPos, n = z.trailLen;
+      if (tp._unset) { for (let k=0;k<n;k++){ tp[k*3]=s.x; tp[k*3+1]=s.y; tp[k*3+2]=s.z; } tp._unset = false; }
+      for (let k = n - 1; k > 0; k--) {
+        tp[k*3] = tp[(k-1)*3]; tp[k*3+1] = tp[(k-1)*3+1]; tp[k*3+2] = tp[(k-1)*3+2];
+      }
+      tp[0] = s.x; tp[1] = s.y; tp[2] = s.z;
+      z.trail.geometry.attributes.position.needsUpdate = true;
+      z.trail.visible = !z.eliminated && sp > 2;   // only show a streak when actually moving
+      // SPEED STREAK: stretch a comet tail backward along velocity, growing with speed
+      if (z.streak) {
+        const fast = Math.max(0, sp - 7) / 16;     // 0 below ~7 speed, ramps up past it
+        if (fast > 0.03 && !z.eliminated) {
+          const vd = _tmpV.set(s.vx, 0, s.vz); const vl = vd.length() || 1; vd.multiplyScalar(1/vl);
+          const len = BALL_R * (1.4 + fast * 8);
+          z.streak.position.set(s.x - vd.x*len*0.5, s.y, s.z - vd.z*len*0.5);
+          z.streak.quaternion.setFromUnitVectors(_yUp, _tmpV2.set(-vd.x, 0, -vd.z));
+          z.streak.scale.set(1, len, 1);
+          z.streak.material.opacity = Math.min(0.55, fast * 0.7);
+          z.streak.visible = true;
+        } else z.streak.visible = false;
+      }
+    }
+    // ring follows, stays flat, spins on its own vertical axis
+    if (z.ring) {
+      z.ringBob += dt * z.ringSpin;
+      z.ring.position.copy(z.mesh.position);
+      z.ring.rotation.x = Math.PI/2; z.ring.rotation.z = z.ringBob;
+      z.ring.visible = !z.eliminated;
+      if (z.ringGlow) {
+        z.ringGlow.position.copy(z.mesh.position);
+        z.ringGlow.rotation.x = Math.PI/2; z.ringGlow.rotation.z = z.ringBob;
+        z.ringGlow.visible = !z.eliminated;
+      }
+    }
+    // elimination: drop and fade
+    if (z.eliminated) {
+      z.fallT += dt;
+      z.mesh.position.y -= z.fallT * 6 * dt;
+      z.mesh.material.transparent = true;
+      z.mesh.material.opacity = Math.max(0, 1 - z.fallT*0.7);
+      if (z.fallT > 1.6) { scene.remove(z.mesh); if(z.ring) scene.remove(z.ring); if(z.ringGlow) scene.remove(z.ringGlow); if(z.trail) scene.remove(z.trail); zorbs.delete(id); }
+    }
+  }
+
+  updateCamera(dt);
+
+  if (composer) composer.render(); else renderer.render(scene, camera);
+}
+
+// ---- camera: follow YOUR marble (public mode) or the leader (solo / after you're out) ----
+const camTarget = new THREE.Vector3();
+const camPos = new THREE.Vector3();
+const lookAt = new THREE.Vector3();
+let camLeadIdx = 0;
+function pickCameraTarget(){
+  // in the live game, follow the marble belonging to THIS browser's player...
+  if (_mpMode && _myMarble) { const z = zorbs.get(_myMarble); if (z && !z.eliminated && !z.exploded) return _myMarble; }
+  // ...otherwise (solo, or once your marble has fallen/finished) follow the race leader.
+  return ZPHYSICS.isReady() ? ZPHYSICS.leader() : null;
+}
+function updateCamera(dt) {
+  if (!track) return;
+  // Follow the target's PROGRESS (a centerline node index), not the ball's jittery
+  // position. The node is smooth, so the camera is smooth.
+  const lead = pickCameraTarget();
+  let idx = camLeadIdx;
+  if (lead != null) {
+    const snap = ZPHYSICS.snapshot()[lead];
+    if (snap) idx = snap.progress != null ? snap.progress : snap.hint;
+  }
+  // ease the camera's node index forward (never snaps backward hard)
+  camLeadIdx += (idx - camLeadIdx) * 0.05;
+  const ci = Math.max(0, Math.min(track.nodes.length - 1, Math.round(camLeadIdx)));
+  const node = track.nodes[ci];
+  const ahead = track.nodes[Math.min(track.nodes.length - 1, ci + 10)];
+
+  // desired camera: behind & ABOVE the leader node, along the track direction.
+  // Higher and further back than before (was -14 / +9) — the low angle was skimming
+  // the floor and hiding the pack. This reads as a proper marble-race chase cam.
+  const dir = node.dir;
+  const desired = new THREE.Vector3(
+    node.pos.x - dir.x * 20,
+    node.pos.y + 16,
+    node.pos.z - dir.z * 20
+  );
+  camPos.lerp(desired, 0.05);          // smooth position
+  camera.position.copy(camPos);
+  // look at a point ahead down the track (stable target)
+  lookAt.lerp(new THREE.Vector3(ahead.pos.x, ahead.pos.y - 1, ahead.pos.z), 0.08);
+  camera.lookAt(lookAt);
+}
+
+// ---- boot ----
+// Ask the server for the official race seed (server-authoritative + provably fair). The
+// client never invents the seed for a real race. Local fallback keeps dev/offline working.
+let _raceId = null, _raceServer = false;
+async function fetchRaceSeed(replayId) {
+  try {
+    const url = '/api/race' + (replayId ? ('?raceId=' + encodeURIComponent(replayId)) : '');
+    const r = await fetch(url, { cache:'no-store' });
+    if (r.ok) {
+      const j = await r.json();
+      if (typeof j.seed === 'number') {
+        _raceId = j.raceId; _raceServer = true;
+        return j.seed >>> 0;
+      }
+    }
+  } catch(e) { /* offline / dev */ }
+  _raceId = 'local-' + Math.floor(Math.random()*1e9).toString(36); _raceServer = false;
+  return Math.floor(Math.random()*999999);
+}
+
+// ---- MULTIPLAYER (server-authoritative via the PartyKit race room) ----
+// Everyone connected sees the SAME race: the room hands out a deterministic seed + a shared
+// start time on a fixed schedule, and each browser runs the identical sim locally, syncing to
+// the server clock and highlighting its own marble. Field size is constant so the physics is
+// identical across machines regardless of who's named on which marble.
+const MP_HOST = 'zorbs.thatspeedykid.partykit.dev';
+const MP_ROOM = 'public';
+const MP_SLOT_MS = 95000, MP_LOBBY_MS = 9000, MP_FIELD = 8;
+let _myMarble = null, _joinName = null, _mpMode = false, _kickName = null;
+// server-authoritative result: the first client to finish a race reports the order; the server
+// locks it and broadcasts it as official so every screen shows the SAME outcome.
+let _mpSlot = -1, _officialOrder = null, _officialFinished = 0, _officialSlot = -1;
+let _resultSent = false, _recordedSlot = null;
+// boosts are applied at a SHARED server-stamped time on every client so the live sims (and the
+// leaderboard) stay locked together instead of drifting on per-machine network timing.
+let _mpOffset = 0, _boostQueue = [];
+function reportResult(){
+  if (!_mpMode || _resultSent) return;
+  _resultSent = true;
+  const order = _finishOrder.slice();
+  zorbs.forEach((z, id) => { if (!_finishedSet.has(id)) order.push(id); });
+  if (_mpWS && _mpWS.readyState === 1)
+    _mpWS.send(JSON.stringify({ type:'result', slot:_mpSlot, order, finished:_finishOrder.length }));
+}
+function mpSeedForSlot(slot){ let h=(slot^0x9e3779b9)>>>0; h=Math.imul(h^(h>>>16),0x45d9f3b)>>>0; h=Math.imul(h^(h>>>16),0x45d9f3b)>>>0; return (h^(h>>>16))>>>0; }
+const MP_BOTS = ['Nitro','Blaze','Comet','Volt','Zephyr','Ember','Sonic','Quartz','Pulse','Rhino','Dash','Bolt','Jet','Onyx','Flux','Rocket'];
+function mpBots(seed){ const a=[]; let s=seed>>>0; for(let i=0;i<MP_FIELD;i++){ s=(Math.imul(s,1664525)+1013904223)>>>0; a.push(MP_BOTS[s%MP_BOTS.length]); } return a; }
+
+function runMultiplayer(){
+  const params = new URLSearchParams(location.search);
+  const myName = (_joinName || params.get('name') || ('guest'+Math.floor(1000+Math.random()*9000))).slice(0,16);
+  _myMarble = myName; _mpMode = true;
+  let offset = 0, roster = [], curSlot = -1, ws = null, gotWelcome = false, lobbyTimer = null;
+  const serverNow = () => Date.now() + offset;
+  const lobbyEl = document.getElementById('lobby');
+  const lobbyCd = document.getElementById('lobbyCd');
+  const lobbySub = document.getElementById('lobbySub');
+  function renderLobbyRoster(){
+    if (!lobbySub) return;
+    const real = roster.slice(0, MP_FIELD).map(p => p.name);
+    const fillers = Math.max(0, MP_FIELD - real.length);
+    const shown = real.slice(0, 6).map(n => n === _myMarble ? n + ' (you)' : n).join(' · ');
+    const more = real.length > 6 ? ' +' + (real.length - 6) + ' more' : '';
+    const bots = fillers > 0 ? (real.length ? '  +' + fillers + ' bots' : '') : '';
+    lobbySub.textContent = '👥 ' + real.length + ' racer' + (real.length === 1 ? '' : 's') +
+      (shown ? ' — ' + shown + more : '') + bots;
+  }
+  function showLobby(localStart){
+    lobbyEl.style.display = 'flex';
+    if (lobbyTimer) clearInterval(lobbyTimer);
+    const tick = () => { lobbyCd.textContent = Math.max(0, Math.ceil((localStart - Date.now())/1000)) + 's'; renderLobbyRoster(); };
+    tick(); lobbyTimer = setInterval(tick, 250);
+  }
+  function hideLobby(){ lobbyEl.style.display = 'none'; if (lobbyTimer){ clearInterval(lobbyTimer); lobbyTimer = null; } }
+
+  function scheduleRace(race){
+    // never drop a player into a race already in progress — wait for the next clean start
+    if (serverNow() > race.startTime + 3000) {
+      const ns = race.slot + 1;
+      race = { slot: ns, seed: mpSeedForSlot(ns), startTime: ns*MP_SLOT_MS + MP_LOBBY_MS };
+    }
+    if (race.slot === curSlot) return; curSlot = race.slot; _mpSlot = race.slot;
+    const localStart = race.startTime - offset;              // server time → this machine's clock
+    const wait = Math.max(0, localStart - Date.now());
+    // load the track NOW so the wait shows a real lobby (not blank sky), with a countdown
+    try { buildCourse(race.seed); } catch (e) { ZLOG.report('manual', 'mp buildCourse failed: ' + (e && e.message)); }
+    showLobby(localStart);
+    setStatus('⬡ next race in ' + Math.ceil(wait/1000) + 's', true);
+    setTimeout(() => { hideLobby(); runMpRace(race); }, wait);
+  }
+  function runMpRace(race){
+    const names = []; const used = new Set();
+    for (const p of roster.slice(0, MP_FIELD)) { if(used.has(p.name)) continue; names.push({ id:p.name, isSub:false, prefs:{}, platform: p.platform || 'guest' }); used.add(p.name); }
+    const bots = mpBots(race.seed); let bi = 0;
+    while (names.length < MP_FIELD) { let bn = bots[bi++ % bots.length]; while(used.has(bn)) bn += '·'; used.add(bn); names.push({ id:bn, isSub:false, prefs:{}, platform:'bot' }); }
+    startRace(race.seed, names);
+    setStatus('');   // race is live now → hide the countdown chip (standings take over)
+    // pre-schedule the next race so it loops forever
+    const next = { slot: race.slot+1, seed: mpSeedForSlot(race.slot+1), startTime: (race.slot+1)*MP_SLOT_MS + MP_LOBBY_MS };
+    setTimeout(() => scheduleRace(next), Math.max(2000, (next.startTime - offset) - Date.now()));
+  }
+  function connect(){
+    try { ws = new WebSocket('wss://' + MP_HOST + '/parties/main/' + MP_ROOM); _mpWS = ws; }
+    catch(e){ ZLOG.report('manual','mp ws ctor failed: '+(e&&e.message)); setTimeout(connect, 3000); return; }
+    ws.onopen = () => ws.send(JSON.stringify({ type:'join', name: myName, platform: _kickName ? 'kick' : 'guest' }));
+    ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch(_){ return; }
+      if (m.type === 'welcome') { gotWelcome = true; offset = m.serverTime - Date.now(); _mpOffset = offset; roster = m.players || [];
+        if (m.official) { _officialSlot = m.official.slot; _officialOrder = m.official.order; _officialFinished = m.official.finished || 0; }
+        scheduleRace(m.race); }
+      else if (m.type === 'players') { roster = m.players || []; }
+      else if (m.type === 'official') {
+        // the server has locked the canonical result for a race — show it on the end card so
+        // every machine agrees on the winner/order regardless of local sim drift.
+        _officialSlot = m.slot; _officialOrder = Array.isArray(m.order) ? m.order : null; _officialFinished = m.finished || 0;
+        if (phase === 'done') showEndCard();   // re-render if the card is already up
+      }
+      else if (m.type === 'boost') {
+        // apply at the server-stamped time on EVERY client (so all sims stay identical). If an
+        // older server sent no timestamp, fall back to applying on receipt.
+        if (m.at) _boostQueue.push({ name: m.name, at: m.at });
+        else if (m.name !== _myMarble && ZPHYSICS.isReady()) ZPHYSICS.giveBoost(m.name, BOOST_AMOUNT);
+        if (typeof pushFeed === 'function') pushFeed('boost', '<b>'+esc(m.name)+'</b> used boost!');
+      }
+    };
+    ws.onclose = () => { setStatus('reconnecting…', false); setTimeout(connect, 2500); };
+    ws.onerror = () => { try { ws.close(); } catch(_){} };
+  }
+  // safety net: if the room never answers, don't hang on blank sky — run a solo race
+  function soloFallback(){
+    hideLobby();
+    const seed = (Math.random()*1e9) >>> 0;
+    const names = mpBots(seed).map(n => ({ id:n, prefs:{}, isSub:false }));
+    names[0] = { id:_myMarble, prefs:{}, isSub:false };
+    setStatus('offline — solo race', false);
+    startRace(seed, names);
+  }
+  setStatus('connecting to race room…', false);
+  connect();
+  setTimeout(() => { if (!gotWelcome) { ZLOG.report('manual', 'mp no welcome in 9s — solo fallback'); soloFallback(); } }, 9000);
+}
+
+async function boot() {
+  setStatus('loading physics…', false);
+  const ok = await ZPHYSICS.init(BALL_R);
+  if (!ok) { setStatus('LEGACY (physics failed: ' + ZPHYSICS.getError() + ')', false);
+    ZLOG.report('manual', 'physics init failed: ' + ZPHYSICS.getError(), ''); return; }
+  setStatus('⬡ READY · build ' + BUILD, true);
+  try { buildEnvMap(); } catch(e){ console.warn('env map skipped', e); }
+
+  // LIVE PUBLIC GAME is the default — connect to the race room. ?demo=1 runs the old local
+  // solo field (handy for engine testing without the server).
+  if (new URLSearchParams(location.search).get('demo') !== '1') { runMultiplayer(); return; }
+
+  // SERVER-ASSIGNED RACE: the seed comes from the server (/api/race), not the client, so
+  // a player can't host/choose their own race. Falls back to a local seed if the API is
+  // unreachable (dev/offline) so the page still runs.
+  const seed = await fetchRaceSeed();
+  buildCourse(seed);
+  // give the physics the track collider
+  ZPHYSICS.setTrack(track.collider, track.nodes, { forks: track.forks, branchColliders: track.branchColliders });
+  // demo: spawn a field of test balls and race. A few are given the premium skins so
+  // Galaxy / Lava / Glass / Chrome are actually visible in the demo (they were all
+  // Classic before, so the paid skins never showed on screen).
+  const names = [];
+  const demo = ['NightCrawl','PixelBolt','VoidStar','GhostRide','TurboDrift','CyberDash','NeonByte','PlasmaKing','OrbMaster','MarsScum','GlitchQ','HyperV'];
+  const demoSkins = { NightCrawl:'galaxy', PixelBolt:'lava', VoidStar:'glass', GhostRide:'chrome', PlasmaKing:'galaxy', OrbMaster:'lava' };
+  for (let i=0;i<demo.length;i++) {
+    const skin = demoSkins[demo[i]];
+    // prefs.skin is the key the resolver reads; owned unlocks 'paid' tier (Galaxy/Lava).
+    names.push({ id: demo[i], isSub: true,
+      prefs: skin ? { skin, owned: ['Galaxy','Lava'] } : {} });
+  }
+  startRace(track.seed, names);
+}
+
+// ---- SpeedyGoWild background music (self-hosted only — no YouTube) ----
+// Reads music/playlist.json: { artist, spotify, baseUrl, tracks:[{title,file} | {title,src}] }.
+// Plays via a plain HTML5 <audio> tag (same-origin, or CORS-clean R2). That stream is also
+// tapped by the Web Audio analyser so the whole track can pulse to the beat.
+const MUSIC = {
+  artist: 'SpeedyGoWild',
+  spotify: 'https://open.spotify.com/artist/47Pj5n2KiZRgKgx4fOnB3x',
+  TRACKS: [],       // filled from playlist.json
+};
+// make the artist name in the player open the SpeedyGoWild Spotify in a new tab
+function wireArtistLink(){
+  const el = document.querySelector('#music .artist');
+  if (!el) return;
+  el.textContent = '♪ ' + MUSIC.artist + '  ↗';
+  el.style.cursor = 'pointer';
+  el.title = 'Open SpeedyGoWild on Spotify';
+  el.onclick = () => { if (MUSIC.spotify) window.open(MUSIC.spotify, '_blank', 'noopener'); };
+}
+let wantPlay = false;   // user pressed play before the player was ready
+function shuffle(a){ a=a.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+
+function noMusic(msg){ const el = document.getElementById('m-song'); if (el) el.textContent = msg || 'music coming soon'; }
+// load the self-hosted playlist and start the player (no YouTube)
+fetch('/v2/music/playlist.json', { cache:'no-store' })
+  .then(r => r.ok ? r.json() : null)
+  .then(j => {
+    if (j && Array.isArray(j.tracks) && j.tracks.length) {
+      // resolve each track's URL: explicit src wins, else baseUrl + file
+      const base = (j.baseUrl || '').trim();
+      MUSIC.TRACKS = j.tracks.map(t => ({
+        title: t.title,
+        src: t.src || (base && t.file ? base.replace(/\/?$/, '/') + t.file : (t.file || ''))
+      })).filter(t => t.src && !/REPLACE-WITH-YOUR-R2-URL/.test(t.src));
+      if (j.artist) MUSIC.artist = j.artist;
+      if (j.spotify) MUSIC.spotify = j.spotify;
+      wireArtistLink();
+      if (MUSIC.TRACKS.length) initSelfHosted(); else noMusic('add tracks to playlist.json');
+    } else { noMusic(); }
+  })
+  .catch(() => noMusic());
+
+/* ===== SELF-HOSTED (HTML5 audio) — block-proof ===== */
+let audioEl = null, _slist = [], _sidx = 0;
+function initSelfHosted(){
+  audioEl = document.getElementById('m-audio');
+  _slist = shuffle(MUSIC.TRACKS); _sidx = 0;
+  loadSelf(0, false);
+  audioEl.addEventListener('ended', () => {
+    _sidx++; if (_sidx >= _slist.length) { _slist = shuffle(MUSIC.TRACKS); _sidx = 0; }
+    loadSelf(_sidx, true);
+  });
+  audioEl.addEventListener('play',  () => { setupAnalyser(); document.getElementById('m-play').textContent = '⏸'; });
+  audioEl.addEventListener('pause', () => document.getElementById('m-play').textContent = '▶');
+  audioEl.addEventListener('error', () => document.getElementById('m-song').textContent = 'track unavailable');
+  applyVolume();
+}
+// WEB AUDIO ANALYSER — taps the <audio> stream so the center lane can dance to the beat.
+// Only works on self-hosted (same-origin / CORS-clean) audio; a YouTube iframe is sealed
+// and can't be analysed. Created lazily on first play (AudioContext needs a user gesture).
+let _audioCtx = null, _analyser = null, _freqData = null, _beat = 0, _srcMade = false;
+function setupAnalyser(){
+  try {
+    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (_audioCtx.state === 'suspended') _audioCtx.resume();
+    if (!_srcMade) {                      // createMediaElementSource is one-time per element
+      const src = _audioCtx.createMediaElementSource(audioEl);
+      _analyser = _audioCtx.createAnalyser();
+      _analyser.fftSize = 1024; _analyser.smoothingTimeConstant = 0.82;
+      src.connect(_analyser);
+      _analyser.connect(_audioCtx.destination);   // keep it audible
+      _freqData = new Uint8Array(_analyser.frequencyBinCount);
+      _srcMade = true;
+    }
+  } catch(e) { _analyser = null; }
+}
+// returns 0..1 bass pulse, SELF-CALIBRATING so it works on any track regardless of how
+// loud it is. We track a slow baseline and a decaying peak of the kick/bass band, then
+// normalise the current level between them — so a kick reads ~1 and the lulls read ~0.
+// Quick-ish attack lands the hit; a slower decay gives a visible swell ("DUUUNNN").
+let _bassAvg = 0, _bassMax = 0.02;
+function sampleBeat(){
+  if (!_analyser) return 0;
+  _analyser.getByteFrequencyData(_freqData);
+  let sum = 0; for (let i = 1; i <= 4; i++) sum += _freqData[i];   // ~43–215 Hz (kick/bass)
+  const level = sum / (4 * 255);
+  _bassAvg += (level - _bassAvg) * 0.03;                 // slow baseline (the song's floor)
+  _bassMax = Math.max(level, _bassMax * 0.997);          // decaying peak (the ceiling)
+  const span = Math.max(0.04, _bassMax - _bassAvg);
+  let norm = Math.max(0, Math.min(1, (level - _bassAvg) / span));   // ~0 lull, ~1 on a kick
+  const rate = norm > _beat ? 0.55 : 0.08;               // fast attack, slow swelling decay
+  _beat += (norm - _beat) * rate;
+  return _beat;
+}
+function loadSelf(i, autoplay){
+  _sidx = i; const t = _slist[i] || {};
+  audioEl.src = t.src || '';
+  document.getElementById('m-song').textContent = t.title || MUSIC.artist;
+  if (autoplay || wantPlay) audioEl.play().catch(()=>{});
+}
+
+/* ===== controls ===== */
+function startMusic(){
+  wantPlay = true;
+  if (audioEl) { setupAnalyser(); audioEl.play().catch(()=>{}); }
+}
+document.getElementById('m-play').addEventListener('click', () => {
+  wantPlay = true;
+  if (audioEl) { audioEl.paused ? audioEl.play().catch(()=>{}) : audioEl.pause(); }
+});
+document.getElementById('m-mute').addEventListener('click', () => {
+  if (!audioEl) return;
+  audioEl.muted = !audioEl.muted;
+  document.getElementById('m-mute').textContent = audioEl.muted ? '🔇' : '🔊';
+});
+
+// VOLUME SLIDER — audioEl.volume (0..1). Remembered across sessions via localStorage.
+let _vol = 60;   // 0..100
+try { const sv = parseInt(localStorage.getItem('zorbs_vol')); if (!isNaN(sv)) _vol = sv; } catch(e){}
+function applyVolume(){
+  if (audioEl) { audioEl.volume = _vol/100; if (_vol>0) audioEl.muted = false; }
+  const mute = document.getElementById('m-mute');
+  if (mute) mute.textContent = _vol === 0 ? '🔇' : '🔊';
+}
+const _volEl = document.getElementById('m-vol');
+if (_volEl) {
+  _volEl.value = _vol;
+  _volEl.addEventListener('input', () => {
+    _vol = parseInt(_volEl.value) || 0;
+    try { localStorage.setItem('zorbs_vol', String(_vol)); } catch(e){}
+    applyVolume();
+  });
+}
+
+// join screen: nickname doubles as the audio-start gesture browsers require
+(function joinScreen(){
+  const armEl = document.getElementById('arm');
+  const nickEl = document.getElementById('nick');
+  const kickBtn = document.getElementById('kickbtn');
+  const orline = document.querySelector('#arm .orline');
+  const subEl = document.querySelector('#arm .sub');
+  const params = new URLSearchParams(location.search);
+
+  // SINGLE SIGN-ON: the Kick session is shared across the whole site (same-origin localStorage).
+  // Logging in on the game OR the dashboard logs you into both.
+  let sess = null;
+  try { sess = JSON.parse(localStorage.getItem('zorbs_session') || 'null'); } catch(_){}
+  const kj = params.get('kick_join');   // legacy fallback from older callback
+  if (kj && !(sess && sess.username)) {
+    sess = { username: kj.slice(0,24).toLowerCase(), role:'user', ts:Date.now() };
+    try { localStorage.setItem('zorbs_session', JSON.stringify(sess)); } catch(_){}
+    history.replaceState({}, '', '/v2');
+  }
+
+  if (sess && sess.username) {
+    // signed in with Kick → race as that account, no nickname needed
+    _kickName = sess.username;
+    nickEl.style.display = 'none';
+    if (kickBtn) kickBtn.style.display = 'none';
+    if (orline) orline.style.display = 'none';
+    if (subEl) { subEl.innerHTML = '✓ signed in with Kick as <b>@' + esc(sess.username) + '</b>'; subEl.style.color = '#53fc18'; }
+    const lo = document.createElement('a');
+    lo.textContent = 'not you? log out';
+    lo.style.cssText = 'font-size:10px;color:#7fb8e0;cursor:pointer;text-decoration:underline;opacity:.75';
+    lo.addEventListener('click', () => { try{ localStorage.removeItem('zorbs_session'); }catch(_){}; location.href = '/v2'; });
+    armEl.querySelector('.box').appendChild(lo);
+  } else {
+    nickEl.value = (params.get('name') || '').slice(0,16);
+    setTimeout(() => nickEl.focus(), 50);
+  }
+
+  let started = false;
+  function go(){
+    if (started) return; started = true;
+    _joinName = (_kickName || nickEl.value || '').trim().slice(0,16) || ('guest'+Math.floor(1000+Math.random()*9000));
+    armEl.remove();
+    startMusic();   // the click is the user gesture browsers require for audio
+    boot();
+  }
+  document.getElementById('playbtn').addEventListener('click', go);
+  nickEl.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+
+  // Sign in with Kick (PKCE). Requests the full scope set up front so streamers never have to
+  // re-authorize later. Returns to /auth/kick/game-callback which stores the shared session.
+  if (kickBtn) kickBtn.addEventListener('click', async () => {
+    try {
+      const rnd = () => Math.random().toString(36).slice(2);
+      const verifier = rnd() + rnd() + rnd();
+      const state = rnd() + rnd();
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+      const challenge = btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+      sessionStorage.setItem('kick_verifier', verifier);
+      sessionStorage.setItem('kick_state', state);
+      const p = new URLSearchParams({
+        client_id: '01KTMSSQ3PNEAA8EYYX1T6T4CK',
+        redirect_uri: 'https://www.playzorbs.xyz/auth/kick/game-callback',
+        response_type: 'code',
+        scope: 'user:read channel:read events:subscribe chat:write',
+        state,
+        code_challenge: challenge,
+        code_challenge_method: 'S256',
+      });
+      location.href = 'https://id.kick.com/oauth/authorize?' + p.toString();
+    } catch (e) { ZLOG.report('manual', 'kick login failed: ' + (e && e.message)); }
+  });
+})();
+
+// BOOST — spacebar (desktop) or tap the BOOST button (mobile). Sends to the server, which
+// broadcasts a shared apply-time so every client stays in sync. Gated by a short cooldown.
+_boostHint = document.getElementById('boosthint');
+function tryBoost(){
+  if (phase !== 'racing' || !_myMarble || !ZPHYSICS.isReady()) return;
+  const z = zorbs.get(_myMarble); if (!z || z.eliminated) return;
+  const t = performance.now();
+  if (t < _boostReadyAt) return;
+  _boostReadyAt = t + BOOST_COOLDOWN*1000;
+  if (_mpWS && _mpWS.readyState === 1) {
+    _mpWS.send(JSON.stringify({ type:'boost', name:_myMarble }));
+  } else {
+    ZPHYSICS.giveBoost(_myMarble, BOOST_AMOUNT);                    // solo: instant
+    if (typeof pushFeed === 'function') pushFeed('boost', '<b>'+esc(_myMarble)+'</b> used boost!');
+  }
+}
+window.addEventListener('keydown', (e) => {
+  if (e.code !== 'Space' && e.key !== ' ') return;
+  e.preventDefault();
+  tryBoost();
+});
+// tap-to-boost (mobile + click)
+if (_boostHint) {
+  _boostHint.addEventListener('click', (e) => { e.preventDefault(); tryBoost(); });
+  _boostHint.addEventListener('touchstart', (e) => { e.preventDefault(); tryBoost(); }, { passive:false });
+}
+
+// when the tab is hidden the browser pauses requestAnimationFrame entirely. drive the
+// physics from a timer in that case so the race keeps running and stays in server sync.
+setInterval(() => {
+  if (!document.hidden) return;
+  if (phase !== 'racing' || !ZPHYSICS.isReady()) { last = performance.now(); return; }
+  const t = performance.now(), FIXED = 1/60; let acc = Math.min(3.0, (t - last)/1000); last = t;
+  let steps = 0; while (acc >= FIXED && steps < 200) { ZPHYSICS.step(FIXED); acc -= FIXED; steps++; }
+  ZPHYSICS.checkFalls(_fieldSize);
+}, 300);
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
