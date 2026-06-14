@@ -170,7 +170,7 @@ body{background:#05050f;color:#fff;font-family:'Courier New',monospace;min-heigh
 
       <div class="nav-section">STREAM <span class="coming-soon" style="margin-left:6px">STREAMER TOOLS</span></div>
       <div class="nav-item disabled"><span class="icon">▶</span> RACE CONTROL <span class="coming-soon">SOON</span></div>
-      <div class="nav-item disabled"><span class="icon">◎</span> OBS LINKS <span class="coming-soon">SOON</span></div>
+      <div class="nav-item" onclick="showPage('obs')" id="ni-obs"><span class="icon">◎</span> MY LOBBY</div>
       <div class="nav-item disabled"><span class="icon">⚙</span> BOT SETUP <span class="coming-soon">SOON</span></div>
 
       <div class="nav-section">ACCOUNT</div>
@@ -281,19 +281,22 @@ body{background:#05050f;color:#fff;font-family:'Courier New',monospace;min-heigh
 
       <!-- OBS LINKS -->
       <div class="page" id="page-obs">
-        <div class="page-title">OBS OVERLAY LINKS</div>
+        <div class="page-title">MY LOBBY</div>
         <div class="card" style="margin-bottom:16px;">
-          <h3>BROWSER SOURCES</h3>
-          <p style="font-size:10px;color:rgba(255,255,255,0.3);margin-bottom:16px;line-height:1.7;">Add these as Browser Sources in OBS. Set width 1920, height 1080, transparent background.</p>
-          <div class="obs-link"><span>FULL GAME VIEW</span> <span id="obs-game">playzorbs.xyz/?streamer=you</span></div>
-          <div class="obs-link"><span>LEADERBOARD ONLY</span> <span id="obs-lb">playzorbs.xyz/overlay/lb?ch=you</span></div>
-          <div class="obs-link"><span>ALERTS ONLY</span> <span id="obs-alerts">playzorbs.xyz/overlay/alerts?ch=you</span></div>
+          <h3>YOUR PRIVATE LOBBY</h3>
+          <p style="font-size:10px;color:rgba(255,255,255,0.3);margin-bottom:16px;line-height:1.7;">Share the <b style="color:var(--c)">PLAY</b> link with your chat — everyone who opens it races together in your own room. Add the <b style="color:var(--c)">OBS</b> link as a Browser Source (1920×1080, transparent background) to show the race live on stream.</p>
+          <div class="obs-link"><span>▶ PLAY LINK <small style="opacity:.5">(for viewers)</small></span> <span id="lobby-play" style="color:#fff">—</span> <button class="btn btn-cyan" style="padding:5px 12px;font-size:9px;" onclick="copyLobby('play')">COPY</button></div>
+          <div class="obs-link"><span>◎ OBS OVERLAY <small style="opacity:.5">(browser source)</small></span> <span id="lobby-obs" style="color:#fff">—</span> <button class="btn btn-cyan" style="padding:5px 12px;font-size:9px;" onclick="copyLobby('obs')">COPY</button></div>
+          <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
+            <a id="lobby-open" href="#" target="_blank" rel="noopener" class="btn btn-green">OPEN MY LOBBY ▶</a>
+          </div>
         </div>
         <div class="card">
-          <h3>CHAT COMMANDS</h3>
-          <div class="stat-row"><span style="color:var(--c)">!play</span><span>Join the current race lobby</span></div>
-          <div class="stat-row"><span style="color:var(--c)">!boost</span><span>Use a speed boost (2 per race)</span></div>
-          <div class="stat-row"><span style="color:var(--p)">!play (sub)</span><span>Subs get mega boost (2.2x)</span></div>
+          <h3>HOW IT WORKS</h3>
+          <div class="stat-row"><span style="color:var(--c)">1.</span><span>Drop the PLAY link in your chat / panels — viewers click to join your room.</span></div>
+          <div class="stat-row"><span style="color:var(--c)">2.</span><span>Add the OBS link as a Browser Source so the race shows on your stream.</span></div>
+          <div class="stat-row"><span style="color:var(--c)">3.</span><span>Races run automatically on a loop — your room, your players.</span></div>
+          <div class="stat-row"><span style="color:var(--p)">SOON</span><span>Start races on command + Kick chat <b>!play</b> / <b>!boost</b>.</span></div>
         </div>
       </div>
 
@@ -486,6 +489,7 @@ function initFromSession(s){
   document.getElementById('bot-status').className = 'badge live';
   try { populatePersonal(); } catch(_){}
   try { loadServerData(s.kickId); } catch(_){}
+  try { fillLobbyLinks(); } catch(_){}
   // deep-link: the game's "Leaderboards" button sends ?p=leaderboard
   try { const p = new URLSearchParams(location.search).get('p'); if (p) showPage(p); } catch(_){}
 
@@ -559,6 +563,40 @@ function showPage(id){
   if(page) page.classList.add('active');
   if(nav)  nav.classList.add('active');
   if(id === 'leaderboard') loadGlobalLeaderboard();
+  if(id === 'obs') fillLobbyLinks();
+}
+
+// ── MY LOBBY (per-streamer private rooms) ──────────────
+// Each streamer's room id is their Kick username. Viewers join via the PLAY link; the OBS
+// link is the same room in clean spectator mode (?obs=1) for a Browser Source.
+function lobbyRoom(){
+  let u = '';
+  try { const s = JSON.parse(localStorage.getItem('zorbs_session')||'null'); u = s && s.username ? s.username : ''; } catch(_){}
+  return (u||'').toLowerCase().replace(/[^a-z0-9_-]/g,'').slice(0,32);
+}
+function fillLobbyLinks(){
+  const room = lobbyRoom();
+  const playEl = document.getElementById('lobby-play');
+  const obsEl  = document.getElementById('lobby-obs');
+  const openEl = document.getElementById('lobby-open');
+  if (!room){
+    if(playEl) playEl.textContent = 'sign in with Kick first';
+    if(obsEl)  obsEl.textContent  = '—';
+    if(openEl){ openEl.style.opacity='.4'; openEl.style.pointerEvents='none'; openEl.href='#'; }
+    return;
+  }
+  const play = 'playzorbs.xyz/?room=' + room;
+  const obs  = 'playzorbs.xyz/?room=' + room + '&obs=1';
+  if(playEl) playEl.textContent = play;
+  if(obsEl)  obsEl.textContent  = obs;
+  if(openEl){ openEl.style.opacity='1'; openEl.style.pointerEvents='auto'; openEl.href = 'https://' + play; }
+}
+function copyLobby(which){
+  const room = lobbyRoom(); if(!room) return;
+  const url = 'https://playzorbs.xyz/?room=' + room + (which==='obs' ? '&obs=1' : '');
+  navigator.clipboard.writeText(url).then(()=>{
+    const btn = event && event.target; if(btn){ const t = btn.textContent; btn.textContent='COPIED ✓'; setTimeout(()=>btn.textContent=t, 1200); }
+  }).catch(()=>{});
 }
 
 // ── GUEST / PERSONAL STATS ─────────────────────────────

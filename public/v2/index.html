@@ -107,6 +107,8 @@
   #dashlink { bottom:262px; }
   #lblink   { bottom:226px; }
   #dashlink:hover, #lblink:hover { background:rgba(40,140,255,.35); color:#fff; }
+  /* OBS overlay mode (?obs=1): clean spectator view — hide all interactive chrome */
+  body.obs #dashlink, body.obs #lblink, body.obs #music, body.obs #arm, body.obs #boosthint { display:none !important; }
   /* fullscreen toggle — only shown on touch devices (added via JS body class) */
   #fsbtn { display:none; position:fixed; z-index:32; cursor:pointer; font-family:'Courier New',monospace;
     color:#bfefff; background:rgba(6,12,26,.8); border:1px solid rgba(120,220,255,.6); border-radius:9px;
@@ -272,10 +274,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=v062"></script>
-<script src="/v2/track.js?v=v062"></script>
-<script src="/v2/physics.js?v=v062"></script>
-<script src="/v2/cosmetics.js?v=v062"></script>
+<script src="/v2/forks.js?v=v07"></script>
+<script src="/v2/track.js?v=v07"></script>
+<script src="/v2/physics.js?v=v07"></script>
+<script src="/v2/cosmetics.js?v=v07"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -290,7 +292,7 @@ const statusEl = document.getElementById('nextrace');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = 'v0.6.2';
+const BUILD = 'v0.7';
 console.log('[ZORBS] build', BUILD);
 
 // ---- MOBILE UX: mark touch devices, block pinch/double-tap zoom, wire fullscreen button ----
@@ -1484,7 +1486,13 @@ async function fetchRaceSeed(replayId) {
 // the server clock and highlighting its own marble. Field size is constant so the physics is
 // identical across machines regardless of who's named on which marble.
 const MP_HOST = 'zorbs.thatspeedykid.partykit.dev';
-const MP_ROOM = 'public';
+// Per-streamer private lobbies: ?room=<name> connects to that streamer's isolated PartyKit room.
+// No param = the shared public game. ?obs=1 = clean overlay/spectator view for OBS browser source.
+const _ZP = new URLSearchParams(location.search);
+const _roomParam = (_ZP.get('room') || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 32);
+const MP_ROOM = _roomParam || 'public';
+const _OBS = _ZP.get('obs') === '1';
+const _PRIVATE = MP_ROOM !== 'public';
 const MP_SLOT_MS = 95000, MP_LOBBY_MS = 9000, MP_FIELD = 8;
 let _myMarble = null, _joinName = null, _mpMode = false, _kickName = null, _isFounder = false;
 // server-authoritative result: the first client to finish a race reports the order; the server
@@ -1509,7 +1517,7 @@ function mpBots(seed){ const a=[]; let s=seed>>>0; for(let i=0;i<MP_FIELD;i++){ 
 function runMultiplayer(){
   const params = new URLSearchParams(location.search);
   const myName = (_joinName || params.get('name') || ('guest'+Math.floor(1000+Math.random()*9000))).slice(0,16);
-  _myMarble = myName; _mpMode = true;
+  _myMarble = _OBS ? null : myName; _mpMode = true;
   let offset = 0, roster = [], curSlot = -1, ws = null, gotWelcome = false, lobbyTimer = null;
   const serverNow = () => Date.now() + offset;
   const lobbyEl = document.getElementById('lobby');
@@ -1562,7 +1570,7 @@ function runMultiplayer(){
   function connect(){
     try { ws = new WebSocket('wss://' + MP_HOST + '/parties/main/' + MP_ROOM); _mpWS = ws; }
     catch(e){ ZLOG.report('manual','mp ws ctor failed: '+(e&&e.message)); setTimeout(connect, 3000); return; }
-    ws.onopen = () => ws.send(JSON.stringify({ type:'join', name: myName, platform: _kickName ? 'kick' : 'guest', founder: _isFounder }));
+    ws.onopen = () => { if (!_OBS) ws.send(JSON.stringify({ type:'join', name: myName, platform: _kickName ? 'kick' : 'guest', founder: _isFounder })); };
     ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch(_){ return; }
       if (m.type === 'welcome') { gotWelcome = true; offset = m.serverTime - Date.now(); _mpOffset = offset; roster = m.players || [];
         if (m.official) { _officialSlot = m.official.slot; _officialOrder = m.official.order; _officialFinished = m.official.finished || 0; }
@@ -1795,7 +1803,7 @@ if (_volEl) {
       fetch('/api/leaderboard?user=' + encodeURIComponent(sess.kickId)).then(r => r.json()).then(d => {
         if (d && d.you && d.you.beta) {
           _isFounder = true;
-          if (_mpWS && _mpWS.readyState === 1) _mpWS.send(JSON.stringify({ type:'join', name: _kickName, platform:'kick', founder:true }));
+          if (!_OBS && _mpWS && _mpWS.readyState === 1) _mpWS.send(JSON.stringify({ type:'join', name: _kickName, platform:'kick', founder:true }));
         }
       }).catch(()=>{});
     }
@@ -1823,6 +1831,16 @@ if (_volEl) {
   }
   document.getElementById('playbtn').addEventListener('click', go);
   nickEl.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+
+  // OBS / overlay mode: skip the join screen and watch as a clean spectator (no own marble).
+  if (_OBS) { document.body.classList.add('obs'); go(); }
+  // Private streamer lobby: label it in the header so players know whose room they're in.
+  if (_PRIVATE) {
+    try { document.body.classList.add('private');
+      const by = document.querySelector('#hud .brand .by');
+      if (by) { by.textContent = "🔒 @" + MP_ROOM + "'S LOBBY"; by.style.color = '#ffd24a'; }
+    } catch(_){}
+  }
 
   // Sign in with Kick (PKCE). Requests the full scope set up front so streamers never have to
   // re-authorize later. Returns to /auth/kick/game-callback which stores the shared session.
