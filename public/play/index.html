@@ -153,8 +153,7 @@
     #dashlink { bottom:138px; left:8px; font-size:9px; padding:5px 10px; letter-spacing:1px; }
     #nextrace { display:none; }
 
-    #music { max-width:150px; right:8px; top:6px; bottom:auto; padding:5px 7px; gap:6px; }
-    #music button { width:26px; height:26px; font-size:12px; }
+    #music { display:none; }   /* portrait: hide player, audio keeps playing */
     #music .artist { font-size:9px; }
     #music .song { font-size:10px; }
     #music #m-beat-wrap { display:none; }
@@ -180,7 +179,7 @@
     #minimap { width:104px; height:62px; bottom:6px; left:8px; }
     #dashlink { bottom:74px; left:8px; font-size:9px; padding:4px 9px; letter-spacing:1px; }
     #fsbtn { top:5px; right:166px; left:auto; font-size:10px; padding:5px 9px; }
-    #music { max-width:150px; right:8px; bottom:6px; top:auto; padding:5px 7px; gap:6px; }
+    #music { display:flex; max-width:150px; right:8px; bottom:6px; top:auto; padding:5px 7px; gap:6px; }
     #music #m-beat-wrap { display:none; }
     #music .artist { font-size:9px; } #music .song { font-size:10px; }
     #music button { width:26px; height:26px; font-size:12px; }
@@ -189,7 +188,7 @@
 </style>
 </head>
 <body>
-<div id="buildtag" style="position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:99999;background:#0a0;color:#fff;font:bold 11px monospace;padding:2px 10px;border-radius:0 0 6px 6px;letter-spacing:1px;">PLAY3</div>
+<div id="buildtag" style="position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:99999;background:#0a0;color:#fff;font:bold 11px monospace;padding:2px 10px;border-radius:0 0 6px 6px;letter-spacing:1px;">PLAY4</div>
 <canvas id="c"></canvas>
 <div id="hud">
   <div class="brand">
@@ -240,7 +239,6 @@
 <!-- SpeedyGoWild background music: self-hosted playlist (music/playlist.json) when present
      = zero YouTube + zero ad-blocker issues; otherwise falls back to the YouTube embed -->
 <div id="boosthint">␣ BOOST</div>
-<button id="fsbtn">⛶ <span class="fslabel">FULLSCREEN</span></button>
 <a id="dashlink" href="/dashboard">📊 DASHBOARD</a>
 <canvas id="minimap" width="190" height="132"></canvas>
 <div id="music">
@@ -265,10 +263,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=PLAY3"></script>
-<script src="/v2/track.js?v=PLAY3"></script>
-<script src="/v2/physics.js?v=PLAY3"></script>
-<script src="/v2/cosmetics.js?v=PLAY3"></script>
+<script src="/v2/forks.js?v=PLAY4"></script>
+<script src="/v2/track.js?v=PLAY4"></script>
+<script src="/v2/physics.js?v=PLAY4"></script>
+<script src="/v2/cosmetics.js?v=PLAY4"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -283,7 +281,7 @@ const statusEl = document.getElementById('nextrace');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = 'PLAY3';
+const BUILD = 'PLAY4';
 console.log('[ZORBS] build', BUILD);
 
 // ---- MOBILE UX: mark touch devices, block pinch/double-tap zoom, wire fullscreen button ----
