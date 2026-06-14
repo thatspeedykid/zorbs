@@ -152,6 +152,7 @@
   }
 </head>
 <body>
+<div id="buildtag" style="position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:99999;background:#0a0;color:#fff;font:bold 11px monospace;padding:2px 10px;border-radius:0 0 6px 6px;letter-spacing:1px;">STATIC HTML OK · TEST3</div>
 <canvas id="c"></canvas>
 <div id="hud">
   <div class="brand">
@@ -226,10 +227,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=TEST2"></script>
-<script src="/v2/track.js?v=TEST2"></script>
-<script src="/v2/physics.js?v=TEST2"></script>
-<script src="/v2/cosmetics.js?v=TEST2"></script>
+<script src="/v2/forks.js?v=TEST3"></script>
+<script src="/v2/track.js?v=TEST3"></script>
+<script src="/v2/physics.js?v=TEST3"></script>
+<script src="/v2/cosmetics.js?v=TEST3"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -244,7 +245,7 @@ const statusEl = document.getElementById('nextrace');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = 'TEST2';
+const BUILD = 'TEST3';
 console.log('[ZORBS] build', BUILD);
 
 // ---- ERROR LOGGER: phone runtime errors home (/api/log) so we can fix the game from real
