@@ -52,11 +52,11 @@
   #lobby .cd { color:#fff; font-size:64px; font-weight:bold; text-shadow:0 0 28px rgba(120,220,255,.7); line-height:1.1; }
   #lobby .s { color:#8fc; font-size:12px; letter-spacing:2px; opacity:.85; }
   #rightcol { position:fixed; top:10px; right:12px; width:216px; z-index:10; font-family:'Courier New',monospace; }
-  #standings { position:relative; --rowh:27px; height:calc(var(--count, 8) * var(--rowh)); transition:height .6s cubic-bezier(.33,0,.2,1); }
+  #standings { position:relative; --rowh:27px; height:calc(var(--count, 8) * var(--rowh)); transition:height .5s cubic-bezier(.33,0,.25,1); }
   #standings .row { position:absolute; left:0; right:0; height:25px; box-sizing:border-box; transform:translateY(calc(var(--i,0) * var(--rowh)));
     display:flex; align-items:center; gap:7px; padding:3px 8px; border-radius:6px;
     background:rgba(6,20,40,.55); font-size:12px; color:#dff3ff; box-shadow:0 0 0 1px rgba(80,160,255,.14);
-    transition:transform .6s cubic-bezier(.33,0,.2,1), opacity .3s, box-shadow .3s, background .3s; will-change:transform; }
+    transition:transform .5s cubic-bezier(.33,0,.25,1), opacity .3s, box-shadow .3s, background .3s; will-change:transform; }
   #standings .row.lead { box-shadow:0 0 0 1px rgba(120,230,255,.65), 0 0 14px rgba(40,180,255,.4); color:#fff; }
   #standings .row.out { opacity:.38; filter:grayscale(.7); }
   #standings .row.fin { box-shadow:0 0 0 1px rgba(120,255,180,.5); }
@@ -972,7 +972,7 @@ function resetHUD(){
   _finishedSet.clear(); _fellSet.clear();
   for (const k in _boostState) delete _boostState[k];
   for (const k in _boostCool) delete _boostCool[k];
-  standingsEl.innerHTML = ''; _rowEls.clear(); feedEl.innerHTML = ''; endcardEl.style.display = 'none';
+  standingsEl.innerHTML = ''; _rowEls.clear(); _stableOrder = []; feedEl.innerHTML = ''; endcardEl.style.display = 'none';
 }
 function platformBadge(p){
   // small platform logo next to real (signed-in) players so chat knows who's a verified account.
@@ -984,20 +984,38 @@ function platformBadge(p){
   return '';
 }
 const _rowEls = new Map();
+let _stableOrder = [];
 function updateHUD(snap, nowSec){
   const rows = [];
   zorbs.forEach((z, id) => rows.push({ id, z, s: snap[id], fin: _finishedSet.has(id), out: z.eliminated }));
-  rows.sort((a,b) => {
-    if (a.fin && b.fin) return _finishOrder.indexOf(a.id) - _finishOrder.indexOf(b.id);
-    if (a.fin !== b.fin) return a.fin ? -1 : 1;
-    if (a.out !== b.out) return a.out ? 1 : -1;
+  // Tiered ordering WITH HYSTERESIS: near-tied balls kept their previous order so the rank
+  // numbers don't strobe 1-2-1-2 and rows don't judder. A ball only overtakes on-screen once
+  // it leads the one above it by EPS, then the row slides exactly once.
+  const finished = rows.filter(r => r.fin).sort((a,b) => _finishOrder.indexOf(a.id) - _finishOrder.indexOf(b.id));
+  const outRows  = rows.filter(r => !r.fin && r.out);
+  const racing   = rows.filter(r => !r.fin && !r.out);
+  racing.sort((a,b) => {                       // seed from last frame's order for stability
+    const ia = _stableOrder.indexOf(a.id), ib = _stableOrder.indexOf(b.id);
+    if (ia !== -1 && ib !== -1) return ia - ib;
+    if (ia !== -1) return -1; if (ib !== -1) return 1;
     return (b.s ? b.s.progress : 0) - (a.s ? a.s.progress : 0);
   });
+  const EPS = 0.006;                           // must lead by ~0.6% of the track to overtake on-screen
+  for (let pass = 0; pass < racing.length; pass++) {
+    let swapped = false;
+    for (let k = 0; k < racing.length - 1; k++) {
+      const pa = racing[k].s ? racing[k].s.progress : 0, pb = racing[k+1].s ? racing[k+1].s.progress : 0;
+      if (pb > pa + EPS) { const t = racing[k]; racing[k] = racing[k+1]; racing[k+1] = t; swapped = true; }
+    }
+    if (!swapped) break;
+  }
+  _stableOrder = racing.map(r => r.id);
+  const ordered = [...finished, ...racing, ...outRows];
   // Persistent rows keyed by id: each row keeps its DOM node and just slides (CSS transform
   // transition on --i) to its new rank, instead of the whole list snapping/rebuilding each frame.
-  standingsEl.style.setProperty('--count', rows.length);
+  standingsEl.style.setProperty('--count', ordered.length);
   const seen = new Set();
-  rows.forEach((r, i) => {
+  ordered.forEach((r, i) => {
     seen.add(r.id);
     const cls = 'row ' + (r.fin ? 'fin' : (r.out ? 'out' : (i === 0 ? 'lead' : ''))) + (r.id === _myMarble ? ' you' : '');
     const st = r.fin ? ('#'+(_finishOrder.indexOf(r.id)+1)) : (r.out ? 'OUT' : '');
@@ -1017,7 +1035,7 @@ function updateHUD(snap, nowSec){
   });
   for (const [id, el] of _rowEls) { if (!seen.has(id)) { el.remove(); _rowEls.delete(id); } }
   // lead-change feed (only among still-racing balls, before anyone wins)
-  const top = rows.find(r => !r.fin && !r.out);
+  const top = ordered.find(r => !r.fin && !r.out);
   if (top && !winner && _lastLeaderId && top.id !== _lastLeaderId) pushFeed('lead', '<b>'+esc(top.id)+'</b> took the lead!');
   if (top && !winner) _lastLeaderId = top.id;
   // boost feed (rising edge, per-ball cooldown)
