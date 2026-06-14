@@ -9,8 +9,10 @@
 // endpoint returns { configured:false } and the game/dashboard degrade gracefully (local stats
 // still work). Nothing here can ever break gameplay — the client calls are fire-and-forget.
 
-const KV_URL = process.env.KV_REST_API_URL;
-const KV_TOKEN = process.env.KV_REST_API_TOKEN;
+const KV_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
+  || process.env.STORAGE_KV_REST_API_URL || process.env.STORAGE_REDIS_REST_URL || process.env.REDIS_REST_URL;
+const KV_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
+  || process.env.STORAGE_KV_REST_API_TOKEN || process.env.STORAGE_REDIS_REST_TOKEN || process.env.REDIS_REST_TOKEN;
 
 async function redis(cmd) {
   if (!KV_URL || !KV_TOKEN) return null;
