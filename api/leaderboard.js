@@ -98,13 +98,27 @@ export default async function handler(req, res) {
       if (place === 1) u.wins = (u.wins || 0) + 1;
       if (place >= 1 && place <= 3) u.podiums = (u.podiums || 0) + 1;
       if (place >= 1 && (!u.best || place < u.best)) u.best = place;
+      // BETA TESTERS: everyone who plays before v1.0 is flagged + timestamped, so they qualify
+      // for the founder/beta custom ball. Flip BETA_OPEN to false at v1.0 launch to close it.
+      const BETA_OPEN = true;
+      if (BETA_OPEN && !u.betaSince) { u.beta = true; u.betaSince = Date.now(); }
       u.updated = Date.now();
 
       await pipeline([
         ['SET', key, JSON.stringify(u)],
         ['ZADD', 'zlb', String(u.wins || 0), kickId],
+        ['LPUSH', 'zhist:' + kickId, JSON.stringify({ place: (place >= 1 ? place : 0), ts: Date.now() })],
+        ['LTRIM', 'zhist:' + kickId, '0', '49'],
       ]);
       return res.status(200).json({ ok: true, you: u });
+    }
+
+    // race history for one user (MY RACES table)
+    const histId = clean(req.query && req.query.history);
+    if (histId) {
+      const rows = (await redis(['LRANGE', 'zhist:' + histId, '0', '49'])) || [];
+      const history = rows.map((r) => { try { return JSON.parse(r); } catch (_) { return null; } }).filter(Boolean);
+      return res.status(200).json({ ok: true, history });
     }
 
     const top = (await redis(['ZREVRANGE', 'zlb', '0', '24', 'WITHSCORES'])) || [];
@@ -124,6 +138,7 @@ export default async function handler(req, res) {
           races: u.races || 0,
           podiums: u.podiums || 0,
           best: u.best || null,
+          beta: !!u.beta,
         };
       });
     }

@@ -132,6 +132,7 @@ body{background:#05050f;color:#fff;font-family:'Courier New',monospace;min-heigh
       <span id="nav-username">—</span>
       <span class="role-tag" id="nav-role">USER</span>
     </div>
+    <a href="/" id="btn-return" style="display:inline-block;padding:7px 13px;background:rgba(83,252,24,0.12);border:1px solid rgba(83,252,24,0.4);color:#7dff5a;border-radius:8px;font-size:10px;letter-spacing:1.5px;text-decoration:none;font-family:inherit;margin-right:8px;">▶ RETURN TO GAME</a>
     <button id="btn-logout" onclick="logout()" style="display:none">LOGOUT</button>
   </div>
 </div>
@@ -145,9 +146,6 @@ body{background:#05050f;color:#fff;font-family:'Courier New',monospace;min-heigh
     <button class="btn-kick" onclick="kickLogin()">
       <div class="k-icon">K</div>
       SIGN IN WITH KICK
-    </button>
-    <button onclick="guestEnter()" style="width:100%;padding:11px;background:rgba(0,240,255,0.05);border:1px solid rgba(0,240,255,0.25);color:var(--c);border-radius:10px;font-size:11px;letter-spacing:2px;cursor:pointer;font-family:inherit;">
-      VIEW MY STATS (GUEST) →
     </button>
     <div class="login-note">
       Admins, streamers & chatters all use the same login.<br>
@@ -213,8 +211,8 @@ body{background:#05050f;color:#fff;font-family:'Courier New',monospace;min-heigh
         <div class="page-title">MY RACES</div>
         <div class="card">
           <table class="tbl">
-            <thead><tr><th>DATE</th><th>CHANNEL</th><th>PLAYERS</th><th>WINNER</th><th>DURATION</th></tr></thead>
-            <tbody id="races-table"><tr><td colspan="5" style="color:rgba(255,255,255,0.2);padding:20px;text-align:center">No races recorded yet</td></tr></tbody>
+            <thead><tr><th>WHEN</th><th>RESULT</th><th>PLACE</th></tr></thead>
+            <tbody id="races-table"><tr><td colspan="3" style="color:rgba(255,255,255,0.2);padding:20px;text-align:center">No races recorded yet — sign in with Kick and play a race to log it here.</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -487,6 +485,9 @@ function initFromSession(s){
   document.getElementById('bot-status').textContent = 'READY';
   document.getElementById('bot-status').className = 'badge live';
   try { populatePersonal(); } catch(_){}
+  try { loadServerData(s.kickId); } catch(_){}
+  // deep-link: the game's "Leaderboards" button sends ?p=leaderboard
+  try { const p = new URLSearchParams(location.search).get('p'); if (p) showPage(p); } catch(_){}
 
   // Auto-register Kick chat webhook if we have an access token
   if(s.accessToken && s.kickId && !localStorage.getItem('zorbs_webhook_registered')){
@@ -632,7 +633,7 @@ function loadGlobalLeaderboard(){
         el.innerHTML = lb.map((u,i) =>
           '<div class="lb-row"'+(u.kickId===kickId?' style="background:rgba(83,252,24,.08);border-radius:6px;padding-left:6px"':'')+'>'+
             '<div style="width:24px;color:'+(medal[i]||'rgba(255,255,255,.5)')+';font-weight:bold">'+(i+1)+'</div>'+
-            '<div style="flex:1">'+_lbEsc(u.username)+(u.kickId===kickId?' <span style="color:var(--g);font-size:9px">YOU</span>':'')+'</div>'+
+            '<div style="flex:1">'+_lbEsc(u.username)+(u.beta?' <span title="Beta tester" style="color:#ffd24a">⭐</span>':'')+(u.kickId===kickId?' <span style="color:var(--g);font-size:9px">YOU</span>':'')+'</div>'+
             '<div style="margin-left:auto;color:var(--y)">'+(u.wins||0)+' W</div>'+
             '<div style="width:62px;text-align:right;color:rgba(255,255,255,.45);font-size:10px">'+(u.races||0)+' races</div>'+
           '</div>'
@@ -652,6 +653,54 @@ function renderServerPersonal(u){
     '<div class="lb-row"><div>Podiums</div><div style="margin-left:auto;color:var(--g)">'+podiums+'</div></div>'+
     '<div class="lb-row"><div>Best finish</div><div style="margin-left:auto;color:var(--c)">'+(best?'#'+best:'—')+'</div></div>'+
     '<div class="lb-row"><div>Win rate</div><div style="margin-left:auto;color:var(--c)">'+winRate+'%</div></div>';
+}
+
+// Pull this signed-in user's real stats + race history from the server DB.
+function loadServerData(kickId){
+  if(!kickId) return;
+  const setVal=(id,v)=>{const e=document.getElementById(id); if(e) e.textContent=v;};
+  const relabel=(id,big,sub)=>{const e=document.getElementById(id); if(!e)return; const c=e.closest('.card'); if(!c)return;
+    const h=c.querySelector('h3'); if(h&&big)h.textContent=big; const l=c.querySelector('.stat-label'); if(l&&sub)l.textContent=sub;};
+
+  fetch('/api/leaderboard?user='+encodeURIComponent(kickId)).then(r=>r.json()).then(d=>{
+    if(!d || !d.you) return;
+    const u=d.you, races=u.races||0, wins=u.wins||0, podiums=u.podiums||0, best=u.best||0;
+    relabel('ov-races','TOTAL RACES','ALL TIME');          setVal('ov-races',races);
+    relabel('ov-players','PODIUMS','TOP 3 FINISHES');      setVal('ov-players',podiums);
+    relabel('ov-wins','WINS','1ST PLACE FINISHES');        setVal('ov-wins',wins);
+    relabel('ov-channel','BEST FINISH','LOWEST PLACE');    setVal('ov-channel', best?('#'+best):'—');
+    const ch=document.getElementById('ov-channel'); if(ch) ch.style.color='var(--c)';
+    const winRate=races?Math.round(wins/races*100):0, podRate=races?Math.round(podiums/races*100):0;
+    const tc=document.getElementById('ov-top-chatters');
+    if(tc){ const h=tc.closest('.card').querySelector('h3'); if(h) h.textContent='YOUR RATES';
+      tc.innerHTML = races
+        ? '<div class="stat-row"><span>Win rate</span><span style="margin-left:auto;color:var(--c)">'+winRate+'%</span></div>'+
+          '<div class="stat-row"><span>Podium rate</span><span style="margin-left:auto;color:var(--g)">'+podRate+'%</span></div>'
+        : '<div class="stat-row"><span style="color:rgba(255,255,255,0.2)">No races yet</span></div>'; }
+    renderServerPersonal(u);
+    if(u.beta){
+      let bt=document.getElementById('beta-tag');
+      if(!bt){ bt=document.createElement('span'); bt.id='beta-tag';
+        bt.style.cssText='margin-left:8px;font-size:9px;letter-spacing:1px;color:#ffd24a;border:1px solid rgba(255,210,74,.5);border-radius:6px;padding:2px 7px';
+        const up=document.getElementById('user-pill'); if(up) up.appendChild(bt); }
+      bt.textContent='⭐ BETA TESTER';
+    }
+  }).catch(()=>{});
+
+  fetch('/api/leaderboard?history='+encodeURIComponent(kickId)).then(r=>r.json()).then(d=>{
+    const tb=document.getElementById('races-table'); if(!tb) return;
+    const h=(d&&d.history)||[];
+    if(!h.length){ tb.innerHTML='<tr><td colspan="3" style="color:rgba(255,255,255,0.2);padding:20px;text-align:center">No races recorded yet — play a race signed in to log it here.</td></tr>'; return; }
+    tb.innerHTML = h.map(r=>{
+      const dt=new Date(r.ts||Date.now());
+      const place = r.place ? ('#'+r.place) : 'DNF';
+      const result = r.place===1 ? '<span style="color:var(--y)">🏆 WIN</span>'
+        : (r.place && r.place<=3 ? '<span style="color:var(--g)">PODIUM</span>'
+        : (r.place ? 'FINISHED' : '<span style="opacity:.6">DNF</span>'));
+      const when = dt.toLocaleDateString() + ' ' + dt.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+      return '<tr><td>'+when+'</td><td>'+result+'</td><td>'+place+'</td></tr>';
+    }).join('');
+  }).catch(()=>{});
 }
 
 // ── RACE CONTROL ───────────────────────────────────────

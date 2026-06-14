@@ -62,11 +62,13 @@
   #standings .rank { width:18px; text-align:right; color:#7fe9ff; font-weight:bold; }
   #standings .dot { width:10px; height:10px; border-radius:50%; flex:0 0 auto; box-shadow:0 0 6px currentColor; }
   #standings .nm { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  #standings .pf { display:inline-flex; align-items:center; justify-content:center; width:13px; height:13px; border-radius:3px;
-    font-size:9px; font-weight:900; margin-right:5px; vertical-align:middle; flex:0 0 auto; }
+  #standings .pf { display:inline-flex; align-items:center; justify-content:center; width:14px; height:14px; border-radius:3px;
+    font-size:9px; font-weight:900; margin-right:5px; vertical-align:middle; flex:0 0 auto; overflow:hidden; }
   #standings .pf.kick { background:#53fc18; color:#000; }
   #standings .pf.twitch { background:#9146ff; color:#fff; }
-  #standings .pf.yt { background:#ff0000; color:#fff; font-size:7px; }
+  #standings .pf.yt { background:#ff0000; color:#fff; }
+  #standings .pf.tiktok { background:#010101; color:#fff; }
+  #standings .pf svg { width:10px; height:10px; display:block; }
   #standings .st { font-size:10px; opacity:.85; }
   #feed { margin-top:8px; display:flex; flex-direction:column; gap:3px; }
   #feed .ev { font-size:11px; padding:3px 8px; border-radius:6px; background:rgba(6,20,40,.5);
@@ -96,10 +98,12 @@
     cursor:pointer; pointer-events:auto; user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent;
     font-family:'Courier New',monospace; font-size:14px; letter-spacing:3px; color:#bfefff; padding:7px 18px;
     border-radius:20px; background:rgba(6,12,26,.7); border:1px solid rgba(120,220,255,.8); backdrop-filter:blur(3px); }
-  #dashlink { position:fixed; bottom:226px; left:12px; z-index:30; font-family:'Courier New',monospace; font-size:11px;
+  #dashlink, #lblink { position:fixed; left:12px; z-index:30; font-family:'Courier New',monospace; font-size:11px;
     letter-spacing:2px; color:#bfefff; text-decoration:none; background:rgba(6,12,26,.78); border:1px solid rgba(120,220,255,.55);
     border-radius:8px; padding:7px 14px; backdrop-filter:blur(3px); display:inline-block; }
-  #dashlink:hover { background:rgba(40,140,255,.35); color:#fff; }
+  #dashlink { bottom:262px; }
+  #lblink   { bottom:226px; }
+  #dashlink:hover, #lblink:hover { background:rgba(40,140,255,.35); color:#fff; }
   /* fullscreen toggle — only shown on touch devices (added via JS body class) */
   #fsbtn { display:none; position:fixed; z-index:32; cursor:pointer; font-family:'Courier New',monospace;
     color:#bfefff; background:rgba(6,12,26,.8); border:1px solid rgba(120,220,255,.6); border-radius:9px;
@@ -148,7 +152,8 @@
     #feed { font-size:9px; }
 
     #minimap { width:100px; height:70px; bottom:60px; left:8px; }
-    #dashlink { bottom:138px; left:8px; font-size:9px; padding:5px 10px; letter-spacing:1px; }
+    #dashlink { bottom:170px; left:8px; font-size:9px; padding:5px 10px; letter-spacing:1px; }
+    #lblink   { bottom:138px; left:8px; font-size:9px; padding:5px 10px; letter-spacing:1px; }
     #nextrace { display:none; }
 
     #music { display:none; }   /* portrait: hide player, audio keeps playing */
@@ -175,7 +180,8 @@
     #feed { display:none; }
     #nextrace { display:none; }
     #minimap { width:104px; height:62px; bottom:6px; left:8px; }
-    #dashlink { bottom:74px; left:8px; font-size:9px; padding:4px 9px; letter-spacing:1px; }
+    #dashlink { bottom:100px; left:8px; font-size:9px; padding:4px 9px; letter-spacing:1px; }
+    #lblink   { bottom:74px; left:8px; font-size:9px; padding:4px 9px; letter-spacing:1px; }
     #fsbtn { top:5px; right:166px; left:auto; font-size:10px; padding:5px 9px; }
     #music { display:flex; max-width:150px; right:8px; bottom:6px; top:auto; padding:5px 7px; gap:6px; }
     #music #m-beat-wrap { display:none; }
@@ -237,6 +243,7 @@
      = zero YouTube + zero ad-blocker issues; otherwise falls back to the YouTube embed -->
 <div id="boosthint">␣ BOOST</div>
 <a id="dashlink" href="/dashboard">📊 DASHBOARD</a>
+<a id="lblink" href="/dashboard?p=leaderboard">🏆 LEADERBOARDS</a>
 <canvas id="minimap" width="190" height="132"></canvas>
 <div id="music">
   <div class="meta">
@@ -260,10 +267,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=v03"></script>
-<script src="/v2/track.js?v=v03"></script>
-<script src="/v2/physics.js?v=v03"></script>
-<script src="/v2/cosmetics.js?v=v03"></script>
+<script src="/v2/forks.js?v=v04"></script>
+<script src="/v2/track.js?v=v04"></script>
+<script src="/v2/physics.js?v=v04"></script>
+<script src="/v2/cosmetics.js?v=v04"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -278,7 +285,7 @@ const statusEl = document.getElementById('nextrace');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = 'v0.3';
+const BUILD = 'v0.4';
 console.log('[ZORBS] build', BUILD);
 
 // ---- MOBILE UX: mark touch devices, block pinch/double-tap zoom, wire fullscreen button ----
@@ -946,11 +953,12 @@ function resetHUD(){
   standingsEl.innerHTML = ''; feedEl.innerHTML = ''; endcardEl.style.display = 'none';
 }
 function platformBadge(p){
-  // small platform logo next to real (signed-in) players. Twitch/YouTube light up once those
-  // logins are added; bots and anonymous guests get nothing.
-  if (p === 'kick') return '<span class="pf kick" title="Kick">K</span>';
-  if (p === 'twitch') return '<span class="pf twitch" title="Twitch">T</span>';
-  if (p === 'youtube') return '<span class="pf yt" title="YouTube">▶</span>';
+  // small platform logo next to real (signed-in) players so chat knows who's a verified account.
+  // Twitch/YouTube/TikTok light up as those logins are added; bots + anonymous guests get nothing.
+  if (p === 'kick')    return '<span class="pf kick" title="Kick">K</span>';
+  if (p === 'twitch')  return '<span class="pf twitch" title="Twitch"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 2 2 6.5V20h5v3l3-3h4l6-6V2H4zm15 11-3.5 3.5H12l-3 3v-3H6.5V4H19v9z"/><path d="M11 7h2v5h-2zm5 0h2v5h-2z" fill="#9146ff"/></svg></span>';
+  if (p === 'youtube') return '<span class="pf yt" title="YouTube"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 7.5v9l8-4.5z"/></svg></span>';
+  if (p === 'tiktok')  return '<span class="pf tiktok" title="TikTok"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 2c.4 2.3 2 4 4.3 4.2v3.1c-1.6.1-3.1-.4-4.3-1.3v6.6A6.3 6.3 0 1 1 9.6 8.4v3.3a3 3 0 1 0 3.2 3V2H16z"/></svg></span>';
   return '';
 }
 function updateHUD(snap, nowSec){
