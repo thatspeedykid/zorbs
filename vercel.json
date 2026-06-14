@@ -24,11 +24,6 @@
       ],
       "destination": "https://www.playzorbs.xyz/$1",
       "permanent": true
-    },
-    {
-      "source": "/",
-      "destination": "/v2",
-      "permanent": false
     }
   ],
   "headers": [
@@ -106,6 +101,24 @@
     },
     {
       "source": "/play/index.html",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, no-cache, must-revalidate, max-age=0"
+        }
+      ]
+    },
+    {
+      "source": "/",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, no-cache, must-revalidate, max-age=0"
+        }
+      ]
+    },
+    {
+      "source": "/index.html",
       "headers": [
         {
           "key": "Cache-Control",
