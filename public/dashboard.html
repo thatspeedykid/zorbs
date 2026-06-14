@@ -110,6 +110,15 @@ body{background:#05050f;color:#fff;font-family:'Courier New',monospace;min-heigh
 
 /* OBS */
 .obs-link{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:10px 14px;font-size:10px;color:rgba(255,255,255,0.4);letter-spacing:.5px;display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+.ctl-toggle{display:inline-flex;align-items:center;gap:7px;font-size:10px;letter-spacing:1px;color:rgba(255,255,255,0.6);cursor:pointer;background:rgba(255,255,255,0.04);padding:9px 13px;border-radius:8px;user-select:none;}
+.ctl-toggle input{accent-color:var(--c);width:15px;height:15px;}
+.ctl-label{font-size:9px;letter-spacing:1.5px;color:rgba(255,255,255,0.35);margin-bottom:7px;}
+.seg{display:inline-flex;gap:4px;flex-wrap:wrap;}
+.seg-btn{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);color:rgba(255,255,255,0.55);font-family:inherit;font-size:10px;letter-spacing:1px;padding:7px 13px;border-radius:7px;cursor:pointer;transition:.15s;}
+.seg-btn:hover{color:#fff;}
+.seg-btn.active{background:rgba(0,240,255,0.14);border-color:var(--c);color:var(--c);}
+.custom-name-in{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:7px;color:#fff;font-family:inherit;font-size:12px;padding:8px 11px;width:100%;box-sizing:border-box;}
+.custom-name-in:focus{border-color:var(--c);outline:none;}
 .obs-link span{color:rgba(0,240,255,0.6);}
 
 /* LB TABLE */
@@ -282,6 +291,47 @@ body{background:#05050f;color:#fff;font-family:'Courier New',monospace;min-heigh
       <!-- OBS LINKS -->
       <div class="page" id="page-obs">
         <div class="page-title">MY LOBBY</div>
+
+        <div class="card" style="margin-bottom:16px;">
+          <h3>RACE CONTROLS</h3>
+          <div id="lobby-conn" style="font-size:9px;letter-spacing:1px;color:rgba(255,255,255,0.3);margin-bottom:14px;">● connecting to your room…</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <button class="btn btn-green" onclick="lobbyStart()">▶ START RACE</button>
+            <button class="btn btn-cyan" onclick="lobbyReset()">↻ RESET RACE</button>
+            <label class="ctl-toggle"><input type="checkbox" id="ctl-autoplay" onchange="lobbySetAutoplay(this.checked)"> <span>AUTOPLAY</span></label>
+            <label class="ctl-toggle"><input type="checkbox" id="ctl-mute" checked onchange="lobbyMute(this.checked)"> <span>MUSIC MUTED</span></label>
+          </div>
+          <div style="margin-top:16px;">
+            <div class="ctl-label">WHO CAN JOIN</div>
+            <div class="seg" id="seg-join">
+              <button class="seg-btn active" data-v="all" onclick="lobbyJoinMode('all')">ALL PLAYERS</button>
+              <button class="seg-btn" data-v="subs" onclick="lobbyJoinMode('subs')">SUBS ONLY</button>
+              <button class="seg-btn" data-v="followers" onclick="lobbyJoinMode('followers')">FOLLOWERS</button>
+            </div>
+            <div style="font-size:9px;color:rgba(255,255,255,0.25);margin-top:5px;">Subs/Followers currently require a signed-in Kick account — full sub/follower verification arrives with the Kick chat bot.</div>
+          </div>
+          <div style="margin-top:16px;">
+            <div class="ctl-label">OBS CAMERA</div>
+            <div class="seg" id="seg-cam">
+              <button class="seg-btn active" data-v="leader" onclick="lobbyCam('leader')">LEADER</button>
+              <button class="seg-btn" data-v="map" onclick="lobbyCam('map')">FULL MAP</button>
+              <button class="seg-btn" data-v="player" onclick="lobbyCam('player')">PLAYER</button>
+              <button class="seg-btn" onclick="lobbyCamCycle(-1)" title="previous player">‹</button>
+              <button class="seg-btn" onclick="lobbyCamCycle(1)" title="next player">›</button>
+            </div>
+            <div style="font-size:9px;color:rgba(255,255,255,0.25);margin-top:5px;">Controls the OBS overlay view only. Use ‹ › to step through racers in PLAYER mode.</div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:16px;">
+          <h3>CUSTOM RACE</h3>
+          <p style="font-size:10px;color:rgba(255,255,255,0.3);margin-bottom:12px;line-height:1.6;">Put up to 20 names/words on the balls — chatters, teams, donors, anything. A new box appears as you fill the last one. Then hit START CUSTOM RACE.</p>
+          <div id="custom-names" style="display:flex;flex-direction:column;gap:6px;max-height:300px;overflow:auto;padding-right:4px;"></div>
+          <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+            <button class="btn btn-green" onclick="lobbyStartCustom()">▶ START CUSTOM RACE</button>
+            <button class="btn btn-cyan" onclick="clearCustom()">CLEAR</button>
+          </div>
+        </div>
         <div class="card" style="margin-bottom:16px;">
           <h3>YOUR PRIVATE LOBBY</h3>
           <p style="font-size:10px;color:rgba(255,255,255,0.3);margin-bottom:16px;line-height:1.7;">Share the <b style="color:var(--c)">PLAY</b> link with your chat — everyone who opens it races together in your own room. Add the <b style="color:var(--c)">OBS</b> link as a Browser Source (1920×1080, transparent background) to show the race live on stream.</p>
@@ -563,7 +613,55 @@ function showPage(id){
   if(page) page.classList.add('active');
   if(nav)  nav.classList.add('active');
   if(id === 'leaderboard') loadGlobalLeaderboard();
-  if(id === 'obs') fillLobbyLinks();
+  if(id === 'obs') { fillLobbyLinks(); initCustom(); connectLobby(); }
+}
+
+// ── MY LOBBY · live host controls (WebSocket to the room) ──────────────────
+// The dashboard connects to the streamer's PartyKit room and authes as owner (room id = their
+// username), then drives race start/reset/autoplay/join-mode + the OBS overlay's camera & music.
+const LOBBY_HOST = 'zorbs.thatspeedykid.partykit.dev';
+let _lobbyWS = null, _lobbyOwner = false, _camIdx = 0;
+function setConn(txt, ok){ const e = document.getElementById('lobby-conn'); if(e){ e.textContent = txt; e.style.color = ok ? '#53fc18' : 'rgba(255,255,255,0.3)'; } }
+function connectLobby(){
+  const room = lobbyRoom();
+  if(!room){ setConn('● sign in with Kick to control your lobby', false); return; }
+  if(_lobbyWS && (_lobbyWS.readyState === 0 || _lobbyWS.readyState === 1)) return;
+  let token = ''; try { const s = JSON.parse(localStorage.getItem('zorbs_session')||'null'); token = (s && s.accessToken) || ''; } catch(_){}
+  try { _lobbyWS = new WebSocket('wss://' + LOBBY_HOST + '/parties/main/' + room); }
+  catch(_){ setConn('● connection failed', false); return; }
+  _lobbyWS.onopen = () => { setConn('● connecting…', false); _lobbyWS.send(JSON.stringify({ type:'control-hello', as: room, token })); };
+  _lobbyWS.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch(_){ return; }
+    if(m.type === 'controlState'){
+      if(typeof m.owner === 'boolean') _lobbyOwner = m.owner;
+      setConn(_lobbyOwner ? '● connected — you control this room' : '● connected (view only)', true);
+      const ap = document.getElementById('ctl-autoplay'); if(ap) ap.checked = !!m.autoplay;
+      if(m.joinMode) segSet('seg-join', m.joinMode);
+      // push our current view defaults to the OBS overlay (music muted, leader cam)
+      const mute = document.getElementById('ctl-mute'); lobbyMute(mute ? mute.checked : true);
+    }
+  };
+  _lobbyWS.onclose = () => { setConn('● reconnecting…', false); setTimeout(connectLobby, 2500); };
+  _lobbyWS.onerror = () => { try { _lobbyWS.close(); } catch(_){} };
+}
+function lobbyCmd(obj){ if(_lobbyWS && _lobbyWS.readyState === 1){ _lobbyWS.send(JSON.stringify(Object.assign({ type:'control' }, obj))); } else { setConn('● not connected — reopen MY LOBBY', false); } }
+function lobbySetAutoplay(on){ lobbyCmd({ action:'set', autoplay: !!on }); }
+function lobbyJoinMode(v){ segSet('seg-join', v); lobbyCmd({ action:'set', joinMode: v }); }
+function lobbyStart(){ lobbyCmd({ action:'start' }); }
+function lobbyReset(){ lobbyCmd({ action:'reset' }); }
+function lobbyMute(on){ lobbyCmd({ action:'view', muted: !!on }); }
+function lobbyCam(v){ segSet('seg-cam', v); lobbyCmd({ action:'view', camera: v, idx: _camIdx }); }
+function lobbyCamCycle(d){ _camIdx += d; if(_camIdx < 0) _camIdx = 0; segSet('seg-cam','player'); lobbyCmd({ action:'view', camera:'player', idx: _camIdx }); }
+function segSet(segId, v){ const seg = document.getElementById(segId); if(!seg) return; seg.querySelectorAll('.seg-btn').forEach(b => { if(b.dataset.v) b.classList.toggle('active', b.dataset.v === v); }); }
+// custom-race name inputs — a fresh box appears as you fill the last one (up to 20)
+function customRow(val){ const i = document.createElement('input'); i.className = 'custom-name-in'; i.maxLength = 16; i.placeholder = 'name / word…'; i.value = val || ''; i.addEventListener('input', onCustomInput); return i; }
+function onCustomInput(e){ const wrap = document.getElementById('custom-names'); if(!wrap) return; const inputs = [...wrap.querySelectorAll('input')]; const last = inputs[inputs.length-1]; if(e.target === last && e.target.value.trim() && inputs.length < 20){ wrap.appendChild(customRow('')); } }
+function initCustom(){ const wrap = document.getElementById('custom-names'); if(wrap && wrap.children.length === 0) wrap.appendChild(customRow('')); }
+function clearCustom(){ const wrap = document.getElementById('custom-names'); if(wrap){ wrap.innerHTML = ''; wrap.appendChild(customRow('')); } }
+function lobbyStartCustom(){
+  const wrap = document.getElementById('custom-names'); if(!wrap) return;
+  const names = [...wrap.querySelectorAll('input')].map(i => i.value.trim()).filter(Boolean).slice(0, 20);
+  if(names.length < 2){ alert('Add at least 2 names for a custom race.'); return; }
+  lobbyCmd({ action:'start', roster: names });
 }
 
 // ── MY LOBBY (per-streamer private rooms) ──────────────

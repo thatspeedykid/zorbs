@@ -1152,6 +1152,7 @@ function drawMinimap(snap){
 
 function startRace(seed, names) {
   _fieldSize = names.length;
+  _mapView = null;   // re-frame the overhead map cam for the new track
   buildCourse(seed);
   ZPHYSICS.clearBalls();
   ZPHYSICS.setTrack(track.collider, track.nodes, { forks: track.forks, branchColliders: track.branchColliders });  // new track each race
@@ -1423,14 +1424,40 @@ const camTarget = new THREE.Vector3();
 const camPos = new THREE.Vector3();
 const lookAt = new THREE.Vector3();
 let camLeadIdx = 0;
+// OBS overlay camera control (driven by the streamer's dashboard via the room):
+//   'leader' = follow whoever's winning · 'player' = follow a chosen ball (< > cycles) · 'map' = whole-track overhead
+let _camMode = 'leader', _camPlayerIdx = 0, _mapView = null;
+function liveBallIds(){ const ids = []; zorbs.forEach((z, id) => { if (z && !z.eliminated && !z.exploded) ids.push(id); }); return ids; }
 function pickCameraTarget(){
+  if (_camMode === 'player') {                      // follow a specific racer (arrows cycle the index)
+    const ids = liveBallIds();
+    if (ids.length) return ids[((_camPlayerIdx % ids.length) + ids.length) % ids.length];
+  }
   // in the live game, follow the marble belonging to THIS browser's player...
   if (_mpMode && _myMarble) { const z = zorbs.get(_myMarble); if (z && !z.eliminated && !z.exploded) return _myMarble; }
-  // ...otherwise (solo, or once your marble has fallen/finished) follow the race leader.
+  // ...otherwise (solo, after you're out, or OBS 'leader' mode) follow the race leader.
   return ZPHYSICS.isReady() ? ZPHYSICS.leader() : null;
 }
 function updateCamera(dt) {
   if (!track) return;
+  // FULL MAP (OBS overhead): frame the whole track from above instead of the chase cam.
+  if (_camMode === 'map' && track.nodes && track.nodes.length) {
+    if (!_mapView) {
+      let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity,minZ=Infinity,maxZ=-Infinity;
+      for (const n of track.nodes){ const p=n.pos;
+        if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x;
+        if(p.y<minY)minY=p.y; if(p.y>maxY)maxY=p.y;
+        if(p.z<minZ)minZ=p.z; if(p.z>maxZ)maxZ=p.z; }
+      const center = new THREE.Vector3((minX+maxX)/2, (minY+maxY)/2, (minZ+maxZ)/2);
+      const radius = Math.max(maxX-minX, maxZ-minZ, 40) / 2;
+      _mapView = { center, radius };
+    }
+    const mv = _mapView;
+    const desired = new THREE.Vector3(mv.center.x, mv.center.y + mv.radius*2.2, mv.center.z + mv.radius*0.55);
+    camPos.lerp(desired, 0.04); camera.position.copy(camPos);
+    lookAt.lerp(mv.center, 0.06); camera.lookAt(lookAt);
+    return;
+  }
   // Follow the target's PROGRESS (a centerline node index), not the ball's jittery
   // position. The node is smooth, so the camera is smooth.
   const lead = pickCameraTarget();
@@ -1520,6 +1547,9 @@ function runMultiplayer(){
   const myName = (_joinName || params.get('name') || ('guest'+Math.floor(1000+Math.random()*9000))).slice(0,16);
   _myMarble = _OBS ? null : myName; _mpMode = true;
   let offset = 0, roster = [], curSlot = -1, ws = null, gotWelcome = false, lobbyTimer = null;
+  // private streamer-lobby control: autoplay gate, owner-started (directed) races, OBS view cmds
+  let _ctl = { autoplay: false, joinMode: 'all' }, _directedId = null, _loopTimer = null;
+  const curRaceNow = () => { const ns = Math.floor(serverNow()/MP_SLOT_MS); return { slot: ns, seed: mpSeedForSlot(ns), startTime: ns*MP_SLOT_MS + MP_LOBBY_MS }; };
   const serverNow = () => Date.now() + offset;
   const lobbyEl = document.getElementById('lobby');
   const lobbyCd = document.getElementById('lobbyCd');
@@ -1564,9 +1594,68 @@ function runMultiplayer(){
     while (names.length < MP_FIELD) { let bn = bots[bi++ % bots.length]; while(used.has(bn)) bn += '·'; used.add(bn); names.push({ id:bn, isSub:false, prefs:{}, platform:'bot' }); }
     startRace(race.seed, names);
     setStatus('');   // race is live now → hide the countdown chip (standings take over)
-    // pre-schedule the next race so it loops forever
-    const next = { slot: race.slot+1, seed: mpSeedForSlot(race.slot+1), startTime: (race.slot+1)*MP_SLOT_MS + MP_LOBBY_MS };
-    setTimeout(() => scheduleRace(next), Math.max(2000, (next.startTime - offset) - Date.now()));
+    // Auto-loop only in PUBLIC, or in a private lobby with autoplay ON. Otherwise this was a
+    // one-off (host-started, or the final looped) race → sit in the lobby until the host acts.
+    if (!_PRIVATE || _ctl.autoplay) {
+      const next = { slot: race.slot+1, seed: mpSeedForSlot(race.slot+1), startTime: (race.slot+1)*MP_SLOT_MS + MP_LOBBY_MS };
+      if (_loopTimer) clearTimeout(_loopTimer);
+      _loopTimer = setTimeout(() => scheduleRace(next), Math.max(2000, (next.startTime - offset) - Date.now()));
+    }
+  }
+  // ── PRIVATE-LOBBY host control ─────────────────────────
+  function waitForHost(){
+    if (_loopTimer){ clearTimeout(_loopTimer); _loopTimer = null; }
+    if (lobbyTimer){ clearInterval(lobbyTimer); lobbyTimer = null; }
+    try { if (!track) buildCourse((Math.random()*1e9) >>> 0); } catch(_){}
+    if (lobbyEl) lobbyEl.style.display = 'flex';
+    if (lobbyCd) lobbyCd.textContent = '—';
+    if (lobbySub) lobbySub.textContent = '⏳ waiting for the host to start the race…';
+    setStatus('⏳ waiting for host', true);
+  }
+  function scheduleDirected(d){
+    if (!d || _directedId === d.id) return; _directedId = d.id;
+    if (_loopTimer){ clearTimeout(_loopTimer); _loopTimer = null; }
+    curSlot = -999;                                   // suspend the slot auto-loop
+    const seed = (d.seed >>> 0);
+    try { buildCourse(seed); } catch(e){ ZLOG.report('manual','directed buildCourse failed: '+(e&&e.message)); }
+    const localStart = d.startTime - offset;
+    const wait = Math.max(0, localStart - Date.now());
+    showLobby(localStart);
+    setStatus('⬡ race starting in ' + Math.ceil(wait/1000) + 's', true);
+    setTimeout(() => { if (_directedId !== d.id) return; hideLobby(); runDirected(d, seed); }, wait);
+  }
+  function runDirected(d, seed){
+    const names = []; const used = new Set();
+    if (Array.isArray(d.roster) && d.roster.length){
+      // CUSTOM race: exactly the host's names (no bots), up to 20 balls
+      for (const raw of d.roster.slice(0,20)){
+        let nm = String(raw).slice(0,16).trim(); if(!nm) nm = 'ball';
+        while(used.has(nm)) nm += '·'; used.add(nm);
+        names.push({ id:nm, isSub:false, prefs:{}, platform:'custom' });
+      }
+    } else {
+      // host-started normal race: live roster + bots to fill the field
+      for (const p of roster.slice(0, MP_FIELD)){ if(used.has(p.name)) continue; names.push({ id:p.name, isSub:false, prefs:{}, platform:p.platform||'guest', founder:!!p.founder }); used.add(p.name); }
+      const bots = mpBots(seed); let bi=0;
+      while (names.length < MP_FIELD){ let bn=bots[bi++%bots.length]; while(used.has(bn)) bn+='·'; used.add(bn); names.push({ id:bn, isSub:false, prefs:{}, platform:'bot' }); }
+    }
+    startRace(seed, names);
+    setStatus('');
+  }
+  function resetToLobby(){
+    _directedId = null;
+    if (_loopTimer){ clearTimeout(_loopTimer); _loopTimer = null; }
+    curSlot = -999;
+    try { winner = null; phase = 'idle'; ZPHYSICS.clearBalls(); } catch(_){}
+    zorbs.forEach(z => { scene.remove(z.mesh); if(z.ring)scene.remove(z.ring); if(z.ringGlow)scene.remove(z.ringGlow); if(z.trail)scene.remove(z.trail); if(z.streak)scene.remove(z.streak); if(z.label)scene.remove(z.label); });
+    zorbs.clear(); resetHUD(); if (endcardEl) endcardEl.style.display = 'none';
+    if (_ctl.autoplay) scheduleRace(curRaceNow()); else waitForHost();
+  }
+  function applyView(m){
+    if (!_OBS) return;                                // only the OBS overlay obeys camera/music cmds
+    if (m.camera === 'leader' || m.camera === 'map' || m.camera === 'player') _camMode = m.camera;
+    if (m.camera === 'player' && typeof m.idx === 'number') _camPlayerIdx = m.idx;
+    if (m.has_muted && audioEl){ try { audioEl.muted = !!m.muted; } catch(_){} }
   }
   function connect(){
     try { ws = new WebSocket('wss://' + MP_HOST + '/parties/main/' + MP_ROOM); _mpWS = ws; }
@@ -1575,7 +1664,12 @@ function runMultiplayer(){
     ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch(_){ return; }
       if (m.type === 'welcome') { gotWelcome = true; offset = m.serverTime - Date.now(); _mpOffset = offset; roster = m.players || [];
         if (m.official) { _officialSlot = m.official.slot; _officialOrder = m.official.order; _officialFinished = m.official.finished || 0; }
-        scheduleRace(m.race); }
+        if (m.control) { _ctl.autoplay = !!m.control.autoplay; _ctl.joinMode = m.control.joinMode || 'all'; }
+        // PRIVATE lobby obeys the host: a directed race pending? run it. else autoplay on? loop. else wait.
+        if (_PRIVATE && m.directed && (m.directed.startTime - offset) > Date.now() - 4000) scheduleDirected(m.directed);
+        else if (!_PRIVATE || _ctl.autoplay) scheduleRace(m.race);
+        else waitForHost();
+      }
       else if (m.type === 'players') { roster = m.players || []; }
       else if (m.type === 'official') {
         // the server has locked the canonical result for a race — show it on the end card so
@@ -1590,6 +1684,18 @@ function runMultiplayer(){
         else if (m.name !== _myMarble && ZPHYSICS.isReady()) ZPHYSICS.giveBoost(m.name, BOOST_AMOUNT);
         if (typeof pushFeed === 'function') pushFeed('boost', '<b>'+esc(m.name)+'</b> used boost!');
       }
+      else if (m.type === 'controlState') {
+        const wasAuto = _ctl.autoplay;
+        _ctl.autoplay = !!m.autoplay; _ctl.joinMode = m.joinMode || _ctl.joinMode;
+        if (_PRIVATE && phase !== 'spawning' && phase !== 'racing') {
+          if (_ctl.autoplay && !wasAuto) scheduleRace(curRaceNow());
+          else if (!_ctl.autoplay && wasAuto) waitForHost();
+        }
+      }
+      else if (m.type === 'directed') { if (_PRIVATE) scheduleDirected(m); }
+      else if (m.type === 'reset')    { if (_PRIVATE) resetToLobby(); }
+      else if (m.type === 'view')     { applyView(m); }
+      else if (m.type === 'denied')   { setStatus('🔒 host has restricted this lobby (' + (m.reason||'') + ')', false); }
     };
     ws.onclose = () => { setStatus('reconnecting…', false); setTimeout(connect, 2500); };
     ws.onerror = () => { try { ws.close(); } catch(_){} };
@@ -1687,6 +1793,7 @@ fetch('/v2/music/playlist.json', { cache:'no-store' })
 let audioEl = null, _slist = [], _sidx = 0;
 function initSelfHosted(){
   audioEl = document.getElementById('m-audio');
+  if (_OBS) { try { audioEl.muted = true; } catch(_){} }   // OBS overlay: music off until host enables it
   _slist = shuffle(MUSIC.TRACKS); _sidx = 0;
   loadSelf(0, false);
   audioEl.addEventListener('ended', () => {
