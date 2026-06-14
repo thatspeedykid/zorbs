@@ -129,7 +129,7 @@
     #hud .brand .bt small { font-size:8px; }
     #hud .brand .by { font-size:7px; letter-spacing:2px; margin-top:1px; }
 
-    #rightcol { width:148px; top:6px; right:8px; }
+    #rightcol { width:148px; top:60px; right:8px; }
     #standings .row { padding:2px 6px; gap:5px; margin:1.5px 0; }
     #standings .nm { font-size:10px; }
     #standings .dot { width:8px; height:8px; }
@@ -140,9 +140,10 @@
 
     #minimap { width:100px; height:70px; bottom:60px; left:8px; }
     #dashlink { bottom:138px; left:8px; font-size:9px; padding:5px 10px; letter-spacing:1px; }
-    #nextrace { font-size:9px; padding:4px 7px; margin-bottom:4px; }
+    #nextrace { display:none; }
 
-    #music { max-width:184px; right:8px; bottom:8px; padding:6px 8px; gap:7px; }
+    #music { max-width:150px; right:8px; top:6px; bottom:auto; padding:5px 7px; gap:6px; }
+    #music button { width:26px; height:26px; font-size:12px; }
     #music .artist { font-size:9px; }
     #music .song { font-size:10px; }
     #music #m-beat-wrap { display:none; }
@@ -153,7 +154,7 @@
 </style>
 </head>
 <body>
-<div id="buildtag" style="position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:99999;background:#0a0;color:#fff;font:bold 11px monospace;padding:2px 10px;border-radius:0 0 6px 6px;letter-spacing:1px;">PLAY1</div>
+<div id="buildtag" style="position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:99999;background:#0a0;color:#fff;font:bold 11px monospace;padding:2px 10px;border-radius:0 0 6px 6px;letter-spacing:1px;">PLAY2</div>
 <canvas id="c"></canvas>
 <div id="hud">
   <div class="brand">
@@ -228,10 +229,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=PLAY1"></script>
-<script src="/v2/track.js?v=PLAY1"></script>
-<script src="/v2/physics.js?v=PLAY1"></script>
-<script src="/v2/cosmetics.js?v=PLAY1"></script>
+<script src="/v2/forks.js?v=PLAY2"></script>
+<script src="/v2/track.js?v=PLAY2"></script>
+<script src="/v2/physics.js?v=PLAY2"></script>
+<script src="/v2/cosmetics.js?v=PLAY2"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -246,7 +247,7 @@ const statusEl = document.getElementById('nextrace');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = 'PLAY1';
+const BUILD = 'PLAY2';
 console.log('[ZORBS] build', BUILD);
 
 // ---- ERROR LOGGER: phone runtime errors home (/api/log) so we can fix the game from real
