@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Zorbs On Stream</title>
@@ -18,7 +21,7 @@
   #hud .brand .bt b { color:#7fe9ff; }
   #hud .brand .bt small { color:#7fe9ff; font-size:11px; letter-spacing:1px; }
   #hud .brand .by { color:#7fb8e0; font-size:9px; letter-spacing:3px; margin-top:3px; }
-  #status { position:fixed; bottom:8px; left:8px; font-size:10px; font-family:monospace; padding:3px 8px; border-radius:4px; z-index:20; }
+  #status { position:fixed; bottom:14px; left:12px; font-size:10px; font-family:monospace; padding:3px 8px; border-radius:4px; z-index:20; }
   #arm { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(2,5,13,.9); z-index:50; cursor:default; }
   #arm .box { display:flex; flex-direction:column; align-items:center; gap:14px; color:#7fe9ff;
     border:1px solid rgba(0,200,255,.35); padding:34px 44px; border-radius:16px; text-align:center;
@@ -55,6 +58,11 @@
   #standings .rank { width:18px; text-align:right; color:#7fe9ff; font-weight:bold; }
   #standings .dot { width:10px; height:10px; border-radius:50%; flex:0 0 auto; box-shadow:0 0 6px currentColor; }
   #standings .nm { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #standings .pf { display:inline-flex; align-items:center; justify-content:center; width:13px; height:13px; border-radius:3px;
+    font-size:9px; font-weight:900; margin-right:5px; vertical-align:middle; flex:0 0 auto; }
+  #standings .pf.kick { background:#53fc18; color:#000; }
+  #standings .pf.twitch { background:#9146ff; color:#fff; }
+  #standings .pf.yt { background:#ff0000; color:#fff; font-size:7px; }
   #standings .st { font-size:10px; opacity:.85; }
   #feed { margin-top:8px; display:flex; flex-direction:column; gap:3px; }
   #feed .ev { font-size:11px; padding:3px 8px; border-radius:6px; background:rgba(6,20,40,.5);
@@ -80,10 +88,15 @@
     background:rgba(40,140,255,.25); color:#cfeaff; border:1px solid rgba(80,180,255,.5); letter-spacing:2px; }
   #endcard .again:hover { background:rgba(40,140,255,.45); }
   /* SpeedyGoWild music player */
-  #boosthint { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); z-index:30; display:none;
+  #boosthint { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); z-index:31; display:none;
+    cursor:pointer; pointer-events:auto; user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent;
     font-family:'Courier New',monospace; font-size:14px; letter-spacing:3px; color:#bfefff; padding:7px 18px;
     border-radius:20px; background:rgba(6,12,26,.7); border:1px solid rgba(120,220,255,.8); backdrop-filter:blur(3px); }
-  #minimap { position:fixed; bottom:40px; left:12px; z-index:30; width:190px; height:132px; border-radius:10px;
+  #dashlink { position:fixed; bottom:48px; left:12px; z-index:30; font-family:'Courier New',monospace; font-size:11px;
+    letter-spacing:2px; color:#bfefff; text-decoration:none; background:rgba(6,12,26,.78); border:1px solid rgba(120,220,255,.55);
+    border-radius:8px; padding:7px 14px; backdrop-filter:blur(3px); display:inline-block; }
+  #dashlink:hover { background:rgba(40,140,255,.35); color:#fff; }
+  #minimap { position:fixed; bottom:84px; left:12px; z-index:30; width:190px; height:132px; border-radius:10px;
     background:rgba(6,12,26,.78); border:1px solid rgba(60,180,255,.4); box-shadow:0 0 18px rgba(0,120,255,.25); }
   #music { position:fixed; bottom:10px; right:12px; z-index:30; display:flex; align-items:center; gap:10px;
     background:rgba(6,12,26,.82); border:1px solid rgba(60,180,255,.4); border-radius:10px; padding:8px 10px;
@@ -105,12 +118,40 @@
   #music button { background:rgba(0,150,255,.15); color:#9fefff; border:1px solid rgba(60,180,255,.5);
     border-radius:6px; width:30px; height:30px; cursor:pointer; font-size:13px; line-height:1; }
   #music button:hover { background:rgba(0,150,255,.35); }
-</style>
+  /* ---- MOBILE: scale everything down so the track stays the star ---- */
+  @media (max-width: 768px) {
+    #hud { top:6px; left:8px; gap:4px; }
+    #hud .brand { gap:8px; }
+    #hud .brand .logo { width:30px; height:30px; }
+    #hud .brand .bt { font-size:12px; letter-spacing:1px; }
+    #hud .brand .bt small { font-size:8px; }
+    #hud .brand .by { font-size:7px; letter-spacing:2px; margin-top:1px; }
+
+    #rightcol { width:148px; top:6px; right:8px; }
+    #standings .row { padding:2px 6px; gap:5px; margin:1.5px 0; }
+    #standings .nm { font-size:10px; }
+    #standings .dot { width:8px; height:8px; }
+    #standings .rank { width:13px; }
+    #standings .youtag { font-size:8px; padding:0 3px; }
+    #standings .st { display:none; }
+    #feed { font-size:9px; }
+
+    #minimap { width:114px; height:80px; bottom:68px; left:8px; }
+    #dashlink { bottom:38px; left:8px; font-size:9px; padding:5px 10px; letter-spacing:1px; }
+    #status { bottom:12px; left:8px; font-size:8px; padding:2px 6px; }
+
+    #music { max-width:184px; right:8px; bottom:8px; padding:6px 8px; gap:7px; }
+    #music .artist { font-size:9px; }
+    #music .song { font-size:10px; }
+    #music #m-beat-wrap { display:none; }
+
+    /* big, obvious tap target for boost */
+    #boosthint { bottom:96px; font-size:17px; padding:13px 34px; letter-spacing:3px; border-width:2px; }
+  }
 </head>
 <body>
 <canvas id="c"></canvas>
 <div id="hud">
-  <a class="dashbtn" href="/dashboard">📊 DASHBOARD</a>
   <div class="brand">
     <svg class="logo" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
       <defs>
@@ -160,6 +201,7 @@
 <!-- SpeedyGoWild background music: self-hosted playlist (music/playlist.json) when present
      = zero YouTube + zero ad-blocker issues; otherwise falls back to the YouTube embed -->
 <div id="boosthint">␣ BOOST</div>
+<a id="dashlink" href="/dashboard">📊 DASHBOARD</a>
 <canvas id="minimap" width="190" height="132"></canvas>
 <div id="music">
   <div class="meta">
@@ -183,10 +225,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=4u"></script>
-<script src="/v2/track.js?v=4u"></script>
-<script src="/v2/physics.js?v=4u"></script>
-<script src="/v2/cosmetics.js?v=4u"></script>
+<script src="/v2/forks.js?v=4v"></script>
+<script src="/v2/track.js?v=4v"></script>
+<script src="/v2/physics.js?v=4v"></script>
+<script src="/v2/cosmetics.js?v=4v"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -195,12 +237,13 @@
 const BALL_R = 0.5;
 // manual (spacebar) boost: forward burst strength + seconds between uses
 const BOOST_AMOUNT = 1.8, BOOST_COOLDOWN = 2.5;
+const _isTouch = (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches) || ('ontouchstart' in window);
 let _boostReadyAt = 0, _mpWS = null, _boostHint = null;
 const statusEl = document.getElementById('status');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = '4u';
+const BUILD = '4v';
 console.log('[ZORBS] build', BUILD);
 
 // ---- ERROR LOGGER: phone runtime errors home (/api/log) so we can fix the game from real
@@ -271,11 +314,14 @@ if (THREE.EffectComposer && THREE.UnrealBloomPass) {
   _bloom = bloom;
 }
 
-addEventListener('resize', () => {
+function doResize() {
   renderer.setSize(innerWidth, innerHeight);
   if (composer) composer.setSize(innerWidth, innerHeight);
   camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
-});
+}
+addEventListener('resize', doResize);
+addEventListener('orientationchange', () => setTimeout(doResize, 200));
+if (window.visualViewport) visualViewport.addEventListener('resize', doResize);
 
 // lights (slightly hotter than before — ACES tone mapping eats some brightness)
 scene.add(new THREE.AmbientLight(0x445577, 0.75));
@@ -674,7 +720,7 @@ function makeLabel(text, isMe){
   return sp;
 }
 
-function makeZorb(id, prefs, isSub) {
+function makeZorb(id, prefs, isSub, platform) {
   const cos = ZCOSMETICS.resolveForPlayer(prefs, isSub, prefs.owned || []);
   const color = (cos.skin.color != null) ? cos.skin.color : PALETTE[(colorIdx++) % PALETTE.length];
   const accent = new THREE.Color(color);
@@ -748,6 +794,7 @@ function makeZorb(id, prefs, isSub) {
 
   zorbs.set(id, {
     mesh: core, ring, ringGlow, band, color, trail, trailPos, trailLen: TRAIL_LEN, streak, label,
+    platform: platform || 'guest',
     spawnT: 0, spawnAnim: cos.spawn, ringSpin: cos.ring.spin || 2.0,
     ringBob: Math.random()*Math.PI*2, eliminated:false, fallT:0,
     rollQ: new THREE.Quaternion(),
@@ -839,6 +886,14 @@ function resetHUD(){
   for (const k in _boostCool) delete _boostCool[k];
   standingsEl.innerHTML = ''; feedEl.innerHTML = ''; endcardEl.style.display = 'none';
 }
+function platformBadge(p){
+  // small platform logo next to real (signed-in) players. Twitch/YouTube light up once those
+  // logins are added; bots and anonymous guests get nothing.
+  if (p === 'kick') return '<span class="pf kick" title="Kick">K</span>';
+  if (p === 'twitch') return '<span class="pf twitch" title="Twitch">T</span>';
+  if (p === 'youtube') return '<span class="pf yt" title="YouTube">▶</span>';
+  return '';
+}
 function updateHUD(snap, nowSec){
   const rows = [];
   zorbs.forEach((z, id) => rows.push({ id, z, s: snap[id], fin: _finishedSet.has(id), out: z.eliminated }));
@@ -852,7 +907,7 @@ function updateHUD(snap, nowSec){
   rows.forEach((r, i) => {
     const cls = (r.fin ? 'fin' : (r.out ? 'out' : (i === 0 ? 'lead' : ''))) + (r.id === _myMarble ? ' you' : '');
     const st = r.fin ? ('#'+(_finishOrder.indexOf(r.id)+1)) : (r.out ? 'OUT' : '');
-    const nm = esc(r.id) + (r.id === _myMarble ? ' <span class="youtag">YOU</span>' : '');
+    const nm = platformBadge(r.z.platform) + esc(r.id) + (r.id === _myMarble ? ' <span class="youtag">YOU</span>' : '');
     html += '<div class="row '+cls+'"><span class="rank">'+(i+1)+'</span><span class="dot" style="color:'+cssColor(r.z.color)+'"></span><span class="nm">'+nm+'</span><span class="st">'+st+'</span></div>';
   });
   standingsEl.innerHTML = html;
@@ -974,7 +1029,7 @@ function startRace(seed, names) {
 
 let _spawnIndex = 0;
 function spawnOne(item) {
-  makeZorb(item.id, item.prefs, item.isSub);
+  makeZorb(item.id, item.prefs, item.isSub, item.platform);
   // Place in a grid on the platform: rows across the width, columns down its length,
   // starting near the BACK so nobody spawns past the front edge.
   const plat = track.platform;
@@ -1139,7 +1194,7 @@ function loop(now) {
       const ready = performance.now() >= _boostReadyAt;
       _boostHint.style.display = 'block';
       _boostHint.style.opacity = ready ? '1' : '0.35';
-      _boostHint.textContent = ready ? '␣ BOOST' : 'BOOST…';
+      _boostHint.textContent = ready ? (_isTouch ? '⚡ BOOST' : '␣ BOOST') : 'BOOST…';
       _boostHint.style.borderColor = ready ? 'rgba(120,220,255,.8)' : 'rgba(120,120,140,.4)';
     } else _boostHint.style.display = 'none';
   }
@@ -1359,9 +1414,9 @@ function runMultiplayer(){
   }
   function runMpRace(race){
     const names = []; const used = new Set();
-    for (const p of roster.slice(0, MP_FIELD)) { if(used.has(p.name)) continue; names.push({ id:p.name, isSub:false, prefs:{} }); used.add(p.name); }
+    for (const p of roster.slice(0, MP_FIELD)) { if(used.has(p.name)) continue; names.push({ id:p.name, isSub:false, prefs:{}, platform: p.platform || 'guest' }); used.add(p.name); }
     const bots = mpBots(race.seed); let bi = 0;
-    while (names.length < MP_FIELD) { let bn = bots[bi++ % bots.length]; while(used.has(bn)) bn += '·'; used.add(bn); names.push({ id:bn, isSub:false, prefs:{} }); }
+    while (names.length < MP_FIELD) { let bn = bots[bi++ % bots.length]; while(used.has(bn)) bn += '·'; used.add(bn); names.push({ id:bn, isSub:false, prefs:{}, platform:'bot' }); }
     startRace(race.seed, names);
     // pre-schedule the next race so it loops forever
     const next = { slot: race.slot+1, seed: mpSeedForSlot(race.slot+1), startTime: (race.slot+1)*MP_SLOT_MS + MP_LOBBY_MS };
@@ -1370,7 +1425,7 @@ function runMultiplayer(){
   function connect(){
     try { ws = new WebSocket('wss://' + MP_HOST + '/parties/main/' + MP_ROOM); _mpWS = ws; }
     catch(e){ ZLOG.report('manual','mp ws ctor failed: '+(e&&e.message)); setTimeout(connect, 3000); return; }
-    ws.onopen = () => ws.send(JSON.stringify({ type:'join', name: myName }));
+    ws.onopen = () => ws.send(JSON.stringify({ type:'join', name: myName, platform: _kickName ? 'kick' : 'guest' }));
     ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch(_){ return; }
       if (m.type === 'welcome') { gotWelcome = true; offset = m.serverTime - Date.now(); _mpOffset = offset; roster = m.players || [];
         if (m.official) { _officialSlot = m.official.slot; _officialOrder = m.official.order; _officialFinished = m.official.finished || 0; }
@@ -1647,25 +1702,32 @@ if (_volEl) {
   });
 })();
 
-// SPACEBAR BOOST — apply locally immediately for instant feel, then tell the server, which
-// broadcasts to every client so all sims apply the same boost and stay in sync. Gated by a
-// short cooldown.
+// BOOST — spacebar (desktop) or tap the BOOST button (mobile). Sends to the server, which
+// broadcasts a shared apply-time so every client stays in sync. Gated by a short cooldown.
 _boostHint = document.getElementById('boosthint');
-window.addEventListener('keydown', (e) => {
-  if (e.code !== 'Space' && e.key !== ' ') return;
-  e.preventDefault();
+function tryBoost(){
   if (phase !== 'racing' || !_myMarble || !ZPHYSICS.isReady()) return;
   const z = zorbs.get(_myMarble); if (!z || z.eliminated) return;
   const t = performance.now();
   if (t < _boostReadyAt) return;
   _boostReadyAt = t + BOOST_COOLDOWN*1000;
   if (_mpWS && _mpWS.readyState === 1) {
-    _mpWS.send(JSON.stringify({ type:'boost', name:_myMarble }));   // applied for everyone at the server-stamped time
+    _mpWS.send(JSON.stringify({ type:'boost', name:_myMarble }));
   } else {
     ZPHYSICS.giveBoost(_myMarble, BOOST_AMOUNT);                    // solo: instant
     if (typeof pushFeed === 'function') pushFeed('boost', '<b>'+esc(_myMarble)+'</b> used boost!');
   }
+}
+window.addEventListener('keydown', (e) => {
+  if (e.code !== 'Space' && e.key !== ' ') return;
+  e.preventDefault();
+  tryBoost();
 });
+// tap-to-boost (mobile + click)
+if (_boostHint) {
+  _boostHint.addEventListener('click', (e) => { e.preventDefault(); tryBoost(); });
+  _boostHint.addEventListener('touchstart', (e) => { e.preventDefault(); tryBoost(); }, { passive:false });
+}
 
 // when the tab is hidden the browser pauses requestAnimationFrame entirely. drive the
 // physics from a timer in that case so the race keeps running and stays in server sync.
