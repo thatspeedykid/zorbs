@@ -5,11 +5,15 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Zorbs On Stream</title>
 <style>
-  html,body { margin:0; height:100%; background:#02050d; overflow:hidden; font-family:'Courier New',monospace; }
-  #c { display:block; width:100vw; height:100vh; }
+  html,body { margin:0; height:100%; background:#02050d; overflow:hidden; font-family:'Courier New',monospace;
+    touch-action:manipulation; overscroll-behavior:none; -webkit-text-size-adjust:100%; -webkit-tap-highlight-color:transparent; }
+  #c { display:block; width:100vw; height:100vh; touch-action:none; }
   #hud { position:fixed; top:10px; left:12px; z-index:10; display:flex; flex-direction:column; align-items:flex-start; gap:8px; }
   #hud .dashbtn { font-family:'Courier New',monospace; font-size:11px; letter-spacing:2px; color:#bfefff; text-decoration:none;
     background:rgba(6,12,26,.72); border:1px solid rgba(120,220,255,.55); border-radius:8px; padding:6px 14px; backdrop-filter:blur(3px); transition:.15s; }
@@ -98,6 +102,13 @@
     letter-spacing:2px; color:#bfefff; text-decoration:none; background:rgba(6,12,26,.78); border:1px solid rgba(120,220,255,.55);
     border-radius:8px; padding:7px 14px; backdrop-filter:blur(3px); display:inline-block; }
   #dashlink:hover { background:rgba(40,140,255,.35); color:#fff; }
+  /* fullscreen toggle — only shown on touch devices (added via JS body class) */
+  #fsbtn { display:none; position:fixed; z-index:32; cursor:pointer; font-family:'Courier New',monospace;
+    color:#bfefff; background:rgba(6,12,26,.8); border:1px solid rgba(120,220,255,.6); border-radius:9px;
+    padding:8px 12px; font-size:13px; letter-spacing:1px; -webkit-tap-highlight-color:transparent;
+    align-items:center; gap:6px; backdrop-filter:blur(3px); }
+  body.touch #fsbtn { display:inline-flex; }
+  body.fs #fsbtn .fslabel { display:none; }
   #minimap { position:fixed; bottom:84px; left:12px; z-index:30; width:190px; height:132px; border-radius:10px;
     background:rgba(6,12,26,.78); border:1px solid rgba(60,180,255,.4); box-shadow:0 0 18px rgba(0,120,255,.25); }
   #music { position:fixed; bottom:10px; right:12px; z-index:30; display:flex; align-items:center; gap:10px;
@@ -150,11 +161,35 @@
 
     /* big, obvious tap target for boost */
     #boosthint { bottom:96px; font-size:17px; padding:13px 34px; letter-spacing:3px; border-width:2px; }
+    #fsbtn { top:50px; left:8px; font-size:11px; padding:6px 10px; }
+  }
+
+  /* ---- LANDSCAPE phones: short height, wide — compact arrangement ---- */
+  @media (orientation: landscape) and (max-height: 500px) {
+    #hud { top:5px; left:8px; gap:3px; }
+    #hud .brand .logo { width:26px; height:26px; }
+    #hud .brand .bt { font-size:11px; letter-spacing:1px; }
+    #hud .brand .bt small { font-size:7px; }
+    #hud .brand .by { font-size:6px; letter-spacing:1px; margin-top:1px; }
+    #rightcol { width:150px; top:5px; right:8px; }
+    #standings .row { padding:1px 6px; gap:5px; margin:1px 0; font-size:11px; }
+    #standings .nm { font-size:10px; }
+    #standings .st { display:none; }
+    #feed { display:none; }
+    #nextrace { display:none; }
+    #minimap { width:104px; height:62px; bottom:6px; left:8px; }
+    #dashlink { bottom:74px; left:8px; font-size:9px; padding:4px 9px; letter-spacing:1px; }
+    #fsbtn { top:5px; right:166px; left:auto; font-size:10px; padding:5px 9px; }
+    #music { max-width:150px; right:8px; bottom:6px; top:auto; padding:5px 7px; gap:6px; }
+    #music #m-beat-wrap { display:none; }
+    #music .artist { font-size:9px; } #music .song { font-size:10px; }
+    #music button { width:26px; height:26px; font-size:12px; }
+    #boosthint { bottom:10px; font-size:15px; padding:10px 28px; }
   }
 </style>
 </head>
 <body>
-<div id="buildtag" style="position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:99999;background:#0a0;color:#fff;font:bold 11px monospace;padding:2px 10px;border-radius:0 0 6px 6px;letter-spacing:1px;">PLAY2</div>
+<div id="buildtag" style="position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:99999;background:#0a0;color:#fff;font:bold 11px monospace;padding:2px 10px;border-radius:0 0 6px 6px;letter-spacing:1px;">PLAY3</div>
 <canvas id="c"></canvas>
 <div id="hud">
   <div class="brand">
@@ -205,6 +240,7 @@
 <!-- SpeedyGoWild background music: self-hosted playlist (music/playlist.json) when present
      = zero YouTube + zero ad-blocker issues; otherwise falls back to the YouTube embed -->
 <div id="boosthint">␣ BOOST</div>
+<button id="fsbtn">⛶ <span class="fslabel">FULLSCREEN</span></button>
 <a id="dashlink" href="/dashboard">📊 DASHBOARD</a>
 <canvas id="minimap" width="190" height="132"></canvas>
 <div id="music">
@@ -229,10 +265,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=PLAY2"></script>
-<script src="/v2/track.js?v=PLAY2"></script>
-<script src="/v2/physics.js?v=PLAY2"></script>
-<script src="/v2/cosmetics.js?v=PLAY2"></script>
+<script src="/v2/forks.js?v=PLAY3"></script>
+<script src="/v2/track.js?v=PLAY3"></script>
+<script src="/v2/physics.js?v=PLAY3"></script>
+<script src="/v2/cosmetics.js?v=PLAY3"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -247,8 +283,32 @@ const statusEl = document.getElementById('nextrace');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = 'PLAY2';
+const BUILD = 'PLAY3';
 console.log('[ZORBS] build', BUILD);
+
+// ---- MOBILE UX: mark touch devices, block pinch/double-tap zoom, wire fullscreen button ----
+(function mobileUX(){
+  if (_isTouch) document.body.classList.add('touch');
+  // block pinch-zoom (iOS uses gesture events; others use multi-touch) so taps land as BOOST
+  document.addEventListener('gesturestart',  e => e.preventDefault());
+  document.addEventListener('gesturechange', e => e.preventDefault());
+  document.addEventListener('gestureend',    e => e.preventDefault());
+  document.addEventListener('touchmove', e => { if (e.touches.length > 1) e.preventDefault(); }, { passive:false });
+  // fullscreen toggle button
+  const fsbtn = document.getElementById('fsbtn');
+  const root = document.documentElement;
+  const inFs = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+  function toggleFs(){
+    try {
+      if (!inFs()) { const req = root.requestFullscreen || root.webkitRequestFullscreen; if (req) req.call(root); }
+      else { const ex = document.exitFullscreen || document.webkitExitFullscreen; if (ex) ex.call(document); }
+    } catch(_){}
+  }
+  if (fsbtn) fsbtn.addEventListener('click', e => { e.preventDefault(); toggleFs(); });
+  const syncFs = () => document.body.classList.toggle('fs', inFs());
+  document.addEventListener('fullscreenchange', syncFs);
+  document.addEventListener('webkitfullscreenchange', syncFs);
+})();
 
 // ---- ERROR LOGGER: phone runtime errors home (/api/log) so we can fix the game from real
 // data as it runs in the wild. Deduped + capped so it never spams. Pure additive safety net.
