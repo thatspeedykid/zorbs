@@ -21,7 +21,9 @@
   #hud .brand .bt b { color:#7fe9ff; }
   #hud .brand .bt small { color:#7fe9ff; font-size:11px; letter-spacing:1px; }
   #hud .brand .by { color:#7fb8e0; font-size:9px; letter-spacing:3px; margin-top:3px; }
-  #status { position:fixed; bottom:14px; left:12px; font-size:10px; font-family:monospace; padding:3px 8px; border-radius:4px; z-index:20; }
+  #nextrace { font-family:'Courier New',monospace; font-size:11px; letter-spacing:1px; padding:5px 9px; margin-bottom:6px;
+    border-radius:7px; text-align:center; font-weight:bold; }
+  #nextrace:empty { display:none; }
   #arm { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(2,5,13,.9); z-index:50; cursor:default; }
   #arm .box { display:flex; flex-direction:column; align-items:center; gap:14px; color:#7fe9ff;
     border:1px solid rgba(0,200,255,.35); padding:34px 44px; border-radius:16px; text-align:center;
@@ -92,7 +94,7 @@
     cursor:pointer; pointer-events:auto; user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent;
     font-family:'Courier New',monospace; font-size:14px; letter-spacing:3px; color:#bfefff; padding:7px 18px;
     border-radius:20px; background:rgba(6,12,26,.7); border:1px solid rgba(120,220,255,.8); backdrop-filter:blur(3px); }
-  #dashlink { position:fixed; bottom:48px; left:12px; z-index:30; font-family:'Courier New',monospace; font-size:11px;
+  #dashlink { position:fixed; bottom:226px; left:12px; z-index:30; font-family:'Courier New',monospace; font-size:11px;
     letter-spacing:2px; color:#bfefff; text-decoration:none; background:rgba(6,12,26,.78); border:1px solid rgba(120,220,255,.55);
     border-radius:8px; padding:7px 14px; backdrop-filter:blur(3px); display:inline-block; }
   #dashlink:hover { background:rgba(40,140,255,.35); color:#fff; }
@@ -136,9 +138,9 @@
     #standings .st { display:none; }
     #feed { font-size:9px; }
 
-    #minimap { width:114px; height:80px; bottom:68px; left:8px; }
-    #dashlink { bottom:38px; left:8px; font-size:9px; padding:5px 10px; letter-spacing:1px; }
-    #status { bottom:12px; left:8px; font-size:8px; padding:2px 6px; }
+    #minimap { width:100px; height:70px; bottom:60px; left:8px; }
+    #dashlink { bottom:138px; left:8px; font-size:9px; padding:5px 10px; letter-spacing:1px; }
+    #nextrace { font-size:9px; padding:4px 7px; margin-bottom:4px; }
 
     #music { max-width:184px; right:8px; bottom:8px; padding:6px 8px; gap:7px; }
     #music .artist { font-size:9px; }
@@ -178,7 +180,7 @@
   <div class="cd" id="lobbyCd">—</div>
   <div class="s" id="lobbySub">racers taking their marks…</div>
 </div></div>
-<div id="rightcol"><div id="standings"></div><div id="feed"></div></div>
+<div id="rightcol"><div id="nextrace"></div><div id="standings"></div><div id="feed"></div></div>
 <div id="endcard"><div class="panel">
   <h2>RACE COMPLETE</h2>
   <div class="champ"></div>
@@ -186,7 +188,6 @@
   <div class="mystats"></div>
   <button class="again">RACE AGAIN</button>
 </div></div>
-<div id="status">booting…</div>
 <div id="arm"><div class="box">
   <div class="title">ZORBS</div>
   <div class="sub">live browser marble racing</div>
@@ -225,10 +226,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=TEST1"></script>
-<script src="/v2/track.js?v=TEST1"></script>
-<script src="/v2/physics.js?v=TEST1"></script>
-<script src="/v2/cosmetics.js?v=TEST1"></script>
+<script src="/v2/forks.js?v=TEST2"></script>
+<script src="/v2/track.js?v=TEST2"></script>
+<script src="/v2/physics.js?v=TEST2"></script>
+<script src="/v2/cosmetics.js?v=TEST2"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -239,11 +240,11 @@ const BALL_R = 0.5;
 const BOOST_AMOUNT = 1.8, BOOST_COOLDOWN = 2.5;
 const _isTouch = (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches) || ('ontouchstart' in window);
 let _boostReadyAt = 0, _mpWS = null, _boostHint = null;
-const statusEl = document.getElementById('status');
+const statusEl = document.getElementById('nextrace');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = 'TEST1';
+const BUILD = 'TEST2';
 console.log('[ZORBS] build', BUILD);
 
 // ---- ERROR LOGGER: phone runtime errors home (/api/log) so we can fix the game from real
@@ -1418,6 +1419,7 @@ function runMultiplayer(){
     const bots = mpBots(race.seed); let bi = 0;
     while (names.length < MP_FIELD) { let bn = bots[bi++ % bots.length]; while(used.has(bn)) bn += '·'; used.add(bn); names.push({ id:bn, isSub:false, prefs:{}, platform:'bot' }); }
     startRace(race.seed, names);
+    setStatus('');   // race is live now → hide the countdown chip (standings take over)
     // pre-schedule the next race so it loops forever
     const next = { slot: race.slot+1, seed: mpSeedForSlot(race.slot+1), startTime: (race.slot+1)*MP_SLOT_MS + MP_LOBBY_MS };
     setTimeout(() => scheduleRace(next), Math.max(2000, (next.startTime - offset) - Date.now()));
