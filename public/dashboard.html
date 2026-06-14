@@ -557,6 +557,7 @@ function showPage(id){
   const nav  = document.getElementById('ni-'+id);
   if(page) page.classList.add('active');
   if(nav)  nav.classList.add('active');
+  if(id === 'leaderboard') loadGlobalLeaderboard();
 }
 
 // ── GUEST / PERSONAL STATS ─────────────────────────────
@@ -606,6 +607,51 @@ function populatePersonal(){
       '<div class="lb-row"><div>Best finish</div><div style="margin-left:auto;color:var(--c)">'+(best?'#'+best:'—')+'</div></div>'+
       '<div class="lb-row"><div>Win rate</div><div style="margin-left:auto;color:var(--c)">'+winRate+'%</div></div>'
     : '<div class="stat-row"><span style="color:rgba(255,255,255,0.2)">Play a race to see your stats</span></div>';
+}
+
+// ── GLOBAL LEADERBOARD (server DB) ─────────────────────
+function _lbEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function loadGlobalLeaderboard(){
+  const el = document.getElementById('lb-global');
+  if(!el) return;
+  let kickId = null;
+  try { const s = JSON.parse(localStorage.getItem('zorbs_session')||'null'); if(s) kickId = s.kickId; } catch(_){}
+  el.innerHTML = '<div class="stat-row"><span style="color:rgba(255,255,255,0.3)">Loading…</span></div>';
+  fetch('/api/leaderboard' + (kickId ? ('?user='+encodeURIComponent(kickId)) : ''))
+    .then(r => r.json())
+    .then(d => {
+      if(!d || d.configured === false){
+        el.innerHTML = '<div class="stat-row"><span style="color:rgba(255,255,255,0.25);line-height:1.7">Global board activates once the database is connected.<br>Sign in with Kick in the game to start banking wins.</span></div>';
+        return;
+      }
+      const lb = d.leaderboard || [];
+      if(!lb.length){
+        el.innerHTML = '<div class="stat-row"><span style="color:rgba(255,255,255,0.25)">No ranked players yet — win a race signed in with Kick to claim #1.</span></div>';
+      } else {
+        const medal = ['var(--y)','#cfd8e3','#cd7f32'];
+        el.innerHTML = lb.map((u,i) =>
+          '<div class="lb-row"'+(u.kickId===kickId?' style="background:rgba(83,252,24,.08);border-radius:6px;padding-left:6px"':'')+'>'+
+            '<div style="width:24px;color:'+(medal[i]||'rgba(255,255,255,.5)')+';font-weight:bold">'+(i+1)+'</div>'+
+            '<div style="flex:1">'+_lbEsc(u.username)+(u.kickId===kickId?' <span style="color:var(--g);font-size:9px">YOU</span>':'')+'</div>'+
+            '<div style="margin-left:auto;color:var(--y)">'+(u.wins||0)+' W</div>'+
+            '<div style="width:62px;text-align:right;color:rgba(255,255,255,.45);font-size:10px">'+(u.races||0)+' races</div>'+
+          '</div>'
+        ).join('');
+      }
+      if(d.you) renderServerPersonal(d.you);
+    })
+    .catch(()=>{ el.innerHTML = '<div class="stat-row"><span style="color:rgba(255,255,255,0.25)">Couldn\'t reach the leaderboard right now.</span></div>'; });
+}
+function renderServerPersonal(u){
+  const lb = document.getElementById('lb-personal'); if(!lb) return;
+  const races=u.races||0, wins=u.wins||0, podiums=u.podiums||0, best=u.best||0;
+  const winRate = races ? Math.round(wins/races*100) : 0;
+  lb.innerHTML =
+    '<div class="lb-row"><div>Races</div><div style="margin-left:auto;color:var(--c)">'+races+'</div></div>'+
+    '<div class="lb-row"><div>Wins</div><div style="margin-left:auto;color:var(--y)">'+wins+'</div></div>'+
+    '<div class="lb-row"><div>Podiums</div><div style="margin-left:auto;color:var(--g)">'+podiums+'</div></div>'+
+    '<div class="lb-row"><div>Best finish</div><div style="margin-left:auto;color:var(--c)">'+(best?'#'+best:'—')+'</div></div>'+
+    '<div class="lb-row"><div>Win rate</div><div style="margin-left:auto;color:var(--c)">'+winRate+'%</div></div>';
 }
 
 // ── RACE CONTROL ───────────────────────────────────────

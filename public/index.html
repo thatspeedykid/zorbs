@@ -25,9 +25,7 @@
   #hud .brand .bt b { color:#7fe9ff; }
   #hud .brand .bt small { color:#7fe9ff; font-size:11px; letter-spacing:1px; }
   #hud .brand .by { color:#7fb8e0; font-size:9px; letter-spacing:3px; margin-top:3px; }
-  #nextrace { font-family:'Courier New',monospace; font-size:11px; letter-spacing:1px; padding:5px 9px; margin-bottom:6px;
-    border-radius:7px; text-align:center; font-weight:bold; }
-  #nextrace:empty { display:none; }
+  #nextrace { display:none; }   /* countdown chip retired — center NEXT RACE overlay covers it */
   #arm { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(2,5,13,.9); z-index:50; cursor:default; }
   #arm .box { display:flex; flex-direction:column; align-items:center; gap:14px; color:#7fe9ff;
     border:1px solid rgba(0,200,255,.35); padding:34px 44px; border-radius:16px; text-align:center;
@@ -262,10 +260,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=v02p"></script>
-<script src="/v2/track.js?v=v02p"></script>
-<script src="/v2/physics.js?v=v02p"></script>
-<script src="/v2/cosmetics.js?v=v02p"></script>
+<script src="/v2/forks.js?v=v03"></script>
+<script src="/v2/track.js?v=v03"></script>
+<script src="/v2/physics.js?v=v03"></script>
+<script src="/v2/cosmetics.js?v=v03"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -280,7 +278,7 @@ const statusEl = document.getElementById('nextrace');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = 'v0.2';
+const BUILD = 'v0.3';
 console.log('[ZORBS] build', BUILD);
 
 // ---- MOBILE UX: mark touch devices, block pinch/double-tap zoom, wire fullscreen button ----
@@ -998,6 +996,19 @@ function recordResult(place){
   if (_myMarble) s.name = _myMarble;
   saveStats(s); return s;
 }
+// ---- GLOBAL LEADERBOARD: report this race result to the server DB (signed-in Kick users only).
+// Fully fire-and-forget + guarded, so it can never affect gameplay. No-ops if not signed in
+// or if the DB isn't configured yet. ----
+function postLeaderboard(place){
+  try {
+    const sess = JSON.parse(localStorage.getItem('zorbs_session') || 'null');
+    if (!sess || !sess.kickId) return;                 // only real Kick accounts count
+    fetch('/api/leaderboard', {
+      method:'POST', headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({ kickId: sess.kickId, username: sess.username || _myMarble, place: place })
+    }).catch(()=>{});
+  } catch(_){}
+}
 function statsLine(s){
   if (!s || !s.races) return '';
   return s.races + ' races · ' + (s.wins||0) + ' wins · ' + (s.podiums||0) + ' podiums · best ' + (s.best ? '#'+s.best : '—');
@@ -1029,6 +1040,7 @@ function showEndCard(){
     const idx = order.indexOf(_myMarble);
     const myPlace = (idx >= 0 && idx < finishedCount) ? (idx + 1) : 0;  // 0 = DNF
     const s = recordResult(myPlace);
+    postLeaderboard(myPlace);
     if (statsEl) statsEl.textContent = 'YOUR RECORD — ' + statsLine(s);
   }
   const againBtn = endcardEl.querySelector('.again');
