@@ -298,6 +298,7 @@ body{background:#05050f;color:#fff;font-family:'Courier New',monospace;min-heigh
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
             <button class="btn btn-green" onclick="lobbyStart()">▶ START RACE</button>
             <button class="btn btn-cyan" onclick="lobbyReset()">↻ RESET RACE</button>
+            <button class="btn btn-cyan" onclick="lobbyClearChat()">✕ CLEAR CHAT RACERS</button>
             <label class="ctl-toggle"><input type="checkbox" id="ctl-autoplay" onchange="lobbySetAutoplay(this.checked)"> <span>AUTOPLAY</span></label>
             <label class="ctl-toggle"><input type="checkbox" id="ctl-mute" checked onchange="lobbyMute(this.checked)"> <span>MUSIC MUTED</span></label>
           </div>
@@ -648,6 +649,7 @@ function lobbySetAutoplay(on){ lobbyCmd({ action:'set', autoplay: !!on }); }
 function lobbyJoinMode(v){ segSet('seg-join', v); lobbyCmd({ action:'set', joinMode: v }); }
 function lobbyStart(){ lobbyCmd({ action:'start' }); }
 function lobbyReset(){ lobbyCmd({ action:'reset' }); }
+function lobbyClearChat(){ lobbyCmd({ action:'clearchat' }); }
 function lobbyMute(on){ lobbyCmd({ action:'view', muted: !!on }); }
 function lobbyCam(v){ segSet('seg-cam', v); lobbyCmd({ action:'view', camera: v, idx: _camIdx }); }
 function lobbyCamCycle(d){ _camIdx += d; if(_camIdx < 0) _camIdx = 0; segSet('seg-cam','player'); lobbyCmd({ action:'view', camera:'player', idx: _camIdx }); }

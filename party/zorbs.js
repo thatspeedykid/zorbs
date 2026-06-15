@@ -28,6 +28,7 @@ export default class ZorbsRoom {
   constructor(party) {
     this.party = party;
     this.players = new Map();
+    this.chatPlayers = new Map();   // chatters who typed !play (no browser) — keyed by lowercased name
     this.official = null;
     // private-lobby control state (defaults: autoplay OFF, everyone may join)
     this.control = { autoplay: false, joinMode: 'all' };
@@ -37,9 +38,21 @@ export default class ZorbsRoom {
   }
   get isPublic() { return this.party.id === 'public'; }
 
+  // the full roster broadcast to clients = browser players + chat (!play) players, de-duped by name
+  rosterList() {
+    const browser = [...this.players.values()];
+    const seen = new Set(browser.map(p => String(p.name).toLowerCase()));
+    const chat = [];
+    for (const c of this.chatPlayers.values()) {
+      if (seen.has(c.name.toLowerCase())) continue;
+      chat.push({ id: 'chat:' + c.name, name: c.name, platform: 'kick', founder: false, isSub: !!c.isSub });
+    }
+    return browser.concat(chat);
+  }
+
   onConnect(conn) {
     const msg = { type: 'welcome', id: conn.id, serverTime: Date.now(),
-      race: currentRace(Date.now()), players: [...this.players.values()],
+      race: currentRace(Date.now()), players: this.rosterList(),
       control: this.control,
       directed: (this.directed && this.directed.startTime + 8000 > Date.now()) ? this.directed : null };
     if (this.official && this.official.slot === currentRace(Date.now()).slot) msg.official = this.official;
@@ -110,6 +123,9 @@ export default class ZorbsRoom {
       } else if (a === 'reset') {
         this.directed = null;
         this.party.broadcast(JSON.stringify({ type: 'reset' }));
+      } else if (a === 'clearchat') {
+        this.chatPlayers.clear();
+        this.broadcastPlayers();
       } else if (a === 'view') {
         // camera / music for the OBS overlay — clients filter this to the OBS view only
         this.party.broadcast(JSON.stringify({ type: 'view', camera: m.camera, idx: m.idx | 0, muted: !!m.muted, has_muted: typeof m.muted === 'boolean' }));
@@ -124,14 +140,43 @@ export default class ZorbsRoom {
     this.party.broadcast(JSON.stringify({ type: 'controlState', autoplay: this.control.autoplay, joinMode: this.control.joinMode }));
   }
   broadcastPlayers() {
-    this.party.broadcast(JSON.stringify({ type: 'players', players: [...this.players.values()] }));
+    this.party.broadcast(JSON.stringify({ type: 'players', players: this.rosterList() }));
   }
   send(conn, obj) { conn.send(JSON.stringify(obj)); }
 
-  onRequest() {
+  async onRequest(req) {
+    // POST = chat injection from the Kick webhook (!play / !boost). GET = status page.
+    if (req.method === 'POST') {
+      let b = {}; try { b = await req.json(); } catch (_) {}
+      const secret = (this.party.env && this.party.env.ZORBS_INJECT_SECRET) || '';
+      if (secret && b.secret !== secret) {
+        return new Response(JSON.stringify({ ok: false, error: 'bad secret' }), { status: 403, headers: { 'content-type': 'application/json' } });
+      }
+      const name = String(b.name || '').slice(0, 16).replace(/[<>"]/g, '').trim();
+      if (!name) return new Response(JSON.stringify({ ok: false, error: 'no name' }), { headers: { 'content-type': 'application/json' } });
+
+      if (b.cmd === 'play') {
+        // join-mode gate: subs-only ignores non-subs. (followers = best-effort: any chatter, until
+        // real follower lookup via the Kick API lands.)
+        if (this.control.joinMode === 'subs' && !b.isSub) {
+          return new Response(JSON.stringify({ ok: true, skipped: 'not-sub' }), { headers: { 'content-type': 'application/json' } });
+        }
+        if (this.chatPlayers.size < 60) this.chatPlayers.set(name.toLowerCase(), { name, isSub: !!b.isSub });
+        this.broadcastPlayers();
+        return new Response(JSON.stringify({ ok: true, joined: name, count: this.chatPlayers.size }), { headers: { 'content-type': 'application/json' } });
+      } else if (b.cmd === 'boost') {
+        this.party.broadcast(JSON.stringify({ type: 'boost', name, at: Date.now() + 220 }));
+        return new Response(JSON.stringify({ ok: true, boosted: name }), { headers: { 'content-type': 'application/json' } });
+      } else if (b.cmd === 'clear') {
+        this.chatPlayers.clear(); this.broadcastPlayers();
+        return new Response(JSON.stringify({ ok: true, cleared: true }), { headers: { 'content-type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({ ok: true }), { headers: { 'content-type': 'application/json' } });
+    }
+
     const r = currentRace(Date.now());
     return new Response(JSON.stringify({
-      ok: true, room: this.party.id, players: this.players.size,
+      ok: true, room: this.party.id, players: this.rosterList().length, chat: this.chatPlayers.size,
       control: this.control, currentRace: r, serverTime: Date.now(),
       secondsToStart: Math.max(0, Math.round((r.startTime - Date.now()) / 1000)),
     }, null, 2), { headers: { 'content-type': 'application/json' } });

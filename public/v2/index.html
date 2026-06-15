@@ -274,10 +274,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=v08"></script>
-<script src="/v2/track.js?v=v08"></script>
-<script src="/v2/physics.js?v=v08"></script>
-<script src="/v2/cosmetics.js?v=v08"></script>
+<script src="/v2/forks.js?v=v09"></script>
+<script src="/v2/track.js?v=v09"></script>
+<script src="/v2/physics.js?v=v09"></script>
+<script src="/v2/cosmetics.js?v=v09"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -292,7 +292,7 @@ const statusEl = document.getElementById('nextrace');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = 'v0.8';
+const BUILD = 'v0.9';
 console.log('[ZORBS] build', BUILD);
 
 // ---- MOBILE UX: mark touch devices, block pinch/double-tap zoom, wire fullscreen button ----
@@ -1588,7 +1588,8 @@ function runMultiplayer(){
   }
   function runMpRace(race){
     const names = []; const used = new Set();
-    for (const p of roster.slice(0, MP_FIELD)) { if(used.has(p.name)) continue; names.push({ id:p.name, isSub:false, prefs:{}, platform: p.platform || 'guest', founder: !!p.founder }); used.add(p.name); }
+    const cap = _PRIVATE ? 16 : MP_FIELD;   // private lobbies fit more chat (!play) racers
+    for (const p of roster.slice(0, cap)) { if(used.has(p.name)) continue; names.push({ id:p.name, isSub:!!p.isSub, prefs:{}, platform: p.platform || 'guest', founder: !!p.founder }); used.add(p.name); }
     const bots = mpBots(race.seed); let bi = 0;
     while (names.length < MP_FIELD) { let bn = bots[bi++ % bots.length]; while(used.has(bn)) bn += '·'; used.add(bn); names.push({ id:bn, isSub:false, prefs:{}, platform:'bot' }); }
     startRace(race.seed, names);
@@ -1634,7 +1635,8 @@ function runMultiplayer(){
       }
     } else {
       // host-started normal race: live roster + bots to fill the field
-      for (const p of roster.slice(0, MP_FIELD)){ if(used.has(p.name)) continue; names.push({ id:p.name, isSub:false, prefs:{}, platform:p.platform||'guest', founder:!!p.founder }); used.add(p.name); }
+      const cap = _PRIVATE ? 16 : MP_FIELD;
+      for (const p of roster.slice(0, cap)){ if(used.has(p.name)) continue; names.push({ id:p.name, isSub:!!p.isSub, prefs:{}, platform:p.platform||'guest', founder:!!p.founder }); used.add(p.name); }
       const bots = mpBots(seed); let bi=0;
       while (names.length < MP_FIELD){ let bn=bots[bi++%bots.length]; while(used.has(bn)) bn+='·'; used.add(bn); names.push({ id:bn, isSub:false, prefs:{}, platform:'bot' }); }
     }
