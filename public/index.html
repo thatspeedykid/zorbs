@@ -297,10 +297,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=v11"></script>
-<script src="/v2/track.js?v=v11"></script>
-<script src="/v2/physics.js?v=v11"></script>
-<script src="/v2/cosmetics.js?v=v11"></script>
+<script src="/v2/forks.js?v=v12"></script>
+<script src="/v2/track.js?v=v12"></script>
+<script src="/v2/physics.js?v=v12"></script>
+<script src="/v2/cosmetics.js?v=v12"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -315,7 +315,7 @@ const statusEl = document.getElementById('nextrace');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = 'v1.1';
+const BUILD = 'v1.2';
 console.log('[ZORBS] build', BUILD);
 
 // ---- MOBILE UX: mark touch devices, block pinch/double-tap zoom, wire fullscreen button ----
@@ -394,7 +394,10 @@ try {
     catch(e3) { document.body.innerHTML = '<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#9fd8ff;font-family:monospace;text-align:center;padding:24px;">WebGL unavailable in this browser source.<br>In OBS: Settings → Advanced → enable hardware acceleration, or update OBS.</div>'; throw e3; }
   }
 }
-renderer.setPixelRatio(Math.min(2, devicePixelRatio));
+// LITE mode (auto for the OBS overlay, or ?lite=1): drop bloom post-processing, render at 1x
+// pixel ratio, cap to 30fps — so weak GPUs (e.g. a GTX 960 home server) capture smoothly.
+const _LITE = (function(){ try { const p = new URLSearchParams(location.search); return p.get('obs') === '1' || p.get('lite') === '1'; } catch(_){ return false; } })();
+renderer.setPixelRatio(_LITE ? 1 : Math.min(2, devicePixelRatio));
 renderer.setSize(innerWidth, innerHeight);
 // FILMIC LOOK: ACES tone mapping + sRGB output. This is the single biggest "game
 // engine" upgrade — highlights roll off like a camera instead of clipping to white.
@@ -1282,7 +1285,7 @@ function updateExplosions(dt){
 
 // ---- main loop ----
 let last = performance.now();
-const FRAME_CAP = 1000 / 60;        // target 60fps
+const FRAME_CAP = 1000 / (_LITE ? 30 : 60);        // 30fps in lite (OBS) mode, 60 otherwise
 let frameAcc = 0, prevRaf = performance.now();
 function loop(now) {
   requestAnimationFrame(loop);      // always re-queue
@@ -1451,7 +1454,7 @@ function loop(now) {
 
   updateCamera(dt);
 
-  if (composer) composer.render(); else renderer.render(scene, camera);
+  if (composer && !_LITE) composer.render(); else renderer.render(scene, camera);   // bloom off in lite mode
 }
 
 // ---- camera: follow YOUR marble (public mode) or the leader (solo / after you're out) ----
