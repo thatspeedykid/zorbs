@@ -1607,7 +1607,7 @@ const MP_HOST = 'zorbs.thatspeedykid.partykit.dev';
 // No param = the shared public game. ?obs=1 = clean overlay/spectator view for OBS browser source.
 const _ZP = new URLSearchParams(location.search);
 const _roomParam = (_ZP.get('room') || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 32);
-const MP_ROOM = _roomParam || 'public';
+const MP_ROOM = _roomParam || 'betatest';
 const _OBS = _ZP.get('obs') === '1';
 const _PRIVATE = MP_ROOM !== 'public';
 const MP_SLOT_MS = 95000, MP_LOBBY_MS = 9000, MP_FIELD = 8;
