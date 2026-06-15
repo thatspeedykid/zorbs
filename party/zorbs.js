@@ -29,6 +29,7 @@ export default class ZorbsRoom {
     this.party = party;
     this.players = new Map();
     this.chatPlayers = new Map();   // chatters who typed !play (no browser) — keyed by lowercased name
+    this.boostLog = new Map();      // per-chatter !boost timestamps for rate limiting (subs 2/30s, others 1/20s)
     this.official = null;
     // private-lobby control state (defaults: autoplay OFF, everyone may join)
     this.control = { autoplay: false, joinMode: 'all' };
@@ -165,7 +166,23 @@ export default class ZorbsRoom {
         this.broadcastPlayers();
         return new Response(JSON.stringify({ ok: true, joined: name, count: this.chatPlayers.size }), { headers: { 'content-type': 'application/json' } });
       } else if (b.cmd === 'boost') {
-        this.party.broadcast(JSON.stringify({ type: 'boost', name, at: Date.now() + 220 }));
+        // Per-chatter rate limit: subscribers get 2 boosts per 30s, everyone else 1 per 20s.
+        // Sliding window — count this chatter's boosts inside the window and reject over the cap.
+        const key = name.toLowerCase();
+        const stored = this.chatPlayers.get(key);
+        const isSub = !!b.isSub || !!(stored && stored.isSub);
+        const windowMs = isSub ? 30000 : 20000;
+        const limit = isSub ? 2 : 1;
+        const now = Date.now();
+        const recent = (this.boostLog.get(key) || []).filter(t => now - t < windowMs);
+        if (recent.length >= limit) {
+          const retryMs = windowMs - (now - recent[0]);
+          return new Response(JSON.stringify({ ok: true, rateLimited: true, retryMs }), { headers: { 'content-type': 'application/json' } });
+        }
+        recent.push(now);
+        this.boostLog.set(key, recent);
+        if (this.boostLog.size > 200) { for (const [k, ts] of this.boostLog) { if (!ts.some(t => now - t < 30000)) this.boostLog.delete(k); } }  // prune stale
+        this.party.broadcast(JSON.stringify({ type: 'boost', name, at: now + 220 }));
         return new Response(JSON.stringify({ ok: true, boosted: name }), { headers: { 'content-type': 'application/json' } });
       } else if (b.cmd === 'clear') {
         this.chatPlayers.clear(); this.broadcastPlayers();
