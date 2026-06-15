@@ -108,7 +108,8 @@
   #lblink   { bottom:226px; }
   #dashlink:hover, #lblink:hover { background:rgba(40,140,255,.35); color:#fff; }
   /* OBS overlay mode (?obs=1): clean spectator view — hide all interactive chrome */
-  body.obs #dashlink, body.obs #lblink, body.obs #music, body.obs #arm, body.obs #boosthint, body.obs #cambar { display:none !important; }
+  body.obs #dashlink, body.obs #lblink, body.obs #music, body.obs #arm, body.obs #boosthint, body.obs #cambar,
+  html.obsmode #arm, html.obsmode #dashlink, html.obsmode #lblink, html.obsmode #music, html.obsmode #boosthint, html.obsmode #cambar { display:none !important; }
   #cambar { position:fixed; top:10px; left:50%; transform:translateX(-50%); z-index:30; display:flex; align-items:center; gap:4px;
     background:rgba(6,12,24,.62); border:1px solid rgba(120,200,255,.16); border-radius:10px; padding:4px 6px; backdrop-filter:blur(6px); }
   #cambar .cblabel { font-size:9px; letter-spacing:2px; color:rgba(150,210,255,.5); padding:0 4px; }
@@ -207,6 +208,11 @@
 </style>
 </head>
 <body>
+<script>
+  // Runs before the game script: in OBS overlay mode hide the join screen immediately so it can
+  // never flash, regardless of how the rest of the page loads.
+  try { if (new URLSearchParams(location.search).get('obs') === '1') document.documentElement.classList.add('obsmode'); } catch(_){}
+</script>
 <div id="buildtag" style="position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:99999;background:#0a0;color:#fff;font:bold 11px monospace;padding:2px 10px;border-radius:0 0 6px 6px;letter-spacing:1px;">PLAY4</div>
 <canvas id="c"></canvas>
 <div id="hud">
@@ -260,12 +266,12 @@
 <div id="boosthint">␣ BOOST</div>
 <div id="cambar">
   <span class="cblabel">CAM</span>
-  <button class="cb on" data-m="me" onclick="setCam('me')">ME</button>
-  <button class="cb" data-m="leader" onclick="setCam('leader')">LEAD</button>
-  <button class="cb" data-m="map" onclick="setCam('map')">MAP</button>
-  <button class="cb" data-m="player" onclick="setCam('player')">PLYR</button>
+  <button class="cb on" data-m="me" onclick="setCam('me')">PLAYER</button>
+  <button class="cb" data-m="player" onclick="setCam('player')">PLAYERS</button>
   <button class="cb arw" onclick="cycleCam(-1)" title="previous player">‹</button>
   <button class="cb arw" onclick="cycleCam(1)" title="next player">›</button>
+  <button class="cb" data-m="leader" onclick="setCam('leader')">AUTO</button>
+  <button class="cb" data-m="free" onclick="setCam('free')">FREE</button>
 </div>
 <a id="dashlink" href="/dashboard">📊 DASHBOARD</a>
 <a id="lblink" href="/dashboard?p=leaderboard">🏆 LEADERBOARDS</a>
@@ -375,7 +381,20 @@ function setStatus(txt, ok) {
 
 // ---- renderer / scene ----
 const canvas = document.getElementById('c');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
+// OBS / headless browser sources often have no GPU and REFUSE a hardware WebGL context. Without
+// failIfMajorPerformanceCaveat:false the constructor throws here and the whole script dies — which
+// is why OBS got stuck on the join screen while real browsers were fine. Allow a software context
+// and fall back through gentler options so the game always boots in OBS.
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas, antialias:true, failIfMajorPerformanceCaveat:false, powerPreference:'high-performance' });
+} catch(e1) {
+  try { renderer = new THREE.WebGLRenderer({ canvas, antialias:false, failIfMajorPerformanceCaveat:false }); }
+  catch(e2) {
+    try { renderer = new THREE.WebGLRenderer({ canvas }); }
+    catch(e3) { document.body.innerHTML = '<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#9fd8ff;font-family:monospace;text-align:center;padding:24px;">WebGL unavailable in this browser source.<br>In OBS: Settings → Advanced → enable hardware acceleration, or update OBS.</div>'; throw e3; }
+  }
+}
 renderer.setPixelRatio(Math.min(2, devicePixelRatio));
 renderer.setSize(innerWidth, innerHeight);
 // FILMIC LOOK: ACES tone mapping + sRGB output. This is the single biggest "game
@@ -1445,9 +1464,32 @@ let camLeadIdx = 0;
 //   'me' = your ball (default for players) · 'leader' = whoever's winning · 'player' = a chosen ball (‹ ›) · 'map' = whole-track overhead
 let _camMode = 'me', _camPlayerIdx = 0, _mapView = null;
 function liveBallIds(){ const ids = []; zorbs.forEach((z, id) => { if (z && !z.eliminated && !z.exploded) ids.push(id); }); return ids; }
-function setCam(m){ _camMode = m; _updateCamBar(); }
+function setCam(m){ if (m !== _camMode) _freeReady = false; _camMode = m; _updateCamBar(); }
 function cycleCam(d){ _camPlayerIdx = Math.max(0, _camPlayerIdx + d); _camMode = 'player'; _updateCamBar(); }
 function _updateCamBar(){ const bar = document.getElementById('cambar'); if (!bar) return; bar.querySelectorAll('.cb[data-m]').forEach(b => b.classList.toggle('on', b.dataset.m === _camMode)); }
+
+// FREE CAM — detached fly camera: drag to look, WASD to move, Q/E (or Space) for down/up, Shift = fast.
+const _freeKeys = {};
+let _freeYaw = 0, _freePitch = 0, _freeReady = false, _freeDrag = false, _freeLX = 0, _freeLY = 0;
+function initFreeCam(){ const e = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ'); _freeYaw = e.y; _freePitch = e.x; _freeReady = true; }
+function updateFreeCam(dt){
+  if (!_freeReady) initFreeCam();
+  const speed = (_freeKeys['shift'] ? 85 : 34) * Math.min(0.05, dt);
+  const fwd = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+  const right = new THREE.Vector3(1,0,0).applyQuaternion(camera.quaternion);
+  if (_freeKeys['w']) camera.position.addScaledVector(fwd, speed);
+  if (_freeKeys['s']) camera.position.addScaledVector(fwd, -speed);
+  if (_freeKeys['d']) camera.position.addScaledVector(right, speed);
+  if (_freeKeys['a']) camera.position.addScaledVector(right, -speed);
+  if (_freeKeys['e'] || _freeKeys[' ']) camera.position.y += speed;
+  if (_freeKeys['q']) camera.position.y -= speed;
+  camera.quaternion.setFromEuler(new THREE.Euler(_freePitch, _freeYaw, 0, 'YXZ'));
+}
+addEventListener('keydown', e => { if (_camMode === 'free') { _freeKeys[e.key.toLowerCase()] = true; if (['arrowup','arrowdown','arrowleft','arrowright',' '].includes(e.key.toLowerCase())) e.preventDefault(); } });
+addEventListener('keyup', e => { _freeKeys[e.key.toLowerCase()] = false; });
+addEventListener('mousedown', e => { if (_camMode === 'free') { _freeDrag = true; _freeLX = e.clientX; _freeLY = e.clientY; } });
+addEventListener('mouseup', () => { _freeDrag = false; });
+addEventListener('mousemove', e => { if (_camMode === 'free' && _freeDrag) { _freeYaw -= (e.clientX - _freeLX) * 0.005; _freePitch -= (e.clientY - _freeLY) * 0.005; _freePitch = Math.max(-1.45, Math.min(1.45, _freePitch)); _freeLX = e.clientX; _freeLY = e.clientY; } });
 function pickCameraTarget(){
   if (_camMode === 'player') {                      // follow a specific racer (arrows cycle the index)
     const ids = liveBallIds();
@@ -1460,6 +1502,7 @@ function pickCameraTarget(){
   return ZPHYSICS.isReady() ? ZPHYSICS.leader() : null;
 }
 function updateCamera(dt) {
+  if (_camMode === 'free') { updateFreeCam(dt); return; }
   if (!track) return;
   // FULL MAP (OBS overhead): frame the whole track from above instead of the chase cam.
   if (_camMode === 'map' && track.nodes && track.nodes.length) {
@@ -1696,9 +1739,14 @@ function runMultiplayer(){
   }
   function applyView(m){
     if (!_OBS) return;                                // only the OBS overlay obeys camera/music cmds
-    if (m.camera === 'leader' || m.camera === 'map' || m.camera === 'player') _camMode = m.camera;
+    if (m.camera === 'leader' || m.camera === 'map' || m.camera === 'player' || m.camera === 'me' || m.camera === 'free') _camMode = m.camera;
     if (m.camera === 'player' && typeof m.idx === 'number') _camPlayerIdx = m.idx;
-    if (m.has_muted && audioEl){ try { audioEl.muted = !!m.muted; } catch(_){} }
+    if (m.has_muted && audioEl){
+      try {
+        audioEl.muted = !!m.muted;
+        if (!m.muted) { const p = audioEl.play(); if (p && p.catch) p.catch(()=>{}); }  // enable = actually start the music
+      } catch(_){}
+    }
   }
   function connect(){
     try { ws = new WebSocket('wss://' + MP_HOST + '/parties/main/' + MP_ROOM); _mpWS = ws; }
