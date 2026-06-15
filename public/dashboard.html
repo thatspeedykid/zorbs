@@ -178,9 +178,8 @@ body{background:#05050f;color:#fff;font-family:'Courier New',monospace;min-heigh
       <div class="nav-item" onclick="showPage('leaderboard')" id="ni-leaderboard"><span class="icon">◉</span> LEADERBOARD</div>
 
       <div class="nav-section">STREAM <span class="coming-soon" style="margin-left:6px">STREAMER TOOLS</span></div>
-      <div class="nav-item disabled"><span class="icon">▶</span> RACE CONTROL <span class="coming-soon">SOON</span></div>
       <div class="nav-item" onclick="showPage('obs')" id="ni-obs"><span class="icon">◎</span> MY LOBBY</div>
-      <div class="nav-item disabled"><span class="icon">⚙</span> BOT SETUP <span class="coming-soon">SOON</span></div>
+      <div class="nav-item" onclick="showPage('bot')" id="ni-bot"><span class="icon">⚙</span> BOT SETUP</div>
 
       <div class="nav-section">ACCOUNT</div>
       <div class="nav-item" onclick="showPage('settings')" id="ni-settings"><span class="icon">◧</span> SETTINGS</div>
@@ -377,6 +376,13 @@ body{background:#05050f;color:#fff;font-family:'Courier New',monospace;min-heigh
           <button class="btn btn-green" onclick="reRegisterWebhook()">RE-REGISTER WEBHOOK</button>
         </div>
         <pre id="subs-result" style="margin-top:12px;font-size:9px;color:rgba(255,255,255,0.45);white-space:pre-wrap;max-height:200px;overflow:auto;"></pre>
+        </div>
+        <div class="card" style="margin-top:16px;">
+          <h3>CHAT COMMANDS <span class="badge live" style="margin-left:6px;">LIVE</span></h3>
+          <p style="font-size:10px;color:rgba(255,255,255,0.3);margin-bottom:12px;line-height:1.6;">Once your channel is connected, your viewers control everything from chat — no link needed. Tell them:</p>
+          <div class="stat-row"><span style="color:var(--c)">!play</span><span>Join the next race as a ball</span></div>
+          <div class="stat-row"><span style="color:var(--c)">!boost</span><span>Boost your ball during the race</span></div>
+          <div style="font-size:9px;color:rgba(255,255,255,0.25);margin-top:10px;line-height:1.6;">Subs are detected from their chat badge, so <b>Subs Only</b> mode (in MY LOBBY) is enforced automatically. Use <b>CLEAR CHAT RACERS</b> in MY LOBBY to reset the field between sessions.</div>
         </div>
       </div>
 
