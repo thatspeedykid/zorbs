@@ -108,7 +108,15 @@
   #lblink   { bottom:226px; }
   #dashlink:hover, #lblink:hover { background:rgba(40,140,255,.35); color:#fff; }
   /* OBS overlay mode (?obs=1): clean spectator view — hide all interactive chrome */
-  body.obs #dashlink, body.obs #lblink, body.obs #music, body.obs #arm, body.obs #boosthint { display:none !important; }
+  body.obs #dashlink, body.obs #lblink, body.obs #music, body.obs #arm, body.obs #boosthint, body.obs #cambar { display:none !important; }
+  #cambar { position:fixed; top:10px; left:50%; transform:translateX(-50%); z-index:30; display:flex; align-items:center; gap:4px;
+    background:rgba(6,12,24,.62); border:1px solid rgba(120,200,255,.16); border-radius:10px; padding:4px 6px; backdrop-filter:blur(6px); }
+  #cambar .cblabel { font-size:9px; letter-spacing:2px; color:rgba(150,210,255,.5); padding:0 4px; }
+  #cambar .cb { background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.08); color:rgba(255,255,255,.6);
+    font-family:inherit; font-size:10px; letter-spacing:1px; padding:6px 9px; border-radius:6px; cursor:pointer; transition:.12s; }
+  #cambar .cb:hover { color:#fff; }
+  #cambar .cb.on { background:rgba(0,240,255,.16); border-color:#0ff; color:#0ff; }
+  #cambar .cb.arw { padding:6px 8px; }
   /* fullscreen toggle — only shown on touch devices (added via JS body class) */
   #fsbtn { display:none; position:fixed; z-index:32; cursor:pointer; font-family:'Courier New',monospace;
     color:#bfefff; background:rgba(6,12,26,.8); border:1px solid rgba(120,220,255,.6); border-radius:9px;
@@ -250,6 +258,15 @@
 <!-- SpeedyGoWild background music: self-hosted playlist (music/playlist.json) when present
      = zero YouTube + zero ad-blocker issues; otherwise falls back to the YouTube embed -->
 <div id="boosthint">␣ BOOST</div>
+<div id="cambar">
+  <span class="cblabel">CAM</span>
+  <button class="cb on" data-m="me" onclick="setCam('me')">ME</button>
+  <button class="cb" data-m="leader" onclick="setCam('leader')">LEAD</button>
+  <button class="cb" data-m="map" onclick="setCam('map')">MAP</button>
+  <button class="cb" data-m="player" onclick="setCam('player')">PLYR</button>
+  <button class="cb arw" onclick="cycleCam(-1)" title="previous player">‹</button>
+  <button class="cb arw" onclick="cycleCam(1)" title="next player">›</button>
+</div>
 <a id="dashlink" href="/dashboard">📊 DASHBOARD</a>
 <a id="lblink" href="/dashboard?p=leaderboard">🏆 LEADERBOARDS</a>
 <canvas id="minimap" width="190" height="132"></canvas>
@@ -1424,18 +1441,22 @@ const camTarget = new THREE.Vector3();
 const camPos = new THREE.Vector3();
 const lookAt = new THREE.Vector3();
 let camLeadIdx = 0;
-// OBS overlay camera control (driven by the streamer's dashboard via the room):
-//   'leader' = follow whoever's winning · 'player' = follow a chosen ball (< > cycles) · 'map' = whole-track overhead
-let _camMode = 'leader', _camPlayerIdx = 0, _mapView = null;
+// OBS overlay + in-game camera control:
+//   'me' = your ball (default for players) · 'leader' = whoever's winning · 'player' = a chosen ball (‹ ›) · 'map' = whole-track overhead
+let _camMode = 'me', _camPlayerIdx = 0, _mapView = null;
 function liveBallIds(){ const ids = []; zorbs.forEach((z, id) => { if (z && !z.eliminated && !z.exploded) ids.push(id); }); return ids; }
+function setCam(m){ _camMode = m; _updateCamBar(); }
+function cycleCam(d){ _camPlayerIdx = Math.max(0, _camPlayerIdx + d); _camMode = 'player'; _updateCamBar(); }
+function _updateCamBar(){ const bar = document.getElementById('cambar'); if (!bar) return; bar.querySelectorAll('.cb[data-m]').forEach(b => b.classList.toggle('on', b.dataset.m === _camMode)); }
 function pickCameraTarget(){
   if (_camMode === 'player') {                      // follow a specific racer (arrows cycle the index)
     const ids = liveBallIds();
     if (ids.length) return ids[((_camPlayerIdx % ids.length) + ids.length) % ids.length];
   }
-  // in the live game, follow the marble belonging to THIS browser's player...
+  if (_camMode === 'leader') return ZPHYSICS.isReady() ? ZPHYSICS.leader() : null;
+  // 'me' / default: follow the marble belonging to THIS browser's player...
   if (_mpMode && _myMarble) { const z = zorbs.get(_myMarble); if (z && !z.eliminated && !z.exploded) return _myMarble; }
-  // ...otherwise (solo, after you're out, or OBS 'leader' mode) follow the race leader.
+  // ...otherwise (solo, after you're out, or OBS with no own ball) follow the race leader.
   return ZPHYSICS.isReady() ? ZPHYSICS.leader() : null;
 }
 function updateCamera(dt) {
@@ -1476,10 +1497,14 @@ function updateCamera(dt) {
   // Higher and further back than before (was -14 / +9) — the low angle was skimming
   // the floor and hiding the pack. This reads as a proper marble-race chase cam.
   const dir = node.dir;
+  // closer, more personal framing when locked to one ball (you / a picked player); pull back a
+  // little for the leader cam so the chasing pack stays in frame.
+  const followingBall = (_camMode === 'me' || _camMode === 'player');
+  const back = followingBall ? 13.5 : 18, up = followingBall ? 10.5 : 14.5;
   const desired = new THREE.Vector3(
-    node.pos.x - dir.x * 20,
-    node.pos.y + 16,
-    node.pos.z - dir.z * 20
+    node.pos.x - dir.x * back,
+    node.pos.y + up,
+    node.pos.z - dir.z * back
   );
   camPos.lerp(desired, 0.05);          // smooth position
   camera.position.copy(camPos);
@@ -1548,7 +1573,7 @@ function runMultiplayer(){
   _myMarble = _OBS ? null : myName; _mpMode = true;
   let offset = 0, roster = [], curSlot = -1, ws = null, gotWelcome = false, lobbyTimer = null;
   // private streamer-lobby control: autoplay gate, owner-started (directed) races, OBS view cmds
-  let _ctl = { autoplay: false, joinMode: 'all' }, _directedId = null, _loopTimer = null;
+  let _ctl = { autoplay: false, joinMode: 'all' }, _directedId = null, _loopTimer = null, _raceTimer = null, _directedActive = false;
   const curRaceNow = () => { const ns = Math.floor(serverNow()/MP_SLOT_MS); return { slot: ns, seed: mpSeedForSlot(ns), startTime: ns*MP_SLOT_MS + MP_LOBBY_MS }; };
   const serverNow = () => Date.now() + offset;
   const lobbyEl = document.getElementById('lobby');
@@ -1574,6 +1599,7 @@ function runMultiplayer(){
   function hideLobby(){ _lobbyMode = null; lobbyEl.style.display = 'none'; if (lobbyTimer){ clearInterval(lobbyTimer); lobbyTimer = null; } }
 
   function scheduleRace(race){
+    if (_directedActive) return;   // a custom/host-started race is running — autoplay stands down
     // never drop a player into a race already in progress — wait for the next clean start
     if (serverNow() > race.startTime + 3000) {
       const ns = race.slot + 1;
@@ -1586,7 +1612,8 @@ function runMultiplayer(){
     try { buildCourse(race.seed); } catch (e) { ZLOG.report('manual', 'mp buildCourse failed: ' + (e && e.message)); }
     showLobby(localStart);
     setStatus('⬡ next race in ' + Math.ceil(wait/1000) + 's', true);
-    setTimeout(() => { hideLobby(); runMpRace(race); }, wait);
+    if (_raceTimer) clearTimeout(_raceTimer);
+    _raceTimer = setTimeout(() => { hideLobby(); runMpRace(race); }, wait);
   }
   function runMpRace(race){
     const names = []; const used = new Set();
@@ -1618,7 +1645,9 @@ function runMultiplayer(){
   }
   function scheduleDirected(d){
     if (!d || _directedId === d.id) return; _directedId = d.id;
+    _directedActive = true;                           // suppress the autoplay loop while this runs
     if (_loopTimer){ clearTimeout(_loopTimer); _loopTimer = null; }
+    if (_raceTimer){ clearTimeout(_raceTimer); _raceTimer = null; }
     curSlot = -999;                                   // suspend the slot auto-loop
     const seed = (d.seed >>> 0);
     try { buildCourse(seed); } catch(e){ ZLOG.report('manual','directed buildCourse failed: '+(e&&e.message)); }
@@ -1646,10 +1675,19 @@ function runMultiplayer(){
     }
     startRace(seed, names);
     setStatus('');
+    // when this one-off race finishes: drop the guard, and if autoplay is on, resume the loop.
+    const watch = setInterval(() => {
+      if (phase === 'done' || phase === 'idle') {
+        clearInterval(watch);
+        _directedActive = false;
+        if (_ctl.autoplay && _PRIVATE) scheduleRace(curRaceNow());
+      }
+    }, 500);
   }
   function resetToLobby(){
-    _directedId = null;
+    _directedId = null; _directedActive = false;
     if (_loopTimer){ clearTimeout(_loopTimer); _loopTimer = null; }
+    if (_raceTimer){ clearTimeout(_raceTimer); _raceTimer = null; }
     curSlot = -999;
     try { winner = null; phase = 'idle'; ZPHYSICS.clearBalls(); } catch(_){}
     zorbs.forEach(z => { scene.remove(z.mesh); if(z.ring)scene.remove(z.ring); if(z.ringGlow)scene.remove(z.ringGlow); if(z.trail)scene.remove(z.trail); if(z.streak)scene.remove(z.streak); if(z.label)scene.remove(z.label); });
