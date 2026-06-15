@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/beta",
+      "destination": "/beta/index.html"
+    },
+    {
       "source": "/dashboard",
       "destination": "/dashboard.html"
     },
@@ -27,6 +31,33 @@
     }
   ],
   "headers": [
+    {
+      "source": "/beta/(forks|track|physics|cosmetics).js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, no-cache, must-revalidate, max-age=0"
+        }
+      ]
+    },
+    {
+      "source": "/beta/index.html",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, no-cache, must-revalidate, max-age=0"
+        }
+      ]
+    },
+    {
+      "source": "/beta",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, no-cache, must-revalidate, max-age=0"
+        }
+      ]
+    },
     {
       "source": "/(session|audio|skins|physics).js",
       "headers": [
