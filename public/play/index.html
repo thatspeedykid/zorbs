@@ -1554,23 +1554,24 @@ function runMultiplayer(){
   const lobbyEl = document.getElementById('lobby');
   const lobbyCd = document.getElementById('lobbyCd');
   const lobbySub = document.getElementById('lobbySub');
-  function renderLobbyRoster(){
+  let _lobbyMode = null;   // 'count' (countdown) | 'wait' (autoplay off, waiting for host)
+  function renderLobbyRoster(suffix){
     if (!lobbySub) return;
-    const real = roster.slice(0, MP_FIELD).map(p => p.name);
-    const fillers = Math.max(0, MP_FIELD - real.length);
+    const cap = _PRIVATE ? 16 : MP_FIELD;
+    const real = roster.slice(0, cap).map(p => p.name);
     const shown = real.slice(0, 6).map(n => n === _myMarble ? n + ' (you)' : n).join(' · ');
     const more = real.length > 6 ? ' +' + (real.length - 6) + ' more' : '';
-    const bots = fillers > 0 ? (real.length ? '  +' + fillers + ' bots' : '') : '';
     lobbySub.textContent = '👥 ' + real.length + ' racer' + (real.length === 1 ? '' : 's') +
-      (shown ? ' — ' + shown + more : '') + bots;
+      (shown ? ' — ' + shown + more : '') + (suffix || '');
   }
   function showLobby(localStart){
+    _lobbyMode = 'count';
     lobbyEl.style.display = 'flex';
     if (lobbyTimer) clearInterval(lobbyTimer);
     const tick = () => { lobbyCd.textContent = Math.max(0, Math.ceil((localStart - Date.now())/1000)) + 's'; renderLobbyRoster(); };
     tick(); lobbyTimer = setInterval(tick, 250);
   }
-  function hideLobby(){ lobbyEl.style.display = 'none'; if (lobbyTimer){ clearInterval(lobbyTimer); lobbyTimer = null; } }
+  function hideLobby(){ _lobbyMode = null; lobbyEl.style.display = 'none'; if (lobbyTimer){ clearInterval(lobbyTimer); lobbyTimer = null; } }
 
   function scheduleRace(race){
     // never drop a player into a race already in progress — wait for the next clean start
@@ -1608,9 +1609,11 @@ function runMultiplayer(){
     if (_loopTimer){ clearTimeout(_loopTimer); _loopTimer = null; }
     if (lobbyTimer){ clearInterval(lobbyTimer); lobbyTimer = null; }
     try { if (!track) buildCourse((Math.random()*1e9) >>> 0); } catch(_){}
+    _lobbyMode = 'wait';
     if (lobbyEl) lobbyEl.style.display = 'flex';
     if (lobbyCd) lobbyCd.textContent = '—';
-    if (lobbySub) lobbySub.textContent = '⏳ waiting for the host to start the race…';
+    if (roster.length) renderLobbyRoster(' · waiting for host ▶');
+    else if (lobbySub) lobbySub.textContent = '⏳ waiting — viewers type !play in chat to join';
     setStatus('⏳ waiting for host', true);
   }
   function scheduleDirected(d){
@@ -1672,7 +1675,7 @@ function runMultiplayer(){
         else if (!_PRIVATE || _ctl.autoplay) scheduleRace(m.race);
         else waitForHost();
       }
-      else if (m.type === 'players') { roster = m.players || []; }
+      else if (m.type === 'players') { roster = m.players || []; if (lobbyEl && lobbyEl.style.display !== 'none' && _lobbyMode) renderLobbyRoster(_lobbyMode === 'wait' ? ' · waiting for host ▶' : ''); }
       else if (m.type === 'official') {
         // the server has locked the canonical result for a race — show it on the end card so
         // every machine agrees on the winner/order regardless of local sim drift.

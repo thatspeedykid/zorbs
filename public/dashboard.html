@@ -179,7 +179,6 @@ body{background:#05050f;color:#fff;font-family:'Courier New',monospace;min-heigh
 
       <div class="nav-section">STREAM <span class="coming-soon" style="margin-left:6px">STREAMER TOOLS</span></div>
       <div class="nav-item" onclick="showPage('obs')" id="ni-obs"><span class="icon">◎</span> MY LOBBY</div>
-      <div class="nav-item" onclick="showPage('bot')" id="ni-bot"><span class="icon">⚙</span> BOT SETUP</div>
 
       <div class="nav-section">ACCOUNT</div>
       <div class="nav-item" onclick="showPage('settings')" id="ni-settings"><span class="icon">◧</span> SETTINGS</div>
@@ -291,6 +290,18 @@ body{background:#05050f;color:#fff;font-family:'Courier New',monospace;min-heigh
       <div class="page" id="page-obs">
         <div class="page-title">MY LOBBY</div>
 
+        <!-- 1 · LINKS -->
+        <div class="card" style="margin-bottom:16px;">
+          <h3>YOUR PRIVATE LOBBY</h3>
+          <p style="font-size:10px;color:rgba(255,255,255,0.3);margin-bottom:16px;line-height:1.7;">Share the <b style="color:var(--c)">PLAY</b> link with your chat — everyone who opens it races together in your own room. Add the <b style="color:var(--c)">OBS</b> link as a Browser Source (1920×1080, transparent background) to show the race live on stream.</p>
+          <div class="obs-link"><span>▶ PLAY LINK <small style="opacity:.5">(for viewers)</small></span> <span id="lobby-play" style="color:#fff">—</span> <button class="btn btn-cyan" style="padding:5px 12px;font-size:9px;" onclick="copyLobby('play')">COPY</button></div>
+          <div class="obs-link"><span>◎ OBS OVERLAY <small style="opacity:.5">(browser source)</small></span> <span id="lobby-obs" style="color:#fff">—</span> <button class="btn btn-cyan" style="padding:5px 12px;font-size:9px;" onclick="copyLobby('obs')">COPY</button></div>
+          <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
+            <a id="lobby-open" href="#" target="_blank" rel="noopener" class="btn btn-green">OPEN MY LOBBY ▶</a>
+          </div>
+        </div>
+
+        <!-- 2 · RACE CONTROLS -->
         <div class="card" style="margin-bottom:16px;">
           <h3>RACE CONTROLS</h3>
           <div id="lobby-conn" style="font-size:9px;letter-spacing:1px;color:rgba(255,255,255,0.3);margin-bottom:14px;">● connecting to your room…</div>
@@ -308,7 +319,7 @@ body{background:#05050f;color:#fff;font-family:'Courier New',monospace;min-heigh
               <button class="seg-btn" data-v="subs" onclick="lobbyJoinMode('subs')">SUBS ONLY</button>
               <button class="seg-btn" data-v="followers" onclick="lobbyJoinMode('followers')">FOLLOWERS</button>
             </div>
-            <div style="font-size:9px;color:rgba(255,255,255,0.25);margin-top:5px;">Subs/Followers currently require a signed-in Kick account — full sub/follower verification arrives with the Kick chat bot.</div>
+            <div style="font-size:9px;color:rgba(255,255,255,0.25);margin-top:5px;">Subs is enforced from the chat badge. Followers is best-effort (any chatter) until follower lookup lands.</div>
           </div>
           <div style="margin-top:16px;">
             <div class="ctl-label">OBS CAMERA</div>
@@ -323,6 +334,7 @@ body{background:#05050f;color:#fff;font-family:'Courier New',monospace;min-heigh
           </div>
         </div>
 
+        <!-- 3 · CUSTOM RACE -->
         <div class="card" style="margin-bottom:16px;">
           <h3>CUSTOM RACE</h3>
           <p style="font-size:10px;color:rgba(255,255,255,0.3);margin-bottom:12px;line-height:1.6;">Put up to 20 names/words on the balls — chatters, teams, donors, anything. A new box appears as you fill the last one. Then hit START CUSTOM RACE.</p>
@@ -332,57 +344,35 @@ body{background:#05050f;color:#fff;font-family:'Courier New',monospace;min-heigh
             <button class="btn btn-cyan" onclick="clearCustom()">CLEAR</button>
           </div>
         </div>
-        <div class="card" style="margin-bottom:16px;">
-          <h3>YOUR PRIVATE LOBBY</h3>
-          <p style="font-size:10px;color:rgba(255,255,255,0.3);margin-bottom:16px;line-height:1.7;">Share the <b style="color:var(--c)">PLAY</b> link with your chat — everyone who opens it races together in your own room. Add the <b style="color:var(--c)">OBS</b> link as a Browser Source (1920×1080, transparent background) to show the race live on stream.</p>
-          <div class="obs-link"><span>▶ PLAY LINK <small style="opacity:.5">(for viewers)</small></span> <span id="lobby-play" style="color:#fff">—</span> <button class="btn btn-cyan" style="padding:5px 12px;font-size:9px;" onclick="copyLobby('play')">COPY</button></div>
-          <div class="obs-link"><span>◎ OBS OVERLAY <small style="opacity:.5">(browser source)</small></span> <span id="lobby-obs" style="color:#fff">—</span> <button class="btn btn-cyan" style="padding:5px 12px;font-size:9px;" onclick="copyLobby('obs')">COPY</button></div>
-          <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
-            <a id="lobby-open" href="#" target="_blank" rel="noopener" class="btn btn-green">OPEN MY LOBBY ▶</a>
-          </div>
-        </div>
-        <div class="card">
-          <h3>HOW IT WORKS</h3>
-          <div class="stat-row"><span style="color:var(--c)">1.</span><span>Drop the PLAY link in your chat / panels — viewers click to join your room.</span></div>
-          <div class="stat-row"><span style="color:var(--c)">2.</span><span>Add the OBS link as a Browser Source so the race shows on your stream.</span></div>
-          <div class="stat-row"><span style="color:var(--c)">3.</span><span>Races run automatically on a loop — your room, your players.</span></div>
-          <div class="stat-row"><span style="color:var(--p)">SOON</span><span>Start races on command + Kick chat <b>!play</b> / <b>!boost</b>.</span></div>
-        </div>
-      </div>
 
-      <!-- BOT SETUP -->
-      <div class="page" id="page-bot">
-        <div class="page-title">BOT SETUP</div>
+        <!-- 4 · INSTRUCTIONS -->
         <div class="card" style="margin-bottom:16px;">
-          <h3>CONNECT BOT TO YOUR CHANNEL</h3>
-          <p style="font-size:10px;color:rgba(255,255,255,0.3);margin-bottom:16px;line-height:1.8;">
-            The ZORBS bot reads your Kick chat and automatically handles !play and !boost commands.<br>
-            Connect your Kick channel below to enable live chat integration.
-          </p>
-          <div class="kick-block" id="bot-kick-block">
-            <div class="k-icon">K</div>
-            <div id="bot-kick-text" class="kick-disconnected">Connect your Kick channel to enable the bot</div>
-          </div>
-          <button class="btn-kick" onclick="kickLogin()" style="font-size:10px;padding:9px;max-width:280px;">CONNECT KICK CHANNEL</button>
+          <h3>HOW IT WORKS</h3>
+          <div class="stat-row"><span style="color:var(--c)">1.</span><span>Viewers type <b>!play</b> in your Kick chat (or open the PLAY link) to join your room.</span></div>
+          <div class="stat-row"><span style="color:var(--c)">2.</span><span>Add the OBS link as a Browser Source so the race shows on your stream.</span></div>
+          <div class="stat-row"><span style="color:var(--c)">3.</span><span>Hit START RACE (or flip AUTOPLAY); viewers type <b>!boost</b> to speed their ball up.</span></div>
+          <div class="stat-row"><span style="color:var(--g)">★</span><span><b style="color:var(--g)">Enable the chat bot below</b> — that's what makes <b>!play</b> / <b>!boost</b> work in your chat.</span></div>
         </div>
-        <div class="card">
-          <h3>BOT STATUS</h3>
+
+        <!-- 5 · CHAT BOT -->
+        <div class="card" style="margin-bottom:16px;">
+          <h3>ENABLE CHAT BOT</h3>
+          <p style="font-size:10px;color:rgba(255,255,255,0.3);margin-bottom:14px;line-height:1.7;">The ZORBS bot reads your Kick chat and runs <b>!play</b> / <b>!boost</b> automatically. Make sure your channel is connected, then enable the webhook.</p>
+          <div class="kick-block" id="bot-kick-block"><div class="k-icon">K</div><div id="bot-kick-text" class="kick-disconnected">Connect your Kick channel to enable the bot</div></div>
           <div class="stat-row"><span>Bot Account</span><span class="stat-val">@ZorbsBot</span></div>
           <div class="stat-row"><span>Channel</span><span id="bot-channel" class="stat-val">—</span></div>
           <div class="stat-row"><span>Status</span><span id="bot-status" class="badge idle">OFFLINE</span></div>
-          <div class="stat-row"><span>Commands Handled Today</span><span id="bot-cmds" class="stat-val">0</span></div>
-        <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
-          <button class="btn btn-cyan" onclick="checkKickSubs()">CHECK CHAT CONNECTION</button>
-          <button class="btn btn-green" onclick="reRegisterWebhook()">RE-REGISTER WEBHOOK</button>
-        </div>
-        <pre id="subs-result" style="margin-top:12px;font-size:9px;color:rgba(255,255,255,0.45);white-space:pre-wrap;max-height:200px;overflow:auto;"></pre>
-        </div>
-        <div class="card" style="margin-top:16px;">
-          <h3>CHAT COMMANDS <span class="badge live" style="margin-left:6px;">LIVE</span></h3>
-          <p style="font-size:10px;color:rgba(255,255,255,0.3);margin-bottom:12px;line-height:1.6;">Once your channel is connected, your viewers control everything from chat — no link needed. Tell them:</p>
-          <div class="stat-row"><span style="color:var(--c)">!play</span><span>Join the next race as a ball</span></div>
-          <div class="stat-row"><span style="color:var(--c)">!boost</span><span>Boost your ball during the race</span></div>
-          <div style="font-size:9px;color:rgba(255,255,255,0.25);margin-top:10px;line-height:1.6;">Subs are detected from their chat badge, so <b>Subs Only</b> mode (in MY LOBBY) is enforced automatically. Use <b>CLEAR CHAT RACERS</b> in MY LOBBY to reset the field between sessions.</div>
+          <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
+            <button class="btn btn-green" onclick="reRegisterWebhook()">⚡ ENABLE / RE-REGISTER BOT</button>
+            <button class="btn btn-cyan" onclick="checkKickSubs()">CHECK CONNECTION</button>
+            <button class="btn-kick" onclick="kickLogin()" style="font-size:10px;padding:8px 14px;">RECONNECT KICK</button>
+          </div>
+          <pre id="subs-result" style="margin-top:12px;font-size:9px;color:rgba(255,255,255,0.45);white-space:pre-wrap;max-height:200px;overflow:auto;"></pre>
+          <div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.06);">
+            <div class="ctl-label" style="margin-bottom:8px;">CHAT COMMANDS <span class="badge live" style="margin-left:6px;">LIVE</span></div>
+            <div class="stat-row"><span style="color:var(--c)">!play</span><span>Join the next race as a ball</span></div>
+            <div class="stat-row"><span style="color:var(--c)">!boost</span><span>Boost your ball during the race</span></div>
+          </div>
         </div>
       </div>
 
