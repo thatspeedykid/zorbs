@@ -119,18 +119,18 @@ const ZTRACK = (() => {
           segLeft = 16 + Math.floor(rng() * 14);
           funnelLen = segLeft;
         } else if (r < 0.80 && spiralCooldown <= 0) {
-          // SPIRAL DROP-FUNNEL — now RARE (cooldown prevents clustering) and gentler so
-          // it doesn't create a catch-lip. The bump at spiral start/end was a hard step
-          // in width (x1.6 applied instantly) and bank; both are eased now (see below).
+          // SPIRAL — gentled hard: a tight helix loops back over itself in XZ, which confuses
+          // the floor-follow (balls grab the wrong coil's height and "swim"). Lower turn + bank
+          // + shorter length keeps the coils from overlapping so balls stay planted.
           moveKind = 'spiral';
           const dir = rng() < 0.5 ? 1 : -1;
-          spiralTurn = dir * (0.09 + rng() * 0.025);
+          spiralTurn = dir * (0.045 + rng() * 0.015);   // was 0.09–0.115 → 0.045–0.06
           targetTurn = spiralTurn;
-          targetBank = dir * 0.4;                       // gentler (was 0.6) — less catch
-          extraDrop = 0.45 + rng() * 0.25;
-          segLeft = 40 + Math.floor(rng() * 22);
+          targetBank = dir * 0.22;                       // was 0.4 — much less catch-lip
+          extraDrop = 0.3 + rng() * 0.18;                // gentler drop
+          segLeft = 28 + Math.floor(rng() * 14);         // shorter (was 40–62) → less overlap
           spiralLen = segLeft;
-          spiralCooldown = 220;                         // no another spiral for ~220 nodes
+          spiralCooldown = 260;
         } else if (r < 0.86) {
           // TUNNEL: enclosed run with a ceiling (capped so it doesn't dominate)
           moveKind = 'tunnel';

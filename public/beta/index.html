@@ -565,7 +565,7 @@ let _planet = null, _clouds = null;
 })();
 
 // ---- build the course ----
-let track = null, trackMeshes = [];
+let track = null, trackMeshes = [], _bumperVis = [];
 let _pulse = null;                  // streaking-pulse animation state (set in buildCourse)
 let _boostMats = [];                // boost-pad chevron textures (scrolled each frame)
 const _tmpV = new THREE.Vector3();  // scratch vector reused each frame (no per-frame alloc)
@@ -805,20 +805,30 @@ function buildCourse(seed) {
     }
   }
 
-  // OBSTACLES — bumper pillars (red posts with a glowing top ring so they pop + catch bloom)
+  // OBSTACLES — electric bumper pylons (theme cyan): a charge ring rises up the post and flashes
+  // at the top when it discharges/shocks. Refs stored in _bumperVis for the render loop to animate.
+  _bumperVis = [];
   if (track.obstacles && track.obstacles.length) {
-    const obMat = new THREE.MeshStandardMaterial({ color: 0xff2e4d, emissive: 0x3a0010, metalness: 0.35, roughness: 0.5 });
-    const ringMat = new THREE.MeshBasicMaterial({ color: 0xff5577 });
+    const postMat = new THREE.MeshStandardMaterial({ color: 0x0a2e3a, emissive: 0x0a4a5a, metalness: 0.7, roughness: 0.35 });
     for (const ob of track.obstacles) {
-      const g = new THREE.CylinderGeometry(ob.radius, ob.radius * 1.08, ob.height, 18);
-      const m = new THREE.Mesh(g, obMat);
-      m.position.set(ob.pos.x, ob.pos.y + ob.height / 2, ob.pos.z);
-      scene.add(m); trackMeshes.push(m);
-      const rg = new THREE.TorusGeometry(ob.radius + 0.06, 0.09, 8, 18);
-      const ring = new THREE.Mesh(rg, ringMat);
-      ring.position.set(ob.pos.x, ob.pos.y + ob.height - 0.15, ob.pos.z);
+      const baseY = ob.pos.y;
+      const g = new THREE.CylinderGeometry(ob.radius * 0.85, ob.radius, ob.height, 18);
+      const post = new THREE.Mesh(g, postMat.clone());
+      post.position.set(ob.pos.x, baseY + ob.height / 2, ob.pos.z);
+      scene.add(post); trackMeshes.push(post);
+      // rising charge ring (bright cyan, blooms)
+      const rg = new THREE.TorusGeometry(ob.radius + 0.12, 0.1, 8, 20);
+      const ring = new THREE.Mesh(rg, new THREE.MeshBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.9 }));
       ring.rotation.x = Math.PI / 2;
+      ring.position.set(ob.pos.x, baseY + 0.1, ob.pos.z);
       scene.add(ring); trackMeshes.push(ring);
+      // top discharge flash (hidden until it zaps)
+      const flash = new THREE.Mesh(new THREE.SphereGeometry(ob.radius + 0.5, 12, 10),
+        new THREE.MeshBasicMaterial({ color: 0xaff6ff, transparent: true, opacity: 0.85 }));
+      flash.position.set(ob.pos.x, baseY + ob.height, ob.pos.z);
+      flash.visible = false;
+      scene.add(flash); trackMeshes.push(flash);
+      _bumperVis.push({ ring, flash, baseY, height: ob.height, post });
     }
   }
 }
@@ -1472,6 +1482,7 @@ function loop(now) {
   }
 
   updateCamera(dt);
+  updateBumpers();
 
   if (composer && !_LITE) composer.render(); else renderer.render(scene, camera);   // bloom off in lite mode
 }
@@ -1521,6 +1532,21 @@ function pickCameraTarget(){
   if (_mpMode && _myMarble) { const z = zorbs.get(_myMarble); if (z && !z.eliminated && !z.exploded) return _myMarble; }
   // ...otherwise (solo, after you're out, or OBS with no own ball) follow the race leader.
   return ZPHYSICS.isReady() ? ZPHYSICS.leader() : null;
+}
+// drive the electric-bumper visuals from the physics charge state: the cyan ring climbs the
+// post, brightening as it charges, and the top flashes on the discharge (charge near full).
+function updateBumpers(){
+  if (!_bumperVis.length || !ZPHYSICS.getBumpers) return;
+  const bms = ZPHYSICS.getBumpers();
+  for (let k = 0; k < _bumperVis.length; k++){
+    const vis = _bumperVis[k], bm = bms[k]; if (!bm) continue;
+    const c = bm.charge || 0;
+    vis.ring.position.y = vis.baseY + 0.1 + c * (vis.height - 0.2);
+    vis.ring.material.opacity = 0.35 + c * 0.6;
+    const hot = c > 0.82;
+    vis.flash.visible = hot;
+    if (hot) vis.flash.material.opacity = 0.85 * ((c - 0.82) / 0.18);
+  }
 }
 function updateCamera(dt) {
   if (_camMode === 'free') { updateFreeCam(dt); return; }

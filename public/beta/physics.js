@@ -22,6 +22,10 @@ const ZPHYSICS = (() => {
   let branchNodes = {};    // branchId -> node array (separate from main)
   let BALL_R = 0.5;
   let lastError = null;
+  // electric bumpers: energy charges up each post; at the top it discharges, shocking nearby balls
+  let bumpers = [];
+  let bumpSimT = 0;
+  const BUMP_CYCLE = 2.4, SHOCK_KICK = 9, SHOCK_UP = 5;
 
   // ---- load Rapier from CDN (browser) or require (node) ----
   async function load() {
@@ -97,13 +101,15 @@ const ZPHYSICS = (() => {
       for (const bc of forkData.branchColliders) mk(bc.buffers);
     }
     // OBSTACLES: static bumper pillars (Y-aligned cylinders). Restitution gives a real bounce.
+    bumpers = [];
     if (forkData && forkData.obstacles) {
-      for (const ob of forkData.obstacles) {
+      forkData.obstacles.forEach((ob, k) => {
         const cd = RAPIER.ColliderDesc.cylinder(ob.height / 2, ob.radius)
           .setTranslation(ob.pos.x, ob.pos.y + ob.height / 2, ob.pos.z)
-          .setRestitution(0.55).setFriction(0.2);
+          .setRestitution(0.45).setFriction(0.2);
         world.createCollider(cd, trackBody);
-      }
+        bumpers.push({ pos: ob.pos, shockR: ob.radius + 1.8, off: (k * 0.7) % BUMP_CYCLE, last: 0, charge: 0 });
+      });
     }
   }
 
@@ -229,6 +235,31 @@ const ZPHYSICS = (() => {
     const dt = Math.max(0.002, Math.min(0.033, realDt));
     world.timestep = dt;
     fixedStep(dt);
+    processBumpers(dt);
+  }
+
+  // Electric bumpers: a charge rises up each post (sawtooth 0→1). When it wraps (reaches the
+  // top) the bumper DISCHARGES, shocking every ball within reach with a chaotic launch.
+  function processBumpers(dt) {
+    if (!bumpers.length) return;
+    bumpSimT += dt;
+    for (const bm of bumpers) {
+      const charge = ((bumpSimT + bm.off) % BUMP_CYCLE) / BUMP_CYCLE;
+      if (charge < bm.last) {                         // wrapped → energy hit the top → ZAP
+        for (const [, b] of balls) {
+          if (!b.alive) continue;
+          const t = b.body.translation();
+          const dx = t.x - bm.pos.x, dz = t.z - bm.pos.z;
+          const d2 = dx * dx + dz * dz;
+          if (d2 < bm.shockR * bm.shockR) {
+            const d = Math.sqrt(d2) || 0.001;
+            const v = b.body.linvel();
+            b.body.setLinvel({ x: v.x + (dx / d) * SHOCK_KICK, y: Math.max(v.y, 0) + SHOCK_UP, z: v.z + (dz / d) * SHOCK_KICK }, true);
+          }
+        }
+      }
+      bm.last = charge; bm.charge = charge;
+    }
   }
 
   function fixedStep(dt) {
@@ -451,6 +482,7 @@ const ZPHYSICS = (() => {
 
   return {
     init, setTrack, addBall, removeBall, clearBalls, giveBoost,
+    getBumpers: () => bumpers,
     step, snapshot, eliminate, checkFalls, leader,
     nearestNode,
     isReady: () => ready,
