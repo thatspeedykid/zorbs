@@ -69,10 +69,13 @@ const ZTRACK = (() => {
       const roll = rng();
       let sec;
       if (roll < 0.60) {
-        // BIG sweeping arc — LONG so it reads as a real curve, not a wiggle. Usually flips
-        // direction from the last (→ big S-curves) but ~30% keeps it to build an even bigger arc.
-        if (rng() > 0.30) lastDir = -lastDir;
-        sec = { kind: 'sweep', dir: lastDir, sharp: 0.026 + rng() * 0.038, len: 40 + Math.floor(rng() * 34) };
+        // BIG sweeping arc — always flip direction (clean S-curves) and CAP the total arc so a
+        // sweep never curls past ~95° onto its own path (that self-overlap was the tangled knot).
+        lastDir = -lastDir;
+        const sharp = 0.022 + rng() * 0.022;                  // 0.022–0.044
+        let len = 34 + Math.floor(rng() * 22);                // 34–56
+        len = Math.min(len, Math.floor(1.65 / sharp));        // arc ≤ ~95° → no loop-back
+        sec = { kind: 'sweep', dir: lastDir, sharp, len };
       } else if (roll < 0.70) {                          // short straight breather
         sec = { kind: 'straight', len: 10 + Math.floor(rng() * 12) };
       } else if (roll < 0.82 && sinceIntense > 2) {      // funnel
