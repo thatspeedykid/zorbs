@@ -91,20 +91,20 @@ const ZFORK = (() => {
     if (heading > 0.35) return null;            // too curvy → not a clean divergent fork
 
     const base = mainNodes[splitIdx].halfW;
-    const RW = base * 0.85;                        // each separate ribbon's half-width
-    const PEAK = base * 3.0;                        // bow FAR apart so they're clearly two tracks
-    const EASE = Math.max(10, Math.floor(lenF * 0.26));   // spread fast, then hold apart a long time
+    const RW = base * 0.82;                        // each separate ribbon's half-width
+    const PEAK = base * 3.4;                        // how far the arms angle apart at the widest
 
-    // Offset profile: both ribbons START on the main centerline (offset 0) so balls hand off
-    // safely onto the branch's analytic floor, ease apart to ±PEAK, hold, then ease back to 0.
-    const smooth = (e) => e * e * (3 - 2 * e);
-    const offsetAt = (k, sign) => {
-      let mag;
-      if (k <= EASE) mag = PEAK * smooth(k / EASE);
-      else if (k >= lenF - EASE) mag = PEAK * smooth((lenF - k) / EASE);
-      else mag = PEAK;
-      return mag * sign;
-    };
+    // DIAMOND (Y) profile: the two ribbons angle APART at a real angle, hold no parallel section,
+    // then angle back to meet — a true fork that goes two ways and rejoins, NOT a parallel bow
+    // (which read as an "O"). Triangle peak in the middle, corners lightly rounded so balls can take
+    // them. Offset is 0 at both ends → safe hand-off onto / off the branch analytic floor.
+    const rawOff = [];
+    for (let k = 0; k <= lenF; k++) rawOff.push(PEAK * (1 - Math.abs(2 * k / lenF - 1)));
+    for (let pass = 0; pass < 1; pass++) {
+      const c = rawOff.slice();
+      for (let k = 1; k < lenF; k++) rawOff[k] = (c[k - 1] + 2 * c[k] + c[k + 1]) / 4;
+    }
+    const offsetAt = (k, sign) => rawOff[Math.max(0, Math.min(lenF, Math.round(k)))] * sign;
 
     const branches = {};
     for (const key of ['A', 'B']) {
