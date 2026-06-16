@@ -43,10 +43,51 @@ const ZTRACK = (() => {
   const STEP = 1.3;           // finer spacing = smaller facets, smoother look
   const DROP_PER_STEP = 0.42; // average descent per node (the "downhill")
 
+  // COURSE DIRECTOR: instead of rolling a random move every time a segment ends, pre-compose a
+  // deliberate SEQUENCE of sections — intro straight → snaking sweeps (alternating direction, the
+  // S-curves) with spaced-out drops/spirals/funnels/tunnels → a long final straight. Deterministic
+  // from the seed. Each section just feeds the same move params the old random block used, so all
+  // the downstream machinery (mesh, physics, forks, boosts, obstacles) is untouched.
+  function buildPlan(rng, total) {
+    const plan = [];
+    let used = 0, lastDir = rng() < 0.5 ? 1 : -1, sinceIntense = 9;
+    const intro = 22 + Math.floor(rng() * 14);
+    plan.push({ kind: 'straight', len: intro }); used += intro;
+    const outro = 42 + Math.floor(rng() * 30);          // long final tail
+    const body = total - outro;
+    while (used < body - 18) {
+      sinceIntense++;
+      const remaining = body - used;
+      const roll = rng();
+      let sec;
+      if (roll < 0.50) {                                 // SWEEP — alternate dir → snaking S-curves
+        lastDir = -lastDir;
+        sec = { kind: 'sweep', dir: lastDir, sharp: 0.02 + rng() * 0.045, len: 22 + Math.floor(rng() * 26) };
+      } else if (roll < 0.66) {                          // short straight breather
+        sec = { kind: 'straight', len: 12 + Math.floor(rng() * 16) };
+      } else if (roll < 0.80 && sinceIntense > 2) {      // funnel
+        sec = { kind: 'funnel', len: 16 + Math.floor(rng() * 14), min: 0.4 + rng() * 0.15 };
+      } else if (roll < 0.90 && sinceIntense > 3) {      // drop
+        sec = { kind: 'drop', len: 8 + Math.floor(rng() * 9), drop: 1.1 + rng() * 1.4 }; sinceIntense = 0;
+      } else if (roll < 0.96 && sinceIntense > 4) {      // spiral (rare, spaced)
+        lastDir = -lastDir;
+        sec = { kind: 'spiral', dir: lastDir, len: 28 + Math.floor(rng() * 12) }; sinceIntense = 0;
+      } else {                                           // tunnel
+        sec = { kind: 'tunnel', dir: rng() < 0.5 ? 1 : -1, len: 16 + Math.floor(rng() * 14) };
+      }
+      if (sec.len > remaining) sec.len = Math.max(8, remaining);
+      plan.push(sec); used += sec.len;
+    }
+    plan.push({ kind: 'straight', len: outro });
+    return plan;
+  }
+
   // Build the centerline as an array of nodes:
   //   { pos, dir, right, up, halfW, bank }  — everything physics & mesh need.
   function buildCenterline(seed, targetNodes, ballCount) {
     const rng = mulberry32(seed);
+    const plan = buildPlan(rng, targetNodes);   // course director: deliberate section sequence
+    let planIdx = 0;
     const nodes = [];
     ballCount = ballCount || 20;
 
@@ -87,66 +128,46 @@ const ZTRACK = (() => {
     for (let i = 0; i < targetNodes; i++) {
       // start a new move when the current one runs out
       if (segLeft <= 0) {
-        const r = rng();
+        // COURSE DIRECTOR drives the next move — pop the next planned section and set the same
+        // move params the old random block used. Fallback to a straight if the plan is exhausted.
+        const sec = plan[planIdx++] || { kind: 'straight', len: 20 };
         moveKind = 'straight'; extraDrop = 0; funnelMin = 0; tunnel = false;
-        // MORE RANDOM: wider value ranges + an added SPIRAL move. Probabilities retuned
-        // so no single feel dominates and every course plays differently.
-        if (r < 0.24) {
-          // straight-ish run (length varies a lot now)
-          targetTurn = (rng() - 0.5) * 0.012;
-          targetBank = 0;
-          segLeft = 10 + Math.floor(rng() * 26);
-        } else if (r < 0.52) {
-          // sweeping turn (banked) — sharper range for more drama
-          const dir = rng() < 0.5 ? 1 : -1;
-          const sharp = 0.015 + rng() * 0.055;
-          targetTurn = dir * sharp;
-          targetBank = dir * Math.min(0.55, sharp * 9);
-          segLeft = 14 + Math.floor(rng() * 28);
-        } else if (r < 0.66) {
-          // DROP: steep plunge
+        if (sec.kind === 'sweep') {
+          targetTurn = sec.dir * sec.sharp;
+          targetBank = sec.dir * Math.min(0.55, sec.sharp * 9);
+          segLeft = sec.len;
+        } else if (sec.kind === 'drop') {
           moveKind = 'drop';
           targetTurn = (rng() - 0.5) * 0.02;
           targetBank = 0;
-          extraDrop = 1.2 + rng() * 1.6;
-          segLeft = 7 + Math.floor(rng() * 10);
-        } else if (r < 0.78) {
-          // FUNNEL: squeeze to a throat then reopen
+          extraDrop = sec.drop;
+          segLeft = sec.len;
+        } else if (sec.kind === 'funnel') {
           moveKind = 'funnel';
           targetTurn = (rng() - 0.5) * 0.012;
           targetBank = 0;
-          funnelMin = 0.38 + rng() * 0.16;
-          segLeft = 16 + Math.floor(rng() * 14);
-          funnelLen = segLeft;
-        } else if (r < 0.80 && spiralCooldown <= 0) {
-          // SPIRAL — gentled hard: a tight helix loops back over itself in XZ, which confuses
-          // the floor-follow (balls grab the wrong coil's height and "swim"). Lower turn + bank
-          // + shorter length keeps the coils from overlapping so balls stay planted.
+          funnelMin = sec.min;
+          segLeft = sec.len;
+          funnelLen = sec.len;
+        } else if (sec.kind === 'spiral') {
           moveKind = 'spiral';
-          const dir = rng() < 0.5 ? 1 : -1;
-          spiralTurn = dir * (0.045 + rng() * 0.015);   // was 0.09–0.115 → 0.045–0.06
+          spiralTurn = sec.dir * (0.045 + rng() * 0.015);
           targetTurn = spiralTurn;
-          targetBank = dir * 0.22;                       // was 0.4 — much less catch-lip
-          extraDrop = 0.3 + rng() * 0.18;                // gentler drop
-          segLeft = 28 + Math.floor(rng() * 14);         // shorter (was 40–62) → less overlap
-          spiralLen = segLeft;
-          spiralCooldown = 260;
-        } else if (r < 0.86) {
-          // TUNNEL: enclosed run with a ceiling (capped so it doesn't dominate)
+          targetBank = sec.dir * 0.22;
+          extraDrop = 0.3 + rng() * 0.18;
+          segLeft = sec.len;
+          spiralLen = sec.len;
+        } else if (sec.kind === 'tunnel') {
           moveKind = 'tunnel';
-          const dir = rng() < 0.5 ? 1 : -1;
-          targetTurn = dir * (rng() * 0.025);
+          targetTurn = sec.dir * (rng() * 0.025);
           targetBank = 0;
           tunnel = true;
-          segLeft = 16 + Math.floor(rng() * 16);
+          segLeft = sec.len;
         } else {
-          // leftover (incl. spiral slot when on cooldown) -> a sweeping banked turn,
-          // keeping courses varied instead of defaulting to more tunnels.
-          const dir = rng() < 0.5 ? 1 : -1;
-          const sharp = 0.02 + rng() * 0.05;
-          targetTurn = dir * sharp;
-          targetBank = dir * Math.min(0.55, sharp * 9);
-          segLeft = 14 + Math.floor(rng() * 24);
+          // straight
+          targetTurn = (rng() - 0.5) * 0.012;
+          targetBank = 0;
+          segLeft = sec.len;
         }
       }
 
