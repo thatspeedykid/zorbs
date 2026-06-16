@@ -51,26 +51,28 @@ const ZTRACK = (() => {
   function buildPlan(rng, total) {
     const plan = [];
     let used = 0, lastDir = rng() < 0.5 ? 1 : -1, sinceIntense = 9;
-    const intro = 22 + Math.floor(rng() * 14);
+    const intro = 20 + Math.floor(rng() * 12);
     plan.push({ kind: 'straight', len: intro }); used += intro;
-    const outro = 42 + Math.floor(rng() * 30);          // long final tail
+    const outro = 40 + Math.floor(rng() * 28);          // long final tail
     const body = total - outro;
     while (used < body - 18) {
       sinceIntense++;
       const remaining = body - used;
       const roll = rng();
       let sec;
-      if (roll < 0.50) {                                 // SWEEP — alternate dir → snaking S-curves
-        lastDir = -lastDir;
-        sec = { kind: 'sweep', dir: lastDir, sharp: 0.02 + rng() * 0.045, len: 22 + Math.floor(rng() * 26) };
-      } else if (roll < 0.66) {                          // short straight breather
-        sec = { kind: 'straight', len: 12 + Math.floor(rng() * 16) };
-      } else if (roll < 0.80 && sinceIntense > 2) {      // funnel
+      if (roll < 0.60) {
+        // BIG sweeping arc — LONG so it reads as a real curve, not a wiggle. Usually flips
+        // direction from the last (→ big S-curves) but ~30% keeps it to build an even bigger arc.
+        if (rng() > 0.30) lastDir = -lastDir;
+        sec = { kind: 'sweep', dir: lastDir, sharp: 0.026 + rng() * 0.038, len: 40 + Math.floor(rng() * 34) };
+      } else if (roll < 0.70) {                          // short straight breather
+        sec = { kind: 'straight', len: 10 + Math.floor(rng() * 12) };
+      } else if (roll < 0.82 && sinceIntense > 2) {      // funnel
         sec = { kind: 'funnel', len: 16 + Math.floor(rng() * 14), min: 0.4 + rng() * 0.15 };
-      } else if (roll < 0.90 && sinceIntense > 3) {      // drop
+      } else if (roll < 0.91 && sinceIntense > 3) {      // drop
         sec = { kind: 'drop', len: 8 + Math.floor(rng() * 9), drop: 1.1 + rng() * 1.4 }; sinceIntense = 0;
       } else if (roll < 0.96 && sinceIntense > 4) {      // spiral (rare, spaced)
-        lastDir = -lastDir;
+        if (rng() > 0.30) lastDir = -lastDir;
         sec = { kind: 'spiral', dir: lastDir, len: 28 + Math.floor(rng() * 12) }; sinceIntense = 0;
       } else {                                           // tunnel
         sec = { kind: 'tunnel', dir: rng() < 0.5 ? 1 : -1, len: 16 + Math.floor(rng() * 14) };
