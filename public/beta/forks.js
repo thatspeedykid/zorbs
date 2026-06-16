@@ -92,6 +92,8 @@ const ZFORK = (() => {
 
     const base = mainNodes[splitIdx].halfW;
     const RW = base * (LOOP ? 1.0 : 0.82);         // route half-width
+    const JUNCT = LOOP ? 16 : 4;                    // spine stays solid this far past the fork/merge
+    const ROUTESKIP = LOOP ? 8 : 2;                 // route mesh hidden until the routes separate
     let spanLen = 0;
     for (let k = splitIdx; k < end; k++) { const a = mainNodes[k].pos, b = mainNodes[k+1].pos; spanLen += Math.hypot(b.x-a.x, b.z-a.z); }
 
@@ -130,8 +132,10 @@ const ZFORK = (() => {
         if (Math.hypot(nx.x - pv.x, nx.z - pv.z) < 1e-4) { const md = mainNodes[splitIdx + k].dir; dir = norm(v(md.x, md.y, md.z)); }
         const right = norm(cross(dir, worldUp));
         const up = norm(cross(right, dir));
-        nlist.push({ pos: v(c.x, c.y, c.z), dir, right, up,
-          halfW: RW, bank: 0, kind: 'route', tunnel: false, branchId: bid });
+        const node = { pos: v(c.x, c.y, c.z), dir, right, up,
+          halfW: RW, bank: 0, kind: 'route', tunnel: false, branchId: bid };
+        if (k < ROUTESKIP || k > lenF - ROUTESKIP) node.meshSkip = true;  // no route walls at the junction (floor stays analytic)
+        nlist.push(node);
       }
       branches[bid] = nlist;
     }
@@ -141,7 +145,7 @@ const ZFORK = (() => {
     for (let k = 0; k <= lenF; k++) {
       const m = mainNodes[splitIdx + k];
       if (m._baseHalfW == null) m._baseHalfW = m.halfW;
-      if (k > 3 && k < lenF - 3) m.meshSkip = true;
+      if (k > JUNCT && k < lenF - JUNCT) m.meshSkip = true;
     }
 
     return {
