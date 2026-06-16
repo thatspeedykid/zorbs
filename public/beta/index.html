@@ -1609,7 +1609,8 @@ const _ZP = new URLSearchParams(location.search);
 const _roomParam = (_ZP.get('room') || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 32);
 const MP_ROOM = _roomParam || 'betatest';
 const _OBS = _ZP.get('obs') === '1';
-const _PRIVATE = MP_ROOM !== 'public';
+// 'betatest' is an isolated room but auto-runs like public (not gated as a streamer lobby)
+const _PRIVATE = MP_ROOM !== 'public' && MP_ROOM !== 'betatest';
 const MP_SLOT_MS = 95000, MP_LOBBY_MS = 9000, MP_FIELD = 8;
 let _myMarble = null, _joinName = null, _mpMode = false, _kickName = null, _isFounder = false;
 // server-authoritative result: the first client to finish a race reports the order; the server
