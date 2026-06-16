@@ -805,30 +805,39 @@ function buildCourse(seed) {
     }
   }
 
-  // OBSTACLES — electric bumper pylons (theme cyan): a charge ring rises up the post and flashes
-  // at the top when it discharges/shocks. Refs stored in _bumperVis for the render loop to animate.
+  // OBSTACLES — electric bumper pylons (theme cyan). The blue post bobs UP as it charges, fires a
+  // mushroom discharge at the peak (shocking nearby balls) with flickering arcs + a static zap.
   _bumperVis = [];
   if (track.obstacles && track.obstacles.length) {
-    const postMat = new THREE.MeshStandardMaterial({ color: 0x0a2e3a, emissive: 0x0a4a5a, metalness: 0.7, roughness: 0.35 });
     for (const ob of track.obstacles) {
-      const baseY = ob.pos.y;
-      const g = new THREE.CylinderGeometry(ob.radius * 0.85, ob.radius, ob.height, 18);
-      const post = new THREE.Mesh(g, postMat.clone());
-      post.position.set(ob.pos.x, baseY + ob.height / 2, ob.pos.z);
-      scene.add(post); trackMeshes.push(post);
-      // rising charge ring (bright cyan, blooms)
-      const rg = new THREE.TorusGeometry(ob.radius + 0.12, 0.1, 8, 20);
-      const ring = new THREE.Mesh(rg, new THREE.MeshBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.9 }));
-      ring.rotation.x = Math.PI / 2;
-      ring.position.set(ob.pos.x, baseY + 0.1, ob.pos.z);
-      scene.add(ring); trackMeshes.push(ring);
-      // top discharge flash (hidden until it zaps)
-      const flash = new THREE.Mesh(new THREE.SphereGeometry(ob.radius + 0.5, 12, 10),
-        new THREE.MeshBasicMaterial({ color: 0xaff6ff, transparent: true, opacity: 0.85 }));
-      flash.position.set(ob.pos.x, baseY + ob.height, ob.pos.z);
-      flash.visible = false;
-      scene.add(flash); trackMeshes.push(flash);
-      _bumperVis.push({ ring, flash, baseY, height: ob.height, post });
+      const baseY = ob.pos.y, H = ob.height, R = ob.radius;
+      const grp = new THREE.Group();
+      grp.position.set(ob.pos.x, baseY, ob.pos.z);
+      const post = new THREE.Mesh(
+        new THREE.CylinderGeometry(R * 0.9, R, H, 20),
+        new THREE.MeshStandardMaterial({ color: 0x2aa8ff, emissive: 0x0a7cff, emissiveIntensity: 0.6, metalness: 0.45, roughness: 0.25, transparent: true, opacity: 0.93 })
+      );
+      post.position.y = H / 2; grp.add(post);
+      // a couple of cyan "cap" rings near the top so it reads as a charged emitter
+      const cap = new THREE.Mesh(new THREE.TorusGeometry(R + 0.08, 0.09, 8, 20),
+        new THREE.MeshBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.9 }));
+      cap.rotation.x = Math.PI / 2; cap.position.y = H - 0.1; grp.add(cap);
+      // flickering electric arcs (jagged lines, animated in updateBumpers)
+      const arcs = [];
+      for (let a = 0; a < 3; a++) {
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(7 * 3), 3));
+        const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xbff7ff, transparent: true, opacity: 0 }));
+        grp.add(line); arcs.push(line);
+      }
+      // mushroom discharge cap (hemisphere that expands + fades when it zaps)
+      const burst = new THREE.Mesh(
+        new THREE.SphereGeometry(R, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2),
+        new THREE.MeshBasicMaterial({ color: 0xd6ffff, transparent: true, opacity: 0 })
+      );
+      burst.position.y = H; grp.add(burst);
+      scene.add(grp); trackMeshes.push(grp);
+      _bumperVis.push({ grp, post, cap, arcs, burst, baseY, H, R, last: 0, burstT: 0 });
     }
   }
 }
@@ -1533,19 +1542,61 @@ function pickCameraTarget(){
   // ...otherwise (solo, after you're out, or OBS with no own ball) follow the race leader.
   return ZPHYSICS.isReady() ? ZPHYSICS.leader() : null;
 }
-// drive the electric-bumper visuals from the physics charge state: the cyan ring climbs the
-// post, brightening as it charges, and the top flashes on the discharge (charge near full).
+// electric "zzzt" static burst (filtered white noise) — no audio file, generated on the fly
+let _zapCtx = null;
+function playZap(vol){
+  try {
+    if (!_zapCtx) _zapCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = _zapCtx; if (ctx.state === 'suspended') ctx.resume();
+    const dur = 0.13, n = Math.floor(ctx.sampleRate * dur);
+    const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 2);  // decaying noise
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2400 + Math.random() * 800; bp.Q.value = 0.7;
+    const g = ctx.createGain(); g.gain.value = Math.min(0.22, vol * 0.22);
+    src.connect(bp); bp.connect(g); g.connect(ctx.destination); src.start();
+  } catch(_){}
+}
+// drive the electric-bumper visuals from the physics charge: post bobs UP as it charges, arcs
+// flicker, and at the peak (discharge) a mushroom cap bursts + a static zap plays.
 function updateBumpers(){
   if (!_bumperVis.length || !ZPHYSICS.getBumpers) return;
   const bms = ZPHYSICS.getBumpers();
+  let zaps = 0;                                   // cap audible zaps per frame
   for (let k = 0; k < _bumperVis.length; k++){
     const vis = _bumperVis[k], bm = bms[k]; if (!bm) continue;
     const c = bm.charge || 0;
-    vis.ring.position.y = vis.baseY + 0.1 + c * (vis.height - 0.2);
-    vis.ring.material.opacity = 0.35 + c * 0.6;
-    const hot = c > 0.82;
-    vis.flash.visible = hot;
-    if (hot) vis.flash.material.opacity = 0.85 * ((c - 0.82) / 0.18);
+    vis.grp.position.y = vis.baseY + c * 0.6;     // bob upward as it charges
+    vis.post.material.emissiveIntensity = 0.5 + c * 2.0;
+    vis.cap.material.opacity = 0.5 + c * 0.5;
+    // arcs flicker, stronger when charged
+    const live = c > 0.35 && Math.random() < 0.25 + c * 0.55;
+    for (const line of vis.arcs){
+      if (live){
+        const ang = Math.random() * 6.283, rr = vis.R + 0.14;
+        const pos = line.geometry.attributes.position.array;
+        for (let p = 0; p < 7; p++){
+          pos[p*3]   = Math.cos(ang) * rr + (Math.random()-0.5) * 0.45;
+          pos[p*3+1] = (p / 6) * vis.H;
+          pos[p*3+2] = Math.sin(ang) * rr + (Math.random()-0.5) * 0.45;
+        }
+        line.geometry.attributes.position.needsUpdate = true;
+        line.material.opacity = 0.6 + Math.random() * 0.4;
+      } else line.material.opacity *= 0.55;
+    }
+    // DISCHARGE: charge wrapped (reached the top) → mushroom burst + zap
+    if (c < vis.last){
+      vis.burstT = 1;
+      if (zaps < 3){ const dd = camera.position.distanceTo(vis.grp.position); if (dd < 32){ playZap(1 - dd/32); zaps++; } }
+    }
+    vis.last = c;
+    if (vis.burstT > 0){
+      vis.burstT = Math.max(0, vis.burstT - 0.07);
+      const e = 1 - vis.burstT;
+      vis.burst.scale.set(0.5 + e*2.6, 0.4 + e*1.4, 0.5 + e*2.6);
+      vis.burst.material.opacity = vis.burstT * 0.75;
+    }
   }
 }
 function updateCamera(dt) {

@@ -353,17 +353,17 @@ const ZTRACK = (() => {
         const bad = !nd || nd.isPlatform || nd.branchId || nd.kind === 'fork' || nd.tunnel ||
                     nd.boost || nd.meshSkip || /drum/.test(nd.kind || '');
         if (!bad) {
-          const count = 1 + (orng() < 0.4 ? 1 : 0);          // 1–2 pillars across the lane
-          for (let c = 0; c < count; c++) {
-            const off = (orng() * 2 - 1) * nd.halfW * 0.55;  // spread across the width, leave a gap to pass
-            obstacles.push({
-              pos: { x: nd.pos.x + nd.right.x * off, y: nd.pos.y, z: nd.pos.z + nd.right.z * off },
-              radius: 0.65 + orng() * 0.35,
-              height: 3.0,
-              idx: i,
-            });
-          }
-          i += 45 + Math.floor(orng() * 50);                 // gap before the next cluster
+          // ONE bumper, pushed to a side so there's always a clear lane past it — never a pair
+          // across the throat (that was stopping the race). Alternate sides; big gaps between.
+          const side = (obstacles.length % 2 === 0) ? 1 : -1;
+          const off = side * nd.halfW * (0.35 + orng() * 0.25);   // 0.35–0.6 out from center
+          obstacles.push({
+            pos: { x: nd.pos.x + nd.right.x * off, y: nd.pos.y, z: nd.pos.z + nd.right.z * off },
+            radius: 0.6 + orng() * 0.18,
+            height: 2.6,
+            idx: i,
+          });
+          i += 85 + Math.floor(orng() * 70);                       // wide gap (was 45–95) → no clustering
         } else {
           i += 8;
         }
