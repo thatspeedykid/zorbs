@@ -376,6 +376,34 @@ const ZTRACK = (() => {
       }
     }
 
+    // PER-ROUTE OBSTACLES: each loop route gets its OWN electric bumpers — fully random every race
+    // and different per side (medium density). Branch floors are analytic, so a world-positioned
+    // bumper cylinder rides the route fine. Junction zones (meshSkip) and route ends are skipped,
+    // and each post is pushed to one side so there's always a clear lane past it.
+    for (const f of forks) {
+      if (f.flavor !== 'divergent' || !f.branches) continue;
+      for (const bid in f.branches) {
+        const arr = f.branches[bid];
+        const tag = bid.charCodeAt(bid.length - 1);
+        const prng = mulberry32((seed ^ 0x7f4a7c15 ^ (tag * 0x9e3779b1)) >>> 0);
+        const lo = 18, hi = arr.length - 18;
+        let m = lo + Math.floor(prng() * 30), cnt = 0;
+        while (m < hi) {
+          const nd = arr[m];
+          if (nd && !nd.meshSkip) {
+            const side = (cnt % 2 === 0) ? 1 : -1;
+            const off = side * nd.halfW * (0.30 + prng() * 0.30);
+            obstacles.push({
+              pos: { x: nd.pos.x + nd.right.x * off, y: nd.pos.y, z: nd.pos.z + nd.right.z * off },
+              radius: 0.6 + prng() * 0.18, height: 2.6, idx: m, branchId: bid,
+            });
+            cnt++;
+            m += 55 + Math.floor(prng() * 50);                     // medium spacing
+          } else m += 8;
+        }
+      }
+    }
+
     // Build mesh for the main path, then add each fork's geometry.
     // lanesOnly forks (v2.1) live INSIDE the widened main corridor, so the main mesh
     // already covers their floor and outer walls — they only contribute the DIVIDER
