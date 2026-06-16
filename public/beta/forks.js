@@ -120,9 +120,11 @@ const ZFORK = (() => {
       const minAmp = 0.7;
       let transK = 3;
       while (transK < lenF * 0.5 - 1 && (rawOff[transK] * minAmp - RW) < base) transK++;
-      JUNCT = transK;
-      ROUTESKIP = Math.max(2, transK - 5);
-    } else { JUNCT = 4; ROUTESKIP = 2; }
+      // OVERLAP the handoff: routes start a few nodes BEFORE the spine ends, and the spine runs a
+      // few nodes PAST where the routes start — so the floor is always continuous (no detached slabs).
+      ROUTESKIP = Math.max(2, transK - 8);
+      JUNCT = transK + 8;
+    } else { JUNCT = 6; ROUTESKIP = 2; }
 
     const branches = {};
     for (const key of ['A', 'B']) {
