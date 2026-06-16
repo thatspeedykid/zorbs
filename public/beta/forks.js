@@ -65,7 +65,7 @@ const ZFORK = (() => {
   // SKIPPED in the middle (meshSkip) so there's nothing to cross. Each branch node carries
   // corridor-floor support over the mouths and standard floor over the divergent middle.
   function makeDivergentFork(mainNodes, splitIdx, rng, forkId) {
-    const steps = 36 + Math.floor(rng() * 12);
+    const steps = 58 + Math.floor(rng() * 16);
     const end = Math.min(mainNodes.length - 6, splitIdx + steps);
     const lenF = end - splitIdx;
     if (lenF < 34) return null;                 // too short to diverge cleanly
@@ -91,9 +91,9 @@ const ZFORK = (() => {
     if (heading > 0.35) return null;            // too curvy → not a clean divergent fork
 
     const base = mainNodes[splitIdx].halfW;
-    const RW = base * 0.8;                         // each separate ribbon's half-width
-    const PEAK = base * 2.3;                        // how far the two ribbons bow apart (the void)
-    const EASE = Math.max(10, Math.floor(lenF * 0.34));   // nodes to spread apart / merge back
+    const RW = base * 0.85;                        // each separate ribbon's half-width
+    const PEAK = base * 3.0;                        // bow FAR apart so they're clearly two tracks
+    const EASE = Math.max(10, Math.floor(lenF * 0.26));   // spread fast, then hold apart a long time
 
     // Offset profile: both ribbons START on the main centerline (offset 0) so balls hand off
     // safely onto the branch's analytic floor, ease apart to ±PEAK, hold, then ease back to 0.

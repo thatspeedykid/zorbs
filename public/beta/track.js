@@ -61,8 +61,8 @@ const ZTRACK = (() => {
       // SPLIT ZONE: a long straight run, marked so the fork-placer can split the track into two
       // separate diverging ribbons here (divergent forks need a near-straight section). Regular
       // cadence so every course actually branches.
-      if (sinceSplit >= 3 && remaining > 110) {
-        const len = 72 + Math.floor(rng() * 16);
+      if (sinceSplit >= 3 && remaining > 140) {
+        const len = 94 + Math.floor(rng() * 20);
         plan.push({ kind: 'straight', len, split: true }); used += len;
         sinceSplit = 0; continue;
       }
