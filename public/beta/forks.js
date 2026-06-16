@@ -65,7 +65,7 @@ const ZFORK = (() => {
   // SKIPPED in the middle (meshSkip) so there's nothing to cross. Each branch node carries
   // corridor-floor support over the mouths and standard floor over the divergent middle.
   function makeDivergentFork(mainNodes, splitIdx, rng, forkId) {
-    const steps = 42 + Math.floor(rng() * 14);
+    const steps = 36 + Math.floor(rng() * 12);
     const end = Math.min(mainNodes.length - 6, splitIdx + steps);
     const lenF = end - splitIdx;
     if (lenF < 34) return null;                 // too short to diverge cleanly
@@ -78,7 +78,7 @@ const ZFORK = (() => {
       const dot = Math.max(-1, Math.min(1, a.x*b.x + a.y*b.y + a.z*b.z));
       turnAcc += Math.acos(dot);
     }
-    if (turnAcc > 0.45) return null;            // ~26° total heading change — too curvy
+    if (turnAcc > 0.22) return null;            // ~13° total — must be genuinely straight or it fans
     // STRAIGHTNESS GATE: offsetting the main path on a CURVE twists the ribbon into a
     // fan/seashell. Only build a divergent fork where the section is near-straight; the
     // caller falls back to a safe lane-fork otherwise.
@@ -88,7 +88,7 @@ const ZFORK = (() => {
       const dot = Math.max(-1, Math.min(1, a.x*b.x + a.y*b.y + a.z*b.z));
       heading += Math.acos(dot);
     }
-    if (heading > 0.9) return null;             // too curvy → not a clean divergent fork
+    if (heading > 0.35) return null;            // too curvy → not a clean divergent fork
 
     const MOUTH = 14;                          // wide Y-mouth nodes at each end
     const base = mainNodes[splitIdx].halfW;
@@ -252,13 +252,14 @@ const ZFORK = (() => {
     // where a divergent fork can cleanly split the track into two separate ribbons. Spaced out.
     for (let i = platformEndIdx + 40; i < mainNodes.length - 120; i++) {
       const inZone = mainNodes[i].forkZone && !(mainNodes[i-1] && mainNodes[i-1].forkZone);
-      if (inZone && (i - lastForkEnd) > 60 && rng() < 0.85) {
+      if (inZone && (i - lastForkEnd) > 60) {
+        const at = i + 16;   // split past the settle region, where the zone is truly straight
         const rejoin = true;
-        const fork = (USE_DIVERGENT && makeDivergentFork(mainNodes, i, rng, 'fork'+n))
-                     || makeFork(mainNodes, i, rng, 'fork'+n, rejoin);
+        const fork = (USE_DIVERGENT && makeDivergentFork(mainNodes, at, rng, 'fork'+n))
+                     || makeFork(mainNodes, at, rng, 'fork'+n, rejoin);
         n++;
         forks.push(fork);
-        forkAtIdx.set(i, fork);
+        forkAtIdx.set(at, fork);
         lastForkEnd = fork.splitIdx + 90;
       }
     }

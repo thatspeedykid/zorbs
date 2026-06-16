@@ -645,7 +645,7 @@ function buildCourse(seed) {
   // EXPERIMENTAL: ?forks=divergent enables the true divergent-route forks (two separate
   // ribbons that bow apart and rejoin). Default is the clean side-by-side lane forks.
   if (typeof ZFORK !== 'undefined' && ZFORK.setDivergent)
-    ZFORK.setDivergent(new URLSearchParams(location.search).get('forks') === 'divergent');
+    ZFORK.setDivergent(new URLSearchParams(location.search).get('forks') !== 'lanes');
   // wire the (now-built) env map into the glossy floor/wall so they reflect the sky+rails
   if (_envMap) { WALL_MAT.envMap = _envMap; ROOF_MAT.envMap = _envMap;
     WALL_MAT.needsUpdate = ROOF_MAT.needsUpdate = true; }

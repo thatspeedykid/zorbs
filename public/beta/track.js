@@ -61,8 +61,8 @@ const ZTRACK = (() => {
       // SPLIT ZONE: a long straight run, marked so the fork-placer can split the track into two
       // separate diverging ribbons here (divergent forks need a near-straight section). Regular
       // cadence so every course actually branches.
-      if (sinceSplit >= 3 && remaining > 100) {
-        const len = 60 + Math.floor(rng() * 14);
+      if (sinceSplit >= 3 && remaining > 110) {
+        const len = 72 + Math.floor(rng() * 16);
         plan.push({ kind: 'straight', len, split: true }); used += len;
         sinceSplit = 0; continue;
       }
@@ -179,8 +179,8 @@ const ZTRACK = (() => {
           tunnel = true;
           segLeft = sec.len;
         } else {
-          // straight
-          targetTurn = (rng() - 0.5) * 0.012;
+          // straight — split-zones are forced DEAD straight so divergent forks don't fan/twist
+          targetTurn = sec.split ? 0 : (rng() - 0.5) * 0.012;
           targetBank = 0;
           segLeft = sec.len;
         }
@@ -201,6 +201,9 @@ const ZTRACK = (() => {
       const bankCap = Math.abs(turn) * 13 + 0.05;
       if (bank >  bankCap) bank =  bankCap;
       if (bank < -bankCap) bank = -bankCap;
+      // inside a split-zone, kill any leftover turn/bank from the prior sweep FAST so the section
+      // is truly straight by the time the divergent fork splits it (no fan/twist).
+      if (curForkZone) { turn *= 0.74; bank *= 0.5; }
 
       // rotate heading around world-up by 'turn'
       const cosT = Math.cos(turn), sinT = Math.sin(turn);
