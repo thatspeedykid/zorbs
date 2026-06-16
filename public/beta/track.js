@@ -49,48 +49,15 @@ const ZTRACK = (() => {
   // from the seed. Each section just feeds the same move params the old random block used, so all
   // the downstream machinery (mesh, physics, forks, boosts, obstacles) is untouched.
   function buildPlan(rng, total) {
+    // WHOLE-LEVEL LOOP: short stem off the platform, then ONE giant dead-straight split-zone that
+    // spans almost the entire level (the spine — two routes bulge off it into a big leaf/loop and
+    // rejoin), then a short finish straight. The level's whole skeleton IS the fork.
     const plan = [];
-    let used = 0, lastDir = rng() < 0.5 ? 1 : -1, sinceIntense = 9, sinceSplit = 0;
-    const intro = 20 + Math.floor(rng() * 12);
-    plan.push({ kind: 'straight', len: intro }); used += intro;
-    const outro = 40 + Math.floor(rng() * 28);          // long final tail
-    const body = total - outro;
-    while (used < body - 18) {
-      sinceIntense++; sinceSplit++;
-      const remaining = body - used;
-      // SPLIT ZONE: a long straight run, marked so the fork-placer can split the track into two
-      // separate diverging ribbons here (divergent forks need a near-straight section). Regular
-      // cadence so every course actually branches.
-      if (sinceSplit >= 3 && remaining > 140) {
-        const len = 94 + Math.floor(rng() * 20);
-        plan.push({ kind: 'straight', len, split: true }); used += len;
-        sinceSplit = 0; continue;
-      }
-      const roll = rng();
-      let sec;
-      if (roll < 0.60) {
-        // BIG sweeping arc — always flip direction (clean S-curves) and CAP the total arc so a
-        // sweep never curls past ~95° onto its own path (that self-overlap was the tangled knot).
-        lastDir = -lastDir;
-        const sharp = 0.022 + rng() * 0.022;                  // 0.022–0.044
-        let len = 34 + Math.floor(rng() * 22);                // 34–56
-        len = Math.min(len, Math.floor(1.65 / sharp));        // arc ≤ ~95° → no loop-back
-        sec = { kind: 'sweep', dir: lastDir, sharp, len };
-      } else if (roll < 0.70) {                          // short straight breather
-        sec = { kind: 'straight', len: 10 + Math.floor(rng() * 12) };
-      } else if (roll < 0.82 && sinceIntense > 2) {      // funnel
-        sec = { kind: 'funnel', len: 16 + Math.floor(rng() * 14), min: 0.4 + rng() * 0.15 };
-      } else if (roll < 0.91 && sinceIntense > 3) {      // drop
-        sec = { kind: 'drop', len: 8 + Math.floor(rng() * 9), drop: 1.1 + rng() * 1.4 }; sinceIntense = 0;
-      } else if (roll < 0.96 && sinceIntense > 4) {      // spiral (rare, spaced)
-        if (rng() > 0.30) lastDir = -lastDir;
-        sec = { kind: 'spiral', dir: lastDir, len: 28 + Math.floor(rng() * 12) }; sinceIntense = 0;
-      } else {                                           // tunnel
-        sec = { kind: 'tunnel', dir: rng() < 0.5 ? 1 : -1, len: 16 + Math.floor(rng() * 14) };
-      }
-      if (sec.len > remaining) sec.len = Math.max(8, remaining);
-      plan.push(sec); used += sec.len;
-    }
+    const intro = 24 + Math.floor(rng() * 12);
+    const outro = 38 + Math.floor(rng() * 22);
+    const splitLen = Math.max(180, total - intro - outro);
+    plan.push({ kind: 'straight', len: intro });
+    plan.push({ kind: 'straight', len: splitLen, split: true });
     plan.push({ kind: 'straight', len: outro });
     return plan;
   }

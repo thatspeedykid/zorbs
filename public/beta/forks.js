@@ -64,21 +64,21 @@ const ZFORK = (() => {
   // enough apart in the middle that their walls never touch, (3) the main path's floor
   // SKIPPED in the middle (meshSkip) so there's nothing to cross. Each branch node carries
   // corridor-floor support over the mouths and standard floor over the divergent middle.
-  function makeDivergentFork(mainNodes, splitIdx, rng, forkId) {
-    const steps = 58 + Math.floor(rng() * 16);
+  function makeDivergentFork(mainNodes, splitIdx, rng, forkId, targetSteps) {
+    const steps = targetSteps || (58 + Math.floor(rng() * 16));
     const end = Math.min(mainNodes.length - 6, splitIdx + steps);
     const lenF = end - splitIdx;
     if (lenF < 34) return null;                 // too short to diverge cleanly
-    // Only diverge on STRAIGHT-ish runs. Offsetting the routes sideways through a turn
-    // sweeps them out into a fan/spiral (the shell shapes), so bail on curvy sections and
-    // let a normal lane-fork handle those instead.
+    const LOOP = lenF > 150;                     // whole-level loop vs a small Y feature
+    // Only diverge on STRAIGHT-ish runs (a curve twists the ribbons into a fan). The loop spine
+    // is force-straight by the director, so loop forks skip this gate.
     let turnAcc = 0;
     for (let k = splitIdx; k < end; k++) {
       const a = mainNodes[k].dir, b = mainNodes[k+1].dir;
       const dot = Math.max(-1, Math.min(1, a.x*b.x + a.y*b.y + a.z*b.z));
       turnAcc += Math.acos(dot);
     }
-    if (turnAcc > 0.22) return null;            // ~13° total — must be genuinely straight or it fans
+    if (!LOOP && turnAcc > 0.22) return null;    // ~13° total — must be genuinely straight or it fans
     // STRAIGHTNESS GATE: offsetting the main path on a CURVE twists the ribbon into a
     // fan/seashell. Only build a divergent fork where the section is near-straight; the
     // caller falls back to a safe lane-fork otherwise.
@@ -88,23 +88,30 @@ const ZFORK = (() => {
       const dot = Math.max(-1, Math.min(1, a.x*b.x + a.y*b.y + a.z*b.z));
       heading += Math.acos(dot);
     }
-    if (heading > 0.35) return null;            // too curvy → not a clean divergent fork
+    if (!LOOP && heading > 0.35) return null;   // too curvy → not a clean divergent fork
 
     const base = mainNodes[splitIdx].halfW;
-    const RW = base * 0.82;                        // each separate ribbon's half-width
-    const PEAK = base * 3.4;                        // how far the arms angle apart at the widest
+    const RW = base * (LOOP ? 1.0 : 0.82);         // route half-width
+    let spanLen = 0;
+    for (let k = splitIdx; k < end; k++) { const a = mainNodes[k].pos, b = mainNodes[k+1].pos; spanLen += Math.hypot(b.x-a.x, b.z-a.z); }
 
-    // DIAMOND (Y) profile: the two ribbons angle APART at a real angle, hold no parallel section,
-    // then angle back to meet — a true fork that goes two ways and rejoins, NOT a parallel bow
-    // (which read as an "O"). Triangle peak in the middle, corners lightly rounded so balls can take
-    // them. Offset is 0 at both ends → safe hand-off onto / off the branch analytic floor.
+    // OFFSET PROFILE. LOOP: a big smooth leaf — each route arcs far out and back so the two
+    // together enclose the whole level. Small: an angular Y (diamond) fork feature.
     const rawOff = [];
-    for (let k = 0; k <= lenF; k++) rawOff.push(PEAK * (1 - Math.abs(2 * k / lenF - 1)));
-    for (let pass = 0; pass < 1; pass++) {
+    if (LOOP) {
+      const PEAK = spanLen * 0.30;                  // leaf width ~60% of length
+      for (let k = 0; k <= lenF; k++) rawOff.push(PEAK * Math.sin(Math.PI * k / lenF));
+    } else {
+      const PEAK = base * 3.4;
+      for (let k = 0; k <= lenF; k++) rawOff.push(PEAK * (1 - Math.abs(2 * k / lenF - 1)));
       const c = rawOff.slice();
       for (let k = 1; k < lenF; k++) rawOff[k] = (c[k - 1] + 2 * c[k] + c[k + 1]) / 4;
     }
-    const offsetAt = (k, sign) => rawOff[Math.max(0, Math.min(lenF, Math.round(k)))] * sign;
+    // loop routes are slightly ASYMMETRIC (one bulges wider) so it's an organic leaf, not a mirror
+    const offsetAt = (k, sign) => {
+      const amp = LOOP ? (sign < 0 ? 1.0 : 0.7) : 1.0;
+      return rawOff[Math.max(0, Math.min(lenF, Math.round(k)))] * sign * amp;
+    };
 
     const branches = {};
     for (const key of ['A', 'B']) {
@@ -236,20 +243,22 @@ const ZFORK = (() => {
   function buildForks(mainNodes, platformEndIdx, rng) {
     const forks = [];
     const forkAtIdx = new Map();
-    let n = 0, lastForkEnd = platformEndIdx + 40;
-    // Place a fork at the START of each marked split-zone (a straight run the director planted),
-    // where a divergent fork can cleanly split the track into two separate ribbons. Spaced out.
-    for (let i = platformEndIdx + 40; i < mainNodes.length - 120; i++) {
+    let n = 0, lastForkEnd = -1e9;
+    for (let i = platformEndIdx + 2; i < mainNodes.length - 60; i++) {
       const inZone = mainNodes[i].forkZone && !(mainNodes[i-1] && mainNodes[i-1].forkZone);
       if (inZone && (i - lastForkEnd) > 60) {
-        const at = i + 16;   // split past the settle region, where the zone is truly straight
-        const rejoin = true;
-        const fork = (USE_DIVERGENT && makeDivergentFork(mainNodes, at, rng, 'fork'+n))
-                     || makeFork(mainNodes, at, rng, 'fork'+n, rejoin);
+        // measure how far this split-zone runs; a giant zone => the whole-level loop fork
+        let zEnd = i; while (zEnd < mainNodes.length && mainNodes[zEnd].forkZone) zEnd++;
+        const at = i + 16;
+        const span = zEnd - at - 6;
+        const targetSteps = span > 34 ? span : undefined;   // span the entire zone
+        const fork = (USE_DIVERGENT && makeDivergentFork(mainNodes, at, rng, 'fork'+n, targetSteps))
+                     || makeFork(mainNodes, at, rng, 'fork'+n, true);
         n++;
         forks.push(fork);
         forkAtIdx.set(at, fork);
-        lastForkEnd = fork.splitIdx + 90;
+        lastForkEnd = fork.splitIdx + (fork.flavor === 'divergent' ? (span + 30) : 90);
+        i = zEnd;
       }
     }
     return { forks, forkAtIdx };
