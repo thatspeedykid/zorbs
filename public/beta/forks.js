@@ -90,69 +90,58 @@ const ZFORK = (() => {
     }
     if (heading > 0.35) return null;            // too curvy → not a clean divergent fork
 
-    const MOUTH = 14;                          // wide Y-mouth nodes at each end
     const base = mainNodes[splitIdx].halfW;
-    const GAP = base * 1.4;                     // route center offset where ribbons begin
-    const SPREAD = base * 2.3;                  // peak route center offset (the bow)
-    const PAD = base * 2.9;                     // Y-mouth corridor half-width
-    const RW = base * 1.35;                     // route half-width (wide — room for the field)
-    const prof = { A: { sign:-1, amp:0.9 }, B: { sign:1, amp:0.88 } };
+    const RW = base * 0.8;                         // each separate ribbon's half-width
+    const PEAK = base * 2.3;                        // how far the two ribbons bow apart (the void)
+    const EASE = Math.max(10, Math.floor(lenF * 0.34));   // nodes to spread apart / merge back
 
-    const offsetAt = (k, amp, sign) => {
+    // Offset profile: both ribbons START on the main centerline (offset 0) so balls hand off
+    // safely onto the branch's analytic floor, ease apart to ±PEAK, hold, then ease back to 0.
+    const smooth = (e) => e * e * (3 - 2 * e);
+    const offsetAt = (k, sign) => {
       let mag;
-      if (k <= MOUTH) { const e = k/MOUTH, es = e*e*(3-2*e); mag = GAP * es; }
-      else if (k >= lenF - MOUTH) { const e = (lenF-k)/MOUTH, es = e*e*(3-2*e); mag = GAP * es; }
-      else { const tt = (k - MOUTH) / (lenF - 2*MOUTH); mag = (GAP + (SPREAD-GAP)*Math.sin(tt*Math.PI)) * amp; }
+      if (k <= EASE) mag = PEAK * smooth(k / EASE);
+      else if (k >= lenF - EASE) mag = PEAK * smooth((lenF - k) / EASE);
+      else mag = PEAK;
       return mag * sign;
     };
 
     const branches = {};
-    for (const key of ['A','B']) {
-      const { sign, amp } = prof[key];
+    for (const key of ['A', 'B']) {
+      const sign = key === 'A' ? -1 : 1;
       const bid = forkId + '_' + key;
       const raw = [];
       for (let k = 0; k <= lenF; k++) {
         const m = mainNodes[splitIdx + k];
-        const off = offsetAt(k, amp, sign);
-        raw.push({ x: m.pos.x + m.right.x*off, y: m.pos.y, z: m.pos.z + m.right.z*off, off });
+        const off = offsetAt(k, sign);
+        raw.push({ x: m.pos.x + m.right.x * off, y: m.pos.y, z: m.pos.z + m.right.z * off });
       }
       const nlist = [];
       for (let k = 0; k <= lenF; k++) {
-        const c = raw[k], nx = raw[Math.min(lenF,k+1)], pv = raw[Math.max(0,k-1)];
-        let dir = norm(v(nx.x-pv.x, nx.y-pv.y, nx.z-pv.z));
-        if (Math.hypot(nx.x-pv.x, nx.z-pv.z) < 1e-4) { const md = mainNodes[splitIdx+k].dir; dir = norm(v(md.x,md.y,md.z)); }
+        const c = raw[k], nx = raw[Math.min(lenF, k + 1)], pv = raw[Math.max(0, k - 1)];
+        let dir = norm(v(nx.x - pv.x, nx.y - pv.y, nx.z - pv.z));
+        if (Math.hypot(nx.x - pv.x, nx.z - pv.z) < 1e-4) { const md = mainNodes[splitIdx + k].dir; dir = norm(v(md.x, md.y, md.z)); }
         const right = norm(cross(dir, worldUp));
         const up = norm(cross(right, dir));
-        const inMouth = (k <= MOUTH || k >= lenF - MOUTH);
-        const node = { pos: v(c.x,c.y,c.z), dir, right, up,
-          halfW: base * 1.05, bank: 0, kind:"route", tunnel:false, branchId: bid };
-        if (inMouth) {
-          node.corridorHalfW = PAD; node.laneOff = c.off;  // physics floor = the wide pad
-          node.meshSkip = true;                             // but NO branch walls here
-        }
-        nlist.push(node);
+        nlist.push({ pos: v(c.x, c.y, c.z), dir, right, up,
+          halfW: RW, bank: 0, kind: 'route', tunnel: false, branchId: bid });
       }
       branches[bid] = nlist;
     }
 
-    // main path: widen the Y-mouth pads, skip the divergent middle (branches cover it)
+    // The main floor SKIPS through the separated middle → real open space between the two tracks.
+    // Floor support is analytic per-branch, so committed balls ride their own ribbon regardless.
     for (let k = 0; k <= lenF; k++) {
       const m = mainNodes[splitIdx + k];
       if (m._baseHalfW == null) m._baseHalfW = m.halfW;
-      if (k <= MOUTH || k >= lenF - MOUTH) {
-        const e = Math.min(1, (k <= MOUTH ? k/MOUTH : (lenF-k)/MOUTH));
-        const es = e*e*(3-2*e);
-        m.halfW = m._baseHalfW + (PAD - m._baseHalfW) * es;
-      } else {
-        m.meshSkip = true;
-      }
+      if (k > 3 && k < lenF - 3) m.meshSkip = true;
     }
 
     return {
-      id: forkId, splitIdx, flavor:'divergent', rejoin:true, lanesOnly:false,
+      id: forkId, splitIdx, flavor: 'divergent', rejoin: true, lanesOnly: false,
       branches,
-      rejoinIdx: { [forkId+'_A']: end, [forkId+'_B']: end },
-      endA: branches[forkId+'_A'][lenF], endB: branches[forkId+'_B'][lenF],
+      rejoinIdx: { [forkId + '_A']: end, [forkId + '_B']: end },
+      endA: branches[forkId + '_A'][lenF], endB: branches[forkId + '_B'][lenF],
     };
   }
 
