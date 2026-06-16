@@ -65,7 +65,7 @@ const ZFORK = (() => {
   // SKIPPED in the middle (meshSkip) so there's nothing to cross. Each branch node carries
   // corridor-floor support over the mouths and standard floor over the divergent middle.
   function makeDivergentFork(mainNodes, splitIdx, rng, forkId) {
-    const steps = 56 + Math.floor(rng() * 20);
+    const steps = 42 + Math.floor(rng() * 14);
     const end = Math.min(mainNodes.length - 6, splitIdx + steps);
     const lenF = end - splitIdx;
     if (lenF < 34) return null;                 // too short to diverge cleanly
@@ -247,24 +247,19 @@ const ZFORK = (() => {
   function buildForks(mainNodes, platformEndIdx, rng) {
     const forks = [];
     const forkAtIdx = new Map();
-    const minGap = 120;                    // nodes between forks
-    let i = platformEndIdx + 80;
-    let n = 0;
-    while (i < mainNodes.length - 140) {
-      if (rng() < 0.6) {
-        // ALL forks rejoin for now. "Separate finish" branches were only ~30-60 nodes
-        // long and dead-ended in midair — balls reached the end and sat there forever
-        // (one of the stuck-ball bugs). Real separate finishes need geometry that runs
-        // all the way to the end of the course; until that's built, rejoin everything.
+    let n = 0, lastForkEnd = platformEndIdx + 40;
+    // Place a fork at the START of each marked split-zone (a straight run the director planted),
+    // where a divergent fork can cleanly split the track into two separate ribbons. Spaced out.
+    for (let i = platformEndIdx + 40; i < mainNodes.length - 120; i++) {
+      const inZone = mainNodes[i].forkZone && !(mainNodes[i-1] && mainNodes[i-1].forkZone);
+      if (inZone && (i - lastForkEnd) > 60 && rng() < 0.85) {
         const rejoin = true;
         const fork = (USE_DIVERGENT && makeDivergentFork(mainNodes, i, rng, 'fork'+n))
                      || makeFork(mainNodes, i, rng, 'fork'+n, rejoin);
         n++;
         forks.push(fork);
         forkAtIdx.set(i, fork);
-        i += minGap + Math.floor(rng()*80);
-      } else {
-        i += 40;
+        lastForkEnd = fork.splitIdx + 90;
       }
     }
     return { forks, forkAtIdx };

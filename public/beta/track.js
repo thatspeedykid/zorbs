@@ -50,14 +50,22 @@ const ZTRACK = (() => {
   // the downstream machinery (mesh, physics, forks, boosts, obstacles) is untouched.
   function buildPlan(rng, total) {
     const plan = [];
-    let used = 0, lastDir = rng() < 0.5 ? 1 : -1, sinceIntense = 9;
+    let used = 0, lastDir = rng() < 0.5 ? 1 : -1, sinceIntense = 9, sinceSplit = 0;
     const intro = 20 + Math.floor(rng() * 12);
     plan.push({ kind: 'straight', len: intro }); used += intro;
     const outro = 40 + Math.floor(rng() * 28);          // long final tail
     const body = total - outro;
     while (used < body - 18) {
-      sinceIntense++;
+      sinceIntense++; sinceSplit++;
       const remaining = body - used;
+      // SPLIT ZONE: a long straight run, marked so the fork-placer can split the track into two
+      // separate diverging ribbons here (divergent forks need a near-straight section). Regular
+      // cadence so every course actually branches.
+      if (sinceSplit >= 3 && remaining > 100) {
+        const len = 60 + Math.floor(rng() * 14);
+        plan.push({ kind: 'straight', len, split: true }); used += len;
+        sinceSplit = 0; continue;
+      }
       const roll = rng();
       let sec;
       if (roll < 0.60) {
@@ -112,6 +120,7 @@ const ZTRACK = (() => {
     let targetBank = 0;
     let moveKind = 'straight', extraDrop = 0, funnelMin = 0, tunnel = false;
     let funnelLen = 1, funnelPos = 0, spiralTurn = 0, spiralLen = 1, spiralCooldown = 0;
+    let curForkZone = false;   // true while laying a marked split-zone (for divergent forks)
 
 
     const worldUp = v(0, 1, 0);
@@ -134,9 +143,10 @@ const ZTRACK = (() => {
         // move params the old random block used. Fallback to a straight if the plan is exhausted.
         const sec = plan[planIdx++] || { kind: 'straight', len: 20 };
         moveKind = 'straight'; extraDrop = 0; funnelMin = 0; tunnel = false;
+        curForkZone = (sec.kind === 'straight' && sec.split === true);
         if (sec.kind === 'sweep') {
           targetTurn = sec.dir * sec.sharp;
-          targetBank = sec.dir * Math.min(0.55, sec.sharp * 9);
+          targetBank = sec.dir * Math.min(0.66, sec.sharp * 11);   // stronger bank → balls carry speed through
           segLeft = sec.len;
         } else if (sec.kind === 'drop') {
           moveKind = 'drop';
@@ -185,7 +195,7 @@ const ZTRACK = (() => {
       // rare "everyone falls at one node" wipe (bank lags the turn as a sweep eases into a
       // straight/spiral, leaving an over-banked flat). Capping bank to the turn rate means
       // it always eases out together with the turn. Banking on real turns is unaffected.
-      const bankCap = Math.abs(turn) * 11 + 0.06;
+      const bankCap = Math.abs(turn) * 13 + 0.05;
       if (bank >  bankCap) bank =  bankCap;
       if (bank < -bankCap) bank = -bankCap;
 
@@ -227,7 +237,7 @@ const ZTRACK = (() => {
       }
       const halfW = WIDTH * widthFactor;
 
-      nodes.push({ pos, dir: heading, right, up, halfW, bank, kind: moveKind, tunnel });
+      nodes.push({ pos, dir: heading, right, up, halfW, bank, kind: moveKind, tunnel, forkZone: curForkZone });
       segLeft--;
     }
     return nodes;
