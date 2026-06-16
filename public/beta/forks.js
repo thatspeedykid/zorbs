@@ -92,8 +92,6 @@ const ZFORK = (() => {
 
     const base = mainNodes[splitIdx].halfW;
     const RW = base * (LOOP ? 1.0 : 0.82);         // route half-width
-    const JUNCT = LOOP ? 16 : 4;                    // spine stays solid this far past the fork/merge
-    const ROUTESKIP = LOOP ? 8 : 2;                 // route mesh hidden until the routes separate
     let spanLen = 0;
     for (let k = splitIdx; k < end; k++) { const a = mainNodes[k].pos, b = mainNodes[k+1].pos; spanLen += Math.hypot(b.x-a.x, b.z-a.z); }
 
@@ -114,6 +112,17 @@ const ZFORK = (() => {
       const amp = LOOP ? (sign < 0 ? 1.0 : 0.7) : 1.0;
       return rawOff[Math.max(0, Math.min(lenF, Math.round(k)))] * sign * amp;
     };
+
+    // Hand the floor off from spine -> routes EXACTLY where the (narrower) route's inner edge
+    // clears the spine edge, so there's no wedge gap and no crossing walls at the fork/merge.
+    let JUNCT, ROUTESKIP;
+    if (LOOP) {
+      const minAmp = 0.7;
+      let transK = 3;
+      while (transK < lenF * 0.5 - 1 && (rawOff[transK] * minAmp - RW) < base) transK++;
+      JUNCT = transK;
+      ROUTESKIP = Math.max(2, transK - 5);
+    } else { JUNCT = 4; ROUTESKIP = 2; }
 
     const branches = {};
     for (const key of ['A', 'B']) {
