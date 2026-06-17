@@ -60,7 +60,7 @@ const ZTRACK = (() => {
 
     const body = Math.max(220, total - intro - outro - 24); // reserve ~24 for finish scramble
     let used = 0;
-    const splitAt = body * (0.40 + rng() * 0.16);  // place the split in the middle-ish
+    const splitAt = body * (0.28 + rng() * 0.12);  // place the split early-middle so it always fits
     let splitPlaced = false;
     let lastHeavy = false;
     let dir = rng() < 0.5 ? 1 : -1;
@@ -68,10 +68,11 @@ const ZTRACK = (() => {
     while (used < body - 30) {
       const remaining = body - used;
       // --- place the ONE split, with a funnel bottleneck leading into it ---
-      if (!splitPlaced && used >= splitAt && remaining > 240) {
+      if (!splitPlaced && used >= splitAt && remaining > 250) {
         const fl = 16 + Math.floor(rng() * 8);
         plan.push({ kind: 'funnel', len: fl, min: 0.42 + rng() * 0.12 }); used += fl;
-        const sl = 190 + Math.floor(rng() * 90);    // long enough to fan out, hold spread, funnel in
+        // long enough to fan out WIDE, wander, funnel in — but always capped to the room left
+        const sl = Math.max(220, Math.min(280 + Math.floor(rng() * 120), (body - used) - 45));
         plan.push({ kind: 'straight', len: sl, split: true }); used += sl;
         splitPlaced = true; lastHeavy = true;
         continue;
@@ -98,7 +99,7 @@ const ZTRACK = (() => {
     }
     // safety: if the level was too short to cross splitAt, force a split now
     if (!splitPlaced) {
-      const sl = Math.max(190, body - used - 10);
+      const sl = Math.max(280, body - used - 10);
       plan.push({ kind: 'straight', len: sl, split: true });
     }
     // FINISH SCRAMBLE: a funnel right before the line so the last second can change the winner

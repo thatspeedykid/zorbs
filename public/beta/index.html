@@ -653,7 +653,7 @@ function buildCourse(seed) {
   // for fair/wagered races). ~620–820 nodes targets roughly a 2–3 min completion;
   // was a flat 1100 which felt too long. Derived from the seed, never Math.random.
   const lenRng = (Math.abs((seed * 2654435761) >>> 0) % 200);   // 0..199
-  const trackLen = 620 + lenRng;                                  // 620..819
+  const trackLen = 760 + lenRng;                                  // 760..959 (longer: room for a wide fan)
   track = ZTRACK.generate(seed, trackLen, _fieldSize || 20);
   if (typeof computeMiniBounds === 'function') computeMiniBounds();
   meshFrom(track.mesh.floor, FLOOR_MAT, true);   // weld = smooth-shaded ramp

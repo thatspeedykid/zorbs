@@ -81,20 +81,29 @@ const ZFORK = (() => {
     // lane descends monotonically — gravity carries the marbles the whole way down.
     const LW = base;                                  // each lane is full track width
     const SAFEGAP = 0.8;                              // drop the wall between two lanes only where they coincide
-    const foldHalf = 0.49 * (lenF * 0.5) * STEPH;     // widest a lane may sit before the splay would fold (~26°)
-    const wantSpacing = 2 * LW + base * 1.3;          // lane center-to-center: a clear visible gap between lanes
-    let N = 4;                                         // aim for 4 lanes; drop to 3/2 only if there isn't room
-    while (N > 2 && ((N - 1) / 2) * wantSpacing > foldHalf) N--;
-    const spacing = Math.min(wantSpacing, foldHalf / Math.max(0.5, (N - 1) / 2));
-    const offs = [];
-    for (let i = 0; i < N; i++) offs.push((i - (N - 1) / 2) * spacing);   // symmetric lane offsets, left→right
-
-    // PLATEAU shape: fan OUT over the first RAMP, HOLD the lanes spread across the middle, FUNNEL IN
-    // over the last RAMP. Smoothstep ends so the lanes leave/return to the trunk without a kink.
-    const RAMP = 0.34;
+    const RAMP = 0.30;                                // fraction spent fanning OUT / funnelling IN
     const sstep = (a, b, x) => { if (a === b) return x < a ? 0 : 1; let t = (x - a) / (b - a); t = Math.max(0, Math.min(1, t)); return t*t*(3-2*t); };
     const shape = (k) => { const t = k / lenF; if (t < RAMP) return sstep(0, RAMP, t); if (t > 1 - RAMP) return 1 - sstep(1 - RAMP, 1, t); return 1; };
     const eTaper = (t) => { const er = Math.min(1, t / 0.16, (1 - t) / 0.16); const e = Math.max(0, er); return e*e*(3-2*e); };
+
+    // The outer lanes peel WIDE to the left/right. maxOuter is set straight off the fan-out length so
+    // the fan-out slope is a fixed ~SLOPE regardless of track length (no fold). The middle lanes stay
+    // central. Each lane then WANDERS in its own area during the spread before funnelling back.
+    const SLOPE = 0.62;                               // lateral run / forward run during the fan-out (~32°)
+    const fanLenH = RAMP * lenF * STEPH;              // horizontal distance of the fan-out
+    const maxOuter = SLOPE * fanLenH;                 // how far the outermost lane reaches left/right
+    const minSpacing = 2 * LW + base * 0.8;           // lanes must stay at least this far apart (center-to-center)
+    let N = 4;                                         // aim for 4 lanes; drop to 3/2 only if they'd collide
+    while (N > 2 && (2 * maxOuter / (N - 1)) < minSpacing) N--;
+    const spacing = N > 1 ? 2 * maxOuter / (N - 1) : 0;
+    const offs = [];
+    for (let i = 0; i < N; i++) offs.push((i - (N - 1) / 2) * spacing);   // symmetric lane offsets, left→right
+
+    // WANDER is active ONLY in the flat HOLD (where the spread adds no lateral slope), so its turns
+    // never stack on the fan-out slope and fold the lane. Amplitude is bounded so neighbours can't touch.
+    const holdNodes = Math.max(1, (1 - 2 * RAMP) * lenF);
+    const wanderAmp = Math.max(0, Math.min(0.05 * holdNodes, (spacing - 2 * LW) * 0.34, maxOuter * 0.5));
+    const holdWin = (t) => sstep(RAMP * 0.6, RAMP, t) * (1 - sstep(1 - RAMP, 1 - RAMP * 0.6, t));
 
     const mkWave = (amp, maxFreq) => {
       const comps = [], n = 2 + Math.floor(rng() * 3);
@@ -102,24 +111,22 @@ const ZFORK = (() => {
       const tot = comps.reduce((s, c) => s + c.a, 0) || 1;
       return (t) => { let s = 0; for (const c of comps) s += c.a * Math.sin(c.f * 6.2832 * t + c.p); return (s / tot) * Math.sin(Math.PI * t) * amp; };
     };
-    const bump = (t, at, w) => { const z = (t - at) / w; return Math.exp(-z * z); };
 
-    // ---- build the N lanes: lateral spread + a little bank/Y character, strictly descending ----
+    // ---- build the N lanes: WIDE spread + its own wander in-region; strictly descending ----
     const route = [];
     for (let i = 0; i < N; i++) {
-      const turnWave = mkWave(base * 0.30, 4), slopeWave = mkWave(2.0, 2);
-      const feats = []; const nf = 2 + Math.floor(rng() * 3);
-      for (let j = 0; j < nf; j++) {
-        const at = 0.20 + 0.60 * (j + rng()) / nf, s = rng() < 0.5 ? -1 : 1;
-        feats.push({ at, w: 0.05 + rng()*0.03, lat: s*base*(0.25 + rng()*0.20), bank: s*(1.0 + rng()*0.8) });
-      }
+      // each lane's own low-frequency S-curve wander (different per lane via random phase)
+      const wc = []; const wn = 1 + Math.floor(rng() * 2);
+      for (let j = 0; j < wn; j++) wc.push({ f: 1 + Math.floor(rng() * 2), p: rng() * 6.2832, a: 0.5 + rng() });
+      const wtot = wc.reduce((s, c) => s + c.a, 0) || 1;
+      const wander = (t) => { let s = 0; for (const c of wc) s += c.a * Math.sin(c.f * 6.2832 * t + c.p); return (s / wtot) * wanderAmp; };
+      const slopeWave = mkWave(2.0, 2);
       const lat = [], yy = [], bnk = [];
       for (let k = 0; k <= lenF; k++) {
         const t = k / lenF, eT = eTaper(t);
-        let L = offs[i] * shape(k) + turnWave(t) * eT * 0.5;   // spread (dominant) + small character
-        let Y = slopeWave(t) * eT, Bk = 0;                      // gentle monotonic Y wiggle — never a valley
-        for (const f of feats) { const g = bump(t, f.at, f.w) * eT; L += f.lat * g; Bk += f.bank * g; }
-        lat.push(L); yy.push(Y); bnk.push(Bk);
+        const L = offs[i] * shape(k) + wander(t) * holdWin(t) * eT;   // wide spread + in-region wander
+        const Y = slopeWave(t) * eT;                                   // gentle monotonic Y wiggle (no valley)
+        lat.push(L); yy.push(Y); bnk.push(0);
       }
       route.push({ lat, yy, bnk });
     }
