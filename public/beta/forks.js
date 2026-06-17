@@ -126,14 +126,23 @@ const ZFORK = (() => {
       const wtot = wc.reduce((s, c) => s + c.a, 0) || 1;
       const wander = (t) => { let s = 0; for (const c of wc) s += c.a * Math.sin(c.f * 6.2832 * t + c.p); return (s / wtot) * wanderAmp; };
       const slopeWave = mkWave(2.0, 2);
-      const lat = [], yy = [], bnk = [];
+      // per-lane FUNNELS: 0-2 width pinches (bottlenecks) in the spread region. They only NARROW the
+      // lane, so the gap to neighbouring lanes only grows — never causes overlap or fall-through.
+      const ffeats = []; const fcount = Math.floor(rng() * 3);   // 0, 1, or 2 funnels on this lane
+      for (let j = 0; j < fcount; j++) {
+        const narrower = rng() < 0.4;
+        ffeats.push({ at: 0.28 + 0.44 * rng(), w: narrower ? 0.07 + rng()*0.05 : 0.045 + rng()*0.03, minW: 0.44 + rng()*0.16 });
+      }
+      const lat = [], yy = [], bnk = [], wid = [];
       for (let k = 0; k <= lenF; k++) {
         const t = k / lenF, eT = eTaper(t);
         const L = offs[i] * shape(k) + wander(t) * holdWin(t) * eT;   // wide spread + in-region wander
         const Y = slopeWave(t) * eT;                                   // gentle monotonic Y wiggle (no valley)
-        lat.push(L); yy.push(Y); bnk.push(0);
+        let wmul = 1;                                                  // width pinch from this lane's funnels
+        for (const ff of ffeats) { const z = (t - ff.at) / ff.w; wmul = Math.min(wmul, 1 - (1 - ff.minW) * Math.exp(-z * z)); }
+        lat.push(L); yy.push(Y); bnk.push(0); wid.push(LW * wmul);
       }
-      route.push({ lat, yy, bnk });
+      route.push({ lat, yy, bnk, wid });
     }
 
     // ---- lane node lists; a wall sits between two lanes wherever they have separated ----
@@ -149,7 +158,7 @@ const ZFORK = (() => {
         let dir = norm(v(nx.x - pv.x, nx.y - pv.y, nx.z - pv.z));
         if (Math.hypot(nx.x - pv.x, nx.z - pv.z) < 1e-4) { const md = mainNodes[splitIdx + k].dir; dir = norm(v(md.x, md.y, md.z)); }
         const right = norm(cross(dir, worldUp)), up = norm(cross(right, dir));
-        const node = { pos: v(c.x, c.y, c.z), dir, right, up, halfW: LW, bank: 0, kind: 'route', tunnel: false, branchId: bid };
+        const node = { pos: v(c.x, c.y, c.z), dir, right, up, halfW: R.wid[k], bank: 0, kind: 'route', tunnel: false, branchId: bid };
         // gap to the lane on each side (lower offset = left = noWallL, higher offset = right = noWallR)
         const gapL = i > 0     ? (R.lat[k] - LW) - (route[i-1].lat[k] + LW) : 1e9;
         const gapR = i < N - 1 ? (route[i+1].lat[k] - LW) - (R.lat[k] + LW) : 1e9;
