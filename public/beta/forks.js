@@ -87,21 +87,23 @@ const ZFORK = (() => {
     for (let k = splitIdx; k < end; k++) { const a = mainNodes[k].pos, b = mainNodes[k+1].pos; spanLen += Math.hypot(b.x-a.x, b.z-a.z); }
 
     // ---------- TUNABLES (all the shape lives here) ----------
-    const LW    = base * 0.66;                                  // lane half-width
-    const MOUTH = LW * 2;                                       // junction pad = both lanes side by side
-    const BULGE = LOOP ? Math.min(spanLen * 0.11, 55)           // how far lane CENTERS bow apart (capped → tidy)
+    const LW    = base;                                        // routes are full track width
+    const BULGE = LOOP ? Math.min(spanLen * 0.11, 55)          // how far the routes curve apart (capped)
                        : base * 2.4;
-    const ASYM  = 0.72;                                         // route B bows a bit less → organic, not mirrored
+    const ASYM  = 0.72;                                        // route B curves a bit less → organic, not mirrored
 
-    // Lane CENTER offset from the spine. Starts at ±LW (the two lanes sit SIDE BY SIDE, splitting the
-    // mouth down the middle — never both centered, so floors never overlap and walls never cross),
-    // then bows out to ±(LW+BULGE) and back. Smooth sine for the loop; soft triangle for a small Y.
+    // The two routes BOTH start at the stem's end point (offset 0) and CURVE APART — a real fork.
+    // Because they share the stem's end node, they're connected to it by construction (no pad, no
+    // sideways handoff, no seam). Smooth sine bow for the loop; soft hump for a small Y.
     const shape = LOOP
       ? (k) => Math.sin(Math.PI * k / lenF)
       : (k) => { const t = 1 - Math.abs(2*k/lenF - 1); return t*t*(3-2*t); };
-    const centerOff = (k, sign) => sign * (LW + (sign < 0 ? 1 : ASYM) * BULGE * shape(k));
+    const centerOff = (k, sign) => sign * (sign < 0 ? 1 : ASYM) * BULGE * shape(k);
+    // The two routes overlap near the mouth (both still ~centered); their INNER walls would cross
+    // there, so drop them until the routes have actually separated (gap >= 0). Outer walls always on.
+    const innerCrosses = (k) => (BULGE * shape(k) * (1 + ASYM) - 2 * LW) < 0;
 
-    // ---------- BRANCHES: two lanes ----------
+    // ---------- BRANCHES: two routes that fork from one point ----------
     const branches = {};
     for (const key of ['A', 'B']) {
       const sign = key === 'A' ? -1 : 1;
@@ -119,30 +121,24 @@ const ZFORK = (() => {
         if (Math.hypot(nx.x - pv.x, nx.z - pv.z) < 1e-4) { const md = mainNodes[splitIdx + k].dir; dir = norm(v(md.x, md.y, md.z)); }
         const right = norm(cross(dir, worldUp));
         const up = norm(cross(right, dir));
-        nlist.push({ pos: v(c.x, c.y, c.z), dir, right, up,
-          halfW: LW, bank: 0, kind: 'route', tunnel: false, branchId: bid });
+        const node = { pos: v(c.x, c.y, c.z), dir, right, up,
+          halfW: LW, bank: 0, kind: 'route', tunnel: false, branchId: bid };
+        // inner edge = right side of the left route / left side of the right route — drop near mouth
+        if (innerCrosses(k)) { if (sign < 0) node.noWallR = true; else node.noWallL = true; }
+        nlist.push(node);
       }
       branches[bid] = nlist;
     }
 
     // ---------- MAIN SPINE through the fork ----------
-    // The spine carries NO floor in the middle (open loop interior). Only the two junction nodes
-    // (k=0 and k=lenF) remain, as a floor-only PAD that the stem & outro meet and the lanes tile
-    // exactly (pad halfW = MOUTH = both lanes side by side). No spine walls anywhere in the fork.
+    // Routes share the stem's end node (offset 0), so the stem flows straight into them with no
+    // gap. The spine keeps ONLY the split & merge nodes as floor-only bridges; the middle is the
+    // open loop interior. No spine walls in the fork, no width changes.
     for (let k = 0; k <= lenF; k++) {
       const m = mainNodes[splitIdx + k];
       if (m._baseHalfW == null) m._baseHalfW = m.halfW;
-      if (k === 0 || k === lenF) { m.halfW = MOUTH; m.noWalls = true; }
+      if (k === 0 || k === lenF) m.noWalls = true;   // floor-only bridge from stem/outro into the routes
       else m.meshSkip = true;
-    }
-    // ramp the stem & outro width up to the mouth so the road eases into/out of the Y (no width step)
-    const RAMP = 10;
-    for (let j = 1; j <= RAMP; j++) {
-      const w = base + (MOUTH - base) * (1 - j / RAMP);
-      const pre = mainNodes[splitIdx - j];
-      if (pre && !pre.isPlatform && pre._wbak == null) { pre._wbak = pre.halfW; pre.halfW = Math.max(pre.halfW, w); }
-      const post = mainNodes[splitIdx + lenF + j];
-      if (post && post._wbak == null) { post._wbak = post.halfW; post.halfW = Math.max(post.halfW, w); }
     }
 
     return {
