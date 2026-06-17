@@ -667,79 +667,77 @@ function buildCourse(seed) {
       if (bm.mesh.roof && bm.mesh.roof.indices.length) meshFrom(bm.mesh.roof, ROOF_MAT);
     }
   }
-  // GLOWING TUBE RAILS along both track edges. The old rails were 1-pixel lines —
-  // tubes have real thickness, catch the bloom pass, and read as the Tron light-edge
-  // from any distance. Sampled every 4th node to keep the geometry cheap.
-  function buildRail(side, color) {
-    const pts = [];
-    for (let i = 0; i < track.nodes.length; i += 4) {
-      const n = track.nodes[i];
-      pts.push(new THREE.Vector3(
-        n.pos.x + n.right.x * n.halfW * side,
-        n.pos.y + 0.12,
-        n.pos.z + n.right.z * n.halfW * side
-      ));
+  // DECORATION PATHS: the main centerline split at meshSkip gaps (so nothing runs through the open
+  // loop interior) PLUS every route. Rails, halos, the energy lane and the arch gates all follow
+  // these — so a fork carries its glow rails/arches down BOTH routes instead of the dead spine.
+  function _decoPaths() {
+    const paths = []; let run = [];
+    for (const n of track.nodes) {
+      if (n.meshSkip) { if (run.length > 1) paths.push(run); run = []; }
+      else run.push(n);
     }
-    const curve = new THREE.CatmullRomCurve3(pts);
-    const geo = new THREE.TubeGeometry(curve, pts.length * 2, 0.11, 6, false);
-    const mat = new THREE.MeshBasicMaterial({ color });   // unlit = full brightness = blooms
-    const mesh = new THREE.Mesh(geo, mat);
-    scene.add(mesh); trackMeshes.push(mesh);
-  }
-  buildRail(-1, 0x00e5ff);   // left: cyan
-  buildRail( 1, 0xff8800);   // right: orange
-
-  // CENTER ENERGY LANE + RAIL HALOS + STREAKING PULSES — these add depth and *motion*
-  // (the thing a static glowing track lacks). The centerline curve is reused for all
-  // three and stored on `_pulse` so the render loop can animate the streaks forward.
-  const cpts = [];
-  for (let i = 0; i < track.nodes.length; i += 3) {
-    const n = track.nodes[i];
-    cpts.push(new THREE.Vector3(n.pos.x, n.pos.y + 0.14, n.pos.z));
-  }
-  const centerCurve = new THREE.CatmullRomCurve3(cpts);
-  // bright center lane down the middle of the floor
-  const laneGeo = new THREE.TubeGeometry(centerCurve, cpts.length * 2, 0.09, 6, false);
-  const lane = new THREE.Mesh(laneGeo, new THREE.MeshBasicMaterial({
-    color:0x39c8e0, transparent:true, opacity:0.26, blending:THREE.AdditiveBlending, depthWrite:false }));
-  scene.add(lane); trackMeshes.push(lane);
-  // faint wide HALO around each edge rail (makes the rails read thick + glowy)
-  for (const [side, col] of [[-1,0x0090ff],[1,0xff5500]]) {
-    const hp = [];
-    for (let i = 0; i < track.nodes.length; i += 4) {
-      const n = track.nodes[i];
-      hp.push(new THREE.Vector3(n.pos.x + n.right.x*n.halfW*side, n.pos.y+0.12, n.pos.z + n.right.z*n.halfW*side));
+    if (run.length > 1) paths.push(run);
+    if (track.forks) for (const f of track.forks) {
+      if (f.branches) for (const bid in f.branches) { const b = f.branches[bid]; if (b && b.length > 1) paths.push(b); }
     }
-    const hgeo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(hp), hp.length*2, 0.34, 6, false);
-    const halo = new THREE.Mesh(hgeo, new THREE.MeshBasicMaterial({
-      color:col, transparent:true, opacity:0.16, blending:THREE.AdditiveBlending, depthWrite:false }));
-    scene.add(halo); trackMeshes.push(halo);
+    return paths;
   }
-  _pulse = { lane, laneBaseOpacity: 0.26 };
+  const _paths = _decoPaths();
 
-  // NEON ARCH GATES spanning the track every ~70 nodes. archR = halfW so the two legs
-  // of the half-torus land exactly on the left/right floor edges (they were at 1.3x =
-  // floating outside the track = 'not attached'). Lowered slightly so legs touch floor.
-  for (let i = track.platform.endIdx + 40; i < track.nodes.length - 10; i += 70) {
-    const n = track.nodes[i];
-    if (n.kind === 'spiral' || n.kind === 'tunnel') continue;   // skip messy sections
-    const archR = n.halfW * 1.02;
-    const arch = new THREE.Mesh(
-      new THREE.TorusGeometry(archR, 0.22, 10, 32, Math.PI),  // half torus = arch
-      new THREE.MeshStandardMaterial({ color:0x0a2a4a, metalness:0.8, roughness:0.3,
-        emissive:0x00e5ff, emissiveIntensity:2.2 })   // hot enough to bloom
-    );
-    arch.position.set(n.pos.x, n.pos.y - 0.1, n.pos.z);
-    // The half-torus arcs over the top half of its local XY plane. We want that plane to
-    // face along the track direction so the arch spans left-right and rises overhead.
-    // Build a basis: across = n.right (arch width), up = world up, forward = n.dir.
-    const m4 = new THREE.Matrix4();
-    const across = new THREE.Vector3(n.right.x, 0, n.right.z).normalize();
-    const up = new THREE.Vector3(0,1,0);
-    const fwd = new THREE.Vector3().crossVectors(across, up).normalize();
-    m4.makeBasis(across, up, fwd);
-    arch.quaternion.setFromRotationMatrix(m4);
-    scene.add(arch); trackMeshes.push(arch);
+  // GLOWING TUBE RAILS along both edges of every path (cheap: every 4th node).
+  function buildRail(side, color, radius, opacity) {
+    for (const nodes of _paths) {
+      const pts = [];
+      for (let i = 0; i < nodes.length; i += 4) {
+        const n = nodes[i];
+        pts.push(new THREE.Vector3(n.pos.x + n.right.x*n.halfW*side, n.pos.y+0.12, n.pos.z + n.right.z*n.halfW*side));
+      }
+      if (pts.length < 2) continue;
+      const geo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), pts.length*2, radius, 6, false);
+      const mat = opacity != null
+        ? new THREE.MeshBasicMaterial({ color, transparent:true, opacity, blending:THREE.AdditiveBlending, depthWrite:false })
+        : new THREE.MeshBasicMaterial({ color });
+      const mesh = new THREE.Mesh(geo, mat);
+      scene.add(mesh); trackMeshes.push(mesh);
+    }
+  }
+  buildRail(-1, 0x00e5ff, 0.11);          // left edge: cyan
+  buildRail( 1, 0xff8800, 0.11);          // right edge: orange
+  buildRail(-1, 0x0090ff, 0.34, 0.16);    // left halo
+  buildRail( 1, 0xff5500, 0.34, 0.16);    // right halo
+
+  // CENTER ENERGY LANE + STREAKING PULSE down every path.
+  const _pulseLanes = [];
+  for (const nodes of _paths) {
+    const cpts = [];
+    for (let i = 0; i < nodes.length; i += 3) { const n = nodes[i]; cpts.push(new THREE.Vector3(n.pos.x, n.pos.y+0.14, n.pos.z)); }
+    if (cpts.length < 2) continue;
+    const laneGeo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(cpts), cpts.length*2, 0.09, 6, false);
+    const lane = new THREE.Mesh(laneGeo, new THREE.MeshBasicMaterial({
+      color:0x39c8e0, transparent:true, opacity:0.26, blending:THREE.AdditiveBlending, depthWrite:false }));
+    scene.add(lane); trackMeshes.push(lane); _pulseLanes.push(lane);
+  }
+  _pulse = { lane: _pulseLanes[0] || null, lanes: _pulseLanes, laneBaseOpacity: 0.26 };
+
+  // NEON ARCH GATES spanning every path every ~70 nodes (so each route gets gates, none in the void).
+  for (const nodes of _paths) {
+    for (let i = 34; i < nodes.length - 6; i += 70) {
+      const n = nodes[i];
+      if (n.kind === 'spiral' || n.kind === 'tunnel') continue;
+      const archR = n.halfW * 1.02;
+      const arch = new THREE.Mesh(
+        new THREE.TorusGeometry(archR, 0.22, 10, 32, Math.PI),
+        new THREE.MeshStandardMaterial({ color:0x0a2a4a, metalness:0.8, roughness:0.3,
+          emissive:0x00e5ff, emissiveIntensity:2.2 }));
+      arch.position.set(n.pos.x, n.pos.y - 0.1, n.pos.z);
+      const m4 = new THREE.Matrix4();
+      const across = new THREE.Vector3(n.right.x, 0, n.right.z).normalize();
+      const up = new THREE.Vector3(0,1,0);
+      const fwd = new THREE.Vector3().crossVectors(across, up).normalize();
+      m4.makeBasis(across, up, fwd);
+      arch.quaternion.setFromRotationMatrix(m4);
+      scene.add(arch); trackMeshes.push(arch);
+    }
   }
 
   // FINISH LINE: a checkered banner on two glowing posts, placed at the win node (where a
@@ -1349,10 +1347,11 @@ function loop(now) {
   // each beat THUD (rising edge) advances the center line to the next neon color
   if (beat > 0.5 && _lastBeat <= 0.5) _hueIdx = (_hueIdx + 1) % BEAT_COLORS.length;
   _lastBeat = beat;
-  if (_pulse && _pulse.lane) {
+  if (_pulse && (_pulse.lanes || _pulse.lane)) {
     const c = BEAT_COLORS[_hueIdx];
-    _pulse.lane.material.color.setRGB(c[0], c[1], c[2]);
-    _pulse.lane.material.opacity = Math.min(0.85, _pulse.laneBaseOpacity + beat * 0.6);
+    const op = Math.min(0.85, _pulse.laneBaseOpacity + beat * 0.6);
+    const lanes = _pulse.lanes && _pulse.lanes.length ? _pulse.lanes : [_pulse.lane];
+    for (const ln of lanes) { if (!ln) continue; ln.material.color.setRGB(c[0], c[1], c[2]); ln.material.opacity = op; }
   }
 
   if (phase === 'spawning') {
@@ -1499,6 +1498,9 @@ function loop(now) {
 // ---- camera: follow YOUR marble (public mode) or the leader (solo / after you're out) ----
 const camTarget = new THREE.Vector3();
 const camPos = new THREE.Vector3();
+const _camBallPos = new THREE.Vector3();   // smoothed actual position of the followed ball
+const _camDir = new THREE.Vector3(0, 0, 1); // smoothed travel direction of the followed ball
+let _camHasBall = false;
 const lookAt = new THREE.Vector3();
 let camLeadIdx = 0;
 // OBS overlay + in-game camera control:
@@ -1620,36 +1622,47 @@ function updateCamera(dt) {
     lookAt.lerp(mv.center, 0.06); camera.lookAt(lookAt);
     return;
   }
-  // Follow the target's PROGRESS (a centerline node index), not the ball's jittery
-  // position. The node is smooth, so the camera is smooth.
+  // Follow the ACTUAL ball — its real position and travel direction — so the camera tracks it
+  // around the routes instead of running straight up the dead-center spine through the loop.
   const lead = pickCameraTarget();
-  let idx = camLeadIdx;
-  if (lead != null) {
-    const snap = ZPHYSICS.snapshot()[lead];
-    if (snap) idx = snap.progress != null ? snap.progress : snap.hint;
+  const snap = lead != null ? ZPHYSICS.snapshot()[lead] : null;
+  if (snap && snap.x != null) {
+    const followingBall = (_camMode === 'me' || _camMode === 'player');
+    const back = followingBall ? 13.5 : 18, up = followingBall ? 10.5 : 14.5;
+    // smooth the ball position
+    const targetPos = new THREE.Vector3(snap.x, snap.y, snap.z);
+    if (!_camHasBall) { _camBallPos.copy(targetPos); _camHasBall = true; }
+    else _camBallPos.lerp(targetPos, 0.18);
+    // smooth the travel direction (from velocity; hold last when nearly stopped, e.g. on the grid)
+    const vx = snap.vx || 0, vz = snap.vz || 0, vl = Math.hypot(vx, vz);
+    if (vl > 0.8) _camDir.lerp(new THREE.Vector3(vx / vl, 0, vz / vl), 0.10).normalize();
+    const d = _camDir;
+    const desired = new THREE.Vector3(
+      _camBallPos.x - d.x * back,
+      _camBallPos.y + up,
+      _camBallPos.z - d.z * back
+    );
+    camPos.lerp(desired, 0.06);
+    camera.position.copy(camPos);
+    lookAt.lerp(new THREE.Vector3(_camBallPos.x + d.x * 6, _camBallPos.y - 1, _camBallPos.z + d.z * 6), 0.10);
+    camera.lookAt(lookAt);
+    return;
   }
-  // ease the camera's node index forward (never snaps backward hard)
+  _camHasBall = false;
+  // PRE-RACE / no ball: glide along the centerline so the track is on display.
+  let idx = camLeadIdx;
   camLeadIdx += (idx - camLeadIdx) * 0.05;
   const ci = Math.max(0, Math.min(track.nodes.length - 1, Math.round(camLeadIdx)));
   const node = track.nodes[ci];
   const ahead = track.nodes[Math.min(track.nodes.length - 1, ci + 10)];
-
-  // desired camera: behind & ABOVE the leader node, along the track direction.
-  // Higher and further back than before (was -14 / +9) — the low angle was skimming
-  // the floor and hiding the pack. This reads as a proper marble-race chase cam.
   const dir = node.dir;
-  // closer, more personal framing when locked to one ball (you / a picked player); pull back a
-  // little for the leader cam so the chasing pack stays in frame.
-  const followingBall = (_camMode === 'me' || _camMode === 'player');
-  const back = followingBall ? 13.5 : 18, up = followingBall ? 10.5 : 14.5;
   const desired = new THREE.Vector3(
-    node.pos.x - dir.x * back,
-    node.pos.y + up,
-    node.pos.z - dir.z * back
+    node.pos.x - dir.x * 18,
+    node.pos.y + 14.5,
+    node.pos.z - dir.z * 18
   );
-  camPos.lerp(desired, 0.05);          // smooth position
+  camPos.lerp(desired, 0.05);
   camera.position.copy(camPos);
-  // look at a point ahead down the track (stable target)
   lookAt.lerp(new THREE.Vector3(ahead.pos.x, ahead.pos.y - 1, ahead.pos.z), 0.08);
   camera.lookAt(lookAt);
 }

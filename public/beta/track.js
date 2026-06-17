@@ -335,7 +335,7 @@ const ZTRACK = (() => {
         for (let k = 0; k < len; k++) {
           const nd = nodes[i + k];
           if (!nd || nd.isPlatform || nd.branchId || nd.kind === 'fork' ||
-              nd.tunnel || /drum/.test(nd.kind || '')) { ok = false; break; }
+              nd.tunnel || nd.meshSkip || /drum/.test(nd.kind || '')) { ok = false; break; }
         }
         if (ok) {
           const side = 2;   // MEDIUM: both edges boost
