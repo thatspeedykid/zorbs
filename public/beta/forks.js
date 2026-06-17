@@ -93,9 +93,14 @@ const ZFORK = (() => {
     const fanLenH = RAMP * lenF * STEPH;              // horizontal distance of the fan-out
     const maxOuter = SLOPE * fanLenH;                 // how far the outermost lane reaches left/right
     const minSpacing = 2 * LW + base * 0.8;           // lanes must stay at least this far apart (center-to-center)
-    let N = 4;                                         // aim for 4 lanes; drop to 3/2 only if they'd collide
-    while (N > 2 && (2 * maxOuter / (N - 1)) < minSpacing) N--;
-    const spacing = N > 1 ? 2 * maxOuter / (N - 1) : 0;
+    // how many lanes FIT side-by-side without colliding (largest count whose spacing >= minSpacing)
+    let roomMax = 4;
+    while (roomMax >= 2 && (2 * maxOuter / (roomMax - 1)) < minSpacing) roomMax--;
+    // RANDOM 1-4 lanes per seed, capped to what fits. N=1 means NO split — this zone stays a single
+    // descending path (return null and the caller leaves it as a normal winding section).
+    let N = Math.min(1 + Math.floor(rng() * 4), roomMax);
+    if (N < 2) return null;
+    const spacing = 2 * maxOuter / (N - 1);
     const offs = [];
     for (let i = 0; i < N; i++) offs.push((i - (N - 1) / 2) * spacing);   // symmetric lane offsets, left→right
 
@@ -275,13 +280,16 @@ const ZFORK = (() => {
         const at = i + 16;
         const span = zEnd - at - 6;
         const targetSteps = span > 34 ? span : undefined;   // span the entire zone
-        const fork = (USE_DIVERGENT && makeDivergentFork(mainNodes, at, rng, 'fork'+n, targetSteps))
-                     || makeFork(mainNodes, at, rng, 'fork'+n, true);
-        n++;
-        forks.push(fork);
-        forkAtIdx.set(at, fork);
-        lastForkEnd = fork.splitIdx + (fork.flavor === 'divergent' ? (span + 30) : 90);
-        i = zEnd;
+        const fork = USE_DIVERGENT
+          ? makeDivergentFork(mainNodes, at, rng, 'fork'+n, targetSteps)   // may be null = NO split (1 lane)
+          : makeFork(mainNodes, at, rng, 'fork'+n, true);
+        if (fork) {
+          n++;
+          forks.push(fork);
+          forkAtIdx.set(at, fork);
+          lastForkEnd = fork.splitIdx + (fork.flavor === 'divergent' ? (span + 30) : 90);
+        }
+        i = zEnd;   // skip past this zone whether or not a fork was placed
       }
     }
     return { forks, forkAtIdx };
