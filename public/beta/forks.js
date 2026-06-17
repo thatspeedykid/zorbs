@@ -68,44 +68,34 @@ const ZFORK = (() => {
     const steps = targetSteps || (58 + Math.floor(rng() * 16));
     const end = Math.min(mainNodes.length - 6, splitIdx + steps);
     const lenF = end - splitIdx;
-    if (lenF < 34) return null;                 // too short to diverge cleanly
-    const LOOP = lenF > 80;                      // a marked split-zone (now ~110-180 nodes) vs a tiny Y
-    // Only diverge on STRAIGHT-ish runs (a curve twists the ribbons into a fan). The loop spine
-    // is force-straight by the director, so loop forks skip this gate.
-    let turnAcc = 0;
-    for (let k = splitIdx; k < end; k++) {
-      const a = mainNodes[k].dir, b = mainNodes[k+1].dir;
-      const dot = Math.max(-1, Math.min(1, a.x*b.x + a.y*b.y + a.z*b.z));
-      turnAcc += Math.acos(dot);
-    }
-    if (!LOOP && turnAcc > 0.22) return null;    // ~13° total — must be genuinely straight or it fans
-    // STRAIGHTNESS GATE (small forks only — the loop spine is force-straight by the director).
-    if (!LOOP && turnAcc > 0.30) return null;
+    if (lenF < 60) return null;                  // need room for a fan to open AND funnel back in
 
     const base = mainNodes[splitIdx].halfW;
-    let spanLen = 0;
-    for (let k = splitIdx; k < end; k++) { const a = mainNodes[k].pos, b = mainNodes[k+1].pos; spanLen += Math.hypot(b.x-a.x, b.z-a.z); }
+    let spanH = 0;
+    for (let k = splitIdx; k < end; k++) { const a = mainNodes[k].pos, b = mainNodes[k+1].pos; spanH += Math.hypot(b.x-a.x, b.z-a.z); }
+    const STEPH = spanH / lenF || 1.2;
 
-    // ---------- TUNABLES (all the shape lives here) ----------
-    const LW    = base;                                        // routes are full track width
-    const BULGE = LOOP ? Math.min(Math.max(spanLen * 0.18, base * 4.5), 52) // clean separation, splay <~30°
-                       : base * 2.4;
-    const ASYM  = 0.72;                                        // route B curves a bit less → organic, not mirrored
+    // ================= WIDE FAN =================
+    // The trunk opens into N lanes that SPREAD OUT, run parallel for the middle stretch (room to drop
+    // funnels/obstacles onto each lane later), then FUNNEL back in to the shared finish point. Every
+    // lane descends monotonically — gravity carries the marbles the whole way down.
+    const LW = base;                                  // each lane is full track width
+    const SAFEGAP = 0.8;                              // drop the wall between two lanes only where they coincide
+    const foldHalf = 0.49 * (lenF * 0.5) * STEPH;     // widest a lane may sit before the splay would fold (~26°)
+    const wantSpacing = 2 * LW + base * 1.3;          // lane center-to-center: a clear visible gap between lanes
+    let N = 4;                                         // aim for 4 lanes; drop to 3/2 only if there isn't room
+    while (N > 2 && ((N - 1) / 2) * wantSpacing > foldHalf) N--;
+    const spacing = Math.min(wantSpacing, foldHalf / Math.max(0.5, (N - 1) / 2));
+    const offs = [];
+    for (let i = 0; i < N; i++) offs.push((i - (N - 1) / 2) * spacing);   // symmetric lane offsets, left→right
 
-    // The two routes BOTH start at the stem's end point (offset 0) and CURVE APART — a real fork.
-    // Because they share the stem's end node, they're connected to it by construction (no pad, no
-    // sideways handoff, no seam). Smooth sine bow for the loop; soft hump for a small Y.
-    const shape = LOOP
-      ? (k) => Math.sin(Math.PI * k / lenF)
-      : (k) => { const t = 1 - Math.abs(2*k/lenF - 1); return t*t*(3-2*t); };
-    const centerOff = (k, sign) => sign * (sign < 0 ? 1 : ASYM) * BULGE * shape(k);
-    // The two routes overlap near the mouth (both still ~centered); their INNER walls would cross
-    // there, so drop them until the routes have clearly separated — with a margin that also covers
-    // the per-route weave, so the weave can never push them into each other while a wall is up.
-    const WEAVEMARGIN = base * 3;
-    const innerCrosses = (k) => (BULGE * shape(k) * (1 + ASYM) - 2 * LW - WEAVEMARGIN) < 0;
+    // PLATEAU shape: fan OUT over the first RAMP, HOLD the lanes spread across the middle, FUNNEL IN
+    // over the last RAMP. Smoothstep ends so the lanes leave/return to the trunk without a kink.
+    const RAMP = 0.34;
+    const sstep = (a, b, x) => { if (a === b) return x < a ? 0 : 1; let t = (x - a) / (b - a); t = Math.max(0, Math.min(1, t)); return t*t*(3-2*t); };
+    const shape = (k) => { const t = k / lenF; if (t < RAMP) return sstep(0, RAMP, t); if (t > 1 - RAMP) return 1 - sstep(1 - RAMP, 1, t); return 1; };
+    const eTaper = (t) => { const er = Math.min(1, t / 0.16, (1 - t) / 0.16); const e = Math.max(0, er); return e*e*(3-2*e); };
 
-    // ---------- BRANCHES: two routes, each with its OWN character + random FEATURES ----------
     const mkWave = (amp, maxFreq) => {
       const comps = [], n = 2 + Math.floor(rng() * 3);
       for (let i = 0; i < n; i++) comps.push({ f: 1 + Math.floor(rng() * maxFreq), p: rng() * 6.2832, a: 0.5 + rng() });
@@ -113,77 +103,51 @@ const ZFORK = (() => {
       return (t) => { let s = 0; for (const c of comps) s += c.a * Math.sin(c.f * 6.2832 * t + c.p); return (s / tot) * Math.sin(Math.PI * t) * amp; };
     };
     const bump = (t, at, w) => { const z = (t - at) / w; return Math.exp(-z * z); };
-    const sstep = (a, b, t) => { const x = Math.max(0, Math.min(1, (t - a) / (b - a))); return x * x * (3 - 2 * x); };
-    // 3-5 banked LATERAL bends per route. NO vertical valleys: a marble can't climb out of a dip,
-    // so both routes descend monotonically with the spine and the variety is in the lateral path +
-    // bank (one route curves more than the other). Gravity carries the marbles the whole way down.
-    const mkFeatures = () => {
-      if (!LOOP) return [];
-      const fs = [], n = 3 + Math.floor(rng() * 3);
-      for (let i = 0; i < n; i++) {
-        // one feature per evenly-spaced slot (jittered) so two never stack
-        const at = 0.18 + 0.64 * (i + 0.25 + rng() * 0.5) / n;
-        const s = rng() < 0.5 ? -1 : 1;
-        fs.push({ kind:'turn', at, w: 0.05 + rng()*0.03, lat: s*base*(0.45 + rng()*0.35), bank: s*(1.0 + rng()*0.9) });
-      }
-      return fs;
-    };
 
-    const route = {};
-    for (const key of ['A', 'B']) {
-      const sign = key === 'A' ? -1 : 1;
-      const turnWave = mkWave(base * 0.45, 4), slopeWave = mkWave(2.0, 2), feats = mkFeatures();
+    // ---- build the N lanes: lateral spread + a little bank/Y character, strictly descending ----
+    const route = [];
+    for (let i = 0; i < N; i++) {
+      const turnWave = mkWave(base * 0.30, 4), slopeWave = mkWave(2.0, 2);
+      const feats = []; const nf = 2 + Math.floor(rng() * 3);
+      for (let j = 0; j < nf; j++) {
+        const at = 0.20 + 0.60 * (j + rng()) / nf, s = rng() < 0.5 ? -1 : 1;
+        feats.push({ at, w: 0.05 + rng()*0.03, lat: s*base*(0.25 + rng()*0.20), bank: s*(1.0 + rng()*0.8) });
+      }
       const lat = [], yy = [], bnk = [];
       for (let k = 0; k <= lenF; k++) {
-        const t = k / lenF;
-        // END-TAPER: features, weave and vertical offset fade to 0 over the first/last 16% so the
-        // two routes leave (and return to) the shared spine on the SAME line and the SAME height.
-        // Near the mouth/rejoin ONLY the clean centerOff separation acts — no lateral wiggle and no
-        // vertical offset, so the ribbons can't stack over one another where they're close.
-        const er = Math.min(1, t / 0.16, (1 - t) / 0.16); const ec = Math.max(0, er); const eT = ec * ec * (3 - 2 * ec);
-        let L = centerOff(k, sign) + turnWave(t) * eT, Y = slopeWave(t) * eT, Bk = 0;
-        for (const f of feats) {
-          const g = bump(t, f.at, f.w) * eT;
-          L += f.lat * g; Bk += f.bank * g;   // lateral + bank only — no vertical valleys
-        }
+        const t = k / lenF, eT = eTaper(t);
+        let L = offs[i] * shape(k) + turnWave(t) * eT * 0.5;   // spread (dominant) + small character
+        let Y = slopeWave(t) * eT, Bk = 0;                      // gentle monotonic Y wiggle — never a valley
+        for (const f of feats) { const g = bump(t, f.at, f.w) * eT; L += f.lat * g; Bk += f.bank * g; }
         lat.push(L); yy.push(Y); bnk.push(Bk);
       }
-      route[key] = { lat, yy, bnk };
+      route.push({ lat, yy, bnk });
     }
 
-    const branches = {};
-    // Drop an inner wall ONLY where the two routes are within a ball-diameter of each other (i.e.
-    // basically overlapping, where their floors already coincide so there's no hole). Everywhere the
-    // routes have actually separated, the inner wall STAYS UP — a wall stops the ball regardless of
-    // how wide the void beyond it is, so balls can never roll off the inner edge into the leaf.
-    const SAFEGAP = 0.8;   // < 2× ball diameter; below this the routes coincide (floored by overlap)
-    for (const key of ['A', 'B']) {
-      const sign = key === 'A' ? -1 : 1;
-      const bid = forkId + '_' + key;
-      const R = route[key];
-      const raw = [];
-      for (let k = 0; k <= lenF; k++) {
-        const m = mainNodes[splitIdx + k];
-        raw.push({ x: m.pos.x + m.right.x * R.lat[k], y: m.pos.y + R.yy[k], z: m.pos.z + m.right.z * R.lat[k] });
-      }
+    // ---- lane node lists; a wall sits between two lanes wherever they have separated ----
+    const branches = {}, branchOrder = [];
+    for (let i = 0; i < N; i++) {
+      const bid = forkId + '_' + i; branchOrder.push(bid);
+      const R = route[i], raw = [];
+      for (let k = 0; k <= lenF; k++) { const m = mainNodes[splitIdx + k];
+        raw.push({ x: m.pos.x + m.right.x * R.lat[k], y: m.pos.y + R.yy[k], z: m.pos.z + m.right.z * R.lat[k] }); }
       const nlist = [];
       for (let k = 0; k <= lenF; k++) {
-        const c = raw[k], nx = raw[Math.min(lenF, k + 1)], pv = raw[Math.max(0, k - 1)];
+        const c = raw[k], nx = raw[Math.min(lenF, k+1)], pv = raw[Math.max(0, k-1)];
         let dir = norm(v(nx.x - pv.x, nx.y - pv.y, nx.z - pv.z));
         if (Math.hypot(nx.x - pv.x, nx.z - pv.z) < 1e-4) { const md = mainNodes[splitIdx + k].dir; dir = norm(v(md.x, md.y, md.z)); }
-        const right = norm(cross(dir, worldUp));
-        const up = norm(cross(right, dir));
+        const right = norm(cross(dir, worldUp)), up = norm(cross(right, dir));
         const node = { pos: v(c.x, c.y, c.z), dir, right, up, halfW: LW, bank: 0, kind: 'route', tunnel: false, branchId: bid };
-        // ACTUAL inner-edge gap between the two routes — robust against any feature swing
-        const gap = (route.B.lat[k] - LW) - (route.A.lat[k] + LW);
-        if (gap < SAFEGAP) { if (sign < 0) node.noWallR = true; else node.noWallL = true; }
+        // gap to the lane on each side (lower offset = left = noWallL, higher offset = right = noWallR)
+        const gapL = i > 0     ? (R.lat[k] - LW) - (route[i-1].lat[k] + LW) : 1e9;
+        const gapR = i < N - 1 ? (route[i+1].lat[k] - LW) - (R.lat[k] + LW) : 1e9;
+        if (i > 0     && gapL < SAFEGAP) node.noWallL = true;   // inner wall drops only where lanes coincide
+        if (i < N - 1 && gapR < SAFEGAP) node.noWallR = true;   // the fan's OUTER edges stay walled always
         nlist.push(node);
       }
-      // BANK = path curvature + explicit feature twist, tapered at the ends.
       const BANK_GAIN = 5.0, BANK_MAX = 0.34;
       for (let k = 1; k < lenF; k++) {
-        const h0 = Math.atan2(nlist[k-1].dir.x, nlist[k-1].dir.z);
-        const h1 = Math.atan2(nlist[k+1].dir.x, nlist[k+1].dir.z);
+        const h0 = Math.atan2(nlist[k-1].dir.x, nlist[k-1].dir.z), h1 = Math.atan2(nlist[k+1].dir.x, nlist[k+1].dir.z);
         let dh = h1 - h0; while (dh > Math.PI) dh -= 6.2832; while (dh < -Math.PI) dh += 6.2832;
         const b = dh * BANK_GAIN + R.bnk[k];
         nlist[k].bank = Math.max(-BANK_MAX, Math.min(BANK_MAX, b)) * Math.sin(Math.PI * k / lenF);
@@ -191,23 +155,17 @@ const ZFORK = (() => {
       branches[bid] = nlist;
     }
 
-    // ---------- MAIN SPINE through the fork ----------
-    // Routes share the stem's end node (offset 0), so the stem flows straight into them with no
-    // gap. The spine keeps ONLY the split & merge nodes as floor-only bridges; the middle is the
-    // open loop interior. No spine walls in the fork, no width changes.
+    // ---- spine through the fan: floor-only bridges at the two ends, open interior (lanes carry it) ----
     for (let k = 0; k <= lenF; k++) {
       const m = mainNodes[splitIdx + k];
       if (m._baseHalfW == null) m._baseHalfW = m.halfW;
-      if (k === 0 || k === lenF) m.noWalls = true;   // floor-only bridge from stem/outro into the routes
-      else m.meshSkip = true;
+      if (k === 0 || k === lenF) m.noWalls = true; else m.meshSkip = true;
     }
 
-    return {
-      id: forkId, splitIdx, flavor: 'divergent', rejoin: true, lanesOnly: false,
-      branches,
-      rejoinIdx: { [forkId + '_A']: end, [forkId + '_B']: end },
-      endA: branches[forkId + '_A'][lenF], endB: branches[forkId + '_B'][lenF],
-    };
+    const rejoinIdx = {}, ends = [];
+    for (const bid of branchOrder) { rejoinIdx[bid] = end; ends.push(branches[bid][lenF]); }
+    return { id: forkId, splitIdx, flavor: 'divergent', rejoin: true, lanesOnly: false,
+      branches, branchOrder, laneCount: N, rejoinIdx, ends, end };
   }
 
   // Create one fork rooted at mainNodes[splitIdx]. Returns the fork descriptor.

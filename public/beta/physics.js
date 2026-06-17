@@ -269,14 +269,22 @@ const ZPHYSICS = (() => {
       const t = b.body.translation();
 
       // FORK COMMIT: if on the main path and we've reached a fork's split point, pick a
-      // branch based on which way the ball is leaning, then follow ONLY that branch.
+      // lane based on the ball's lateral position across the trunk, then follow ONLY that lane.
       if (!b.branch && forks) {
         for (const f of forks) {
           if (b.hint >= f.splitIdx - 1 && b.hint <= f.splitIdx + 1) {
-            // lean = lateral position relative to the split node's right vector
             const sn = nodes[f.splitIdx];
             const latv = (t.x - sn.pos.x)*sn.right.x + (t.z - sn.pos.z)*sn.right.z;
-            b.branch = latv < 0 ? f.id+'_A' : f.id+'_B';  // A=left, B=right
+            const order = f.branchOrder;
+            if (order && order.length) {
+              // bin lateral position across the trunk width into one of N fan lanes (left→right)
+              const hw = sn.halfW || 7;
+              let frac = (latv / hw + 1) / 2;            // 0 (far left) .. 1 (far right)
+              frac = Math.max(0, Math.min(0.99999, frac));
+              b.branch = order[Math.floor(frac * order.length)];
+            } else {
+              b.branch = latv < 0 ? f.id+'_A' : f.id+'_B';   // legacy two-lane fallback
+            }
             b.branchFork = f;
             b.hint = 0;   // restart hint within the branch
             break;
