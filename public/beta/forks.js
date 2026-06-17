@@ -69,7 +69,7 @@ const ZFORK = (() => {
     const end = Math.min(mainNodes.length - 6, splitIdx + steps);
     const lenF = end - splitIdx;
     if (lenF < 34) return null;                 // too short to diverge cleanly
-    const LOOP = lenF > 150;                     // whole-level loop vs a small Y feature
+    const LOOP = lenF > 80;                      // a marked split-zone (now ~110-180 nodes) vs a tiny Y
     // Only diverge on STRAIGHT-ish runs (a curve twists the ribbons into a fan). The loop spine
     // is force-straight by the director, so loop forks skip this gate.
     let turnAcc = 0;
@@ -88,7 +88,7 @@ const ZFORK = (() => {
 
     // ---------- TUNABLES (all the shape lives here) ----------
     const LW    = base;                                        // routes are full track width
-    const BULGE = LOOP ? Math.min(spanLen * 0.11, 55)          // how far the routes curve apart (capped)
+    const BULGE = LOOP ? Math.min(Math.max(spanLen * 0.18, base * 4.5), 52) // clean separation, splay <~30°
                        : base * 2.4;
     const ASYM  = 0.72;                                        // route B curves a bit less → organic, not mirrored
 
@@ -124,10 +124,10 @@ const ZFORK = (() => {
         // one feature per evenly-spaced slot (jittered) so two never stack into a cliff
         const at = 0.18 + 0.64 * (i + 0.25 + rng() * 0.5) / n;
         const r = rng(), s = rng() < 0.5 ? -1 : 1;
-        if (r < 0.44)       fs.push({ kind:'drop',   at, w: 0.05 + rng()*0.03, depth: 15 + rng()*11, lat: 0,                        bank: 0 });
-        else if (r < 0.67)  fs.push({ kind:'turn',   at, w: 0.04 + rng()*0.025, depth: 0,            lat: s*base*(1.8 + rng()*0.7), bank: s*1.3 });
-        else if (r < 0.86)  fs.push({ kind:'spiral', at, w: 0.05 + rng()*0.03, depth: 10 + rng()*7,  lat: s*base*(1.4 + rng()*0.6), bank: s*1.9 });
-        else                fs.push({ kind:'climb',  at, w: 0.05 + rng()*0.03, depth: -(8 + rng()*6), lat: 0,                       bank: 0 });
+        if (r < 0.44)       fs.push({ kind:'drop',   at, w: 0.05 + rng()*0.03, depth: 15 + rng()*11, lat: 0,                          bank: 0 });
+        else if (r < 0.67)  fs.push({ kind:'turn',   at, w: 0.04 + rng()*0.025, depth: 0,            lat: s*base*(0.40 + rng()*0.30), bank: s*1.3 });
+        else if (r < 0.86)  fs.push({ kind:'spiral', at, w: 0.05 + rng()*0.03, depth: 10 + rng()*7,  lat: s*base*(0.35 + rng()*0.25), bank: s*1.9 });
+        else                fs.push({ kind:'climb',  at, w: 0.05 + rng()*0.03, depth: -(8 + rng()*6), lat: 0,                          bank: 0 });
       }
       return fs;
     };
@@ -135,17 +135,22 @@ const ZFORK = (() => {
     const route = {};
     for (const key of ['A', 'B']) {
       const sign = key === 'A' ? -1 : 1;
-      const turnWave = mkWave(base * 1.5, 4), slopeWave = mkWave(5, 3), feats = mkFeatures();
+      const turnWave = mkWave(base * 0.45, 4), slopeWave = mkWave(5, 3), feats = mkFeatures();
       const lat = [], yy = [], bnk = [];
       for (let k = 0; k <= lenF; k++) {
         const t = k / lenF;
-        let L = centerOff(k, sign) + turnWave(t), Y = slopeWave(t), Bk = 0;
+        // END-TAPER: features, weave and vertical offset fade to 0 over the first/last 16% so the
+        // two routes leave (and return to) the shared spine on the SAME line and the SAME height.
+        // Near the mouth/rejoin ONLY the clean centerOff separation acts — no lateral wiggle and no
+        // vertical offset, so the ribbons can't stack over one another where they're close.
+        const er = Math.min(1, t / 0.16, (1 - t) / 0.16); const ec = Math.max(0, er); const eT = ec * ec * (3 - 2 * ec);
+        let L = centerOff(k, sign) + turnWave(t) * eT, Y = slopeWave(t) * eT, Bk = 0;
         for (const f of feats) {
-          const g = bump(t, f.at, f.w);
+          const g = bump(t, f.at, f.w) * eT;
           L += f.lat * g; Bk += f.bank * g;
           if (f.kind === 'drop' || f.kind === 'spiral') {
             // flat-bottom valley: steep descent edge, plateau at the bottom, steep climb out
-            Y -= f.depth * (sstep(f.at - 1.6*f.w, f.at - 0.55*f.w, t) - sstep(f.at + 0.55*f.w, f.at + 1.6*f.w, t));
+            Y -= eT * f.depth * (sstep(f.at - 1.6*f.w, f.at - 0.55*f.w, t) - sstep(f.at + 0.55*f.w, f.at + 1.6*f.w, t));
           } else if (f.kind === 'climb') {
             Y -= f.depth * g;   // depth negative → rises
           }
@@ -156,7 +161,11 @@ const ZFORK = (() => {
     }
 
     const branches = {};
-    const SAFEGAP = base * 1.2;   // min clearance between the routes' inner edges; below it, drop the inner wall
+    // Drop an inner wall ONLY where the two routes are within a ball-diameter of each other (i.e.
+    // basically overlapping, where their floors already coincide so there's no hole). Everywhere the
+    // routes have actually separated, the inner wall STAYS UP — a wall stops the ball regardless of
+    // how wide the void beyond it is, so balls can never roll off the inner edge into the leaf.
+    const SAFEGAP = 0.8;   // < 2× ball diameter; below this the routes coincide (floored by overlap)
     for (const key of ['A', 'B']) {
       const sign = key === 'A' ? -1 : 1;
       const bid = forkId + '_' + key;
