@@ -84,13 +84,13 @@ const ZTRACK = (() => {
         else { dir = -dir; sec = { kind: 'sweep', dir, sharp: 0.018 + rng() * 0.014, len: 26 + Math.floor(rng() * 16) }; }
         lastHeavy = false;
       } else {
-        // EVENT piece
-        if (r < 0.24)      { dir = -dir; sec = { kind: 'sweep',  dir, sharp: 0.026 + rng() * 0.020, len: 28 + Math.floor(rng() * 18) }; lastHeavy = false; }
-        else if (r < 0.44) { sec = { kind: 'moguls', len: 22 + Math.floor(rng() * 16) }; lastHeavy = true; }
-        else if (r < 0.60) { sec = { kind: 'funnel', len: 16 + Math.floor(rng() * 12), min: 0.40 + rng() * 0.16 }; lastHeavy = true; }
-        else if (r < 0.73) { sec = { kind: 'narrower', len: 18 + Math.floor(rng() * 10), min: 0.34 + rng() * 0.10 }; lastHeavy = true; }
-        else if (r < 0.85) { sec = { kind: 'drop', len: 10 + Math.floor(rng() * 8), drop: 1.1 + rng() * 1.1 }; lastHeavy = true; }
-        else if (r < 0.95) { if (rng() > 0.4) dir = -dir; sec = { kind: 'spiral', dir, len: 28 + Math.floor(rng() * 12) }; lastHeavy = true; }
+        // EVENT piece — all of these keep the track DESCENDING (gravity carries the marbles);
+        // none of them go uphill. 'drop' is a steeper descent, not a valley.
+        if (r < 0.30)      { dir = -dir; sec = { kind: 'sweep',  dir, sharp: 0.026 + rng() * 0.020, len: 28 + Math.floor(rng() * 18) }; lastHeavy = false; }
+        else if (r < 0.52) { sec = { kind: 'funnel', len: 16 + Math.floor(rng() * 12), min: 0.40 + rng() * 0.16 }; lastHeavy = true; }
+        else if (r < 0.70) { sec = { kind: 'narrower', len: 18 + Math.floor(rng() * 10), min: 0.34 + rng() * 0.10 }; lastHeavy = true; }
+        else if (r < 0.86) { sec = { kind: 'drop', len: 12 + Math.floor(rng() * 10), drop: 0.9 + rng() * 0.9 }; lastHeavy = true; }
+        else if (r < 0.96) { if (rng() > 0.4) dir = -dir; sec = { kind: 'spiral', dir, len: 28 + Math.floor(rng() * 12) }; lastHeavy = true; }
         else               { sec = { kind: 'tunnel', dir: rng() < 0.5 ? 1 : -1, len: 16 + Math.floor(rng() * 12) }; lastHeavy = false; }
       }
       if (sec.len > remaining - 8) sec.len = Math.max(8, remaining - 8);
@@ -298,15 +298,7 @@ const ZTRACK = (() => {
       }
       const halfW = WIDTH * widthFactor;
 
-      // MOGULS: lay a tapered washboard into the floor. The bump goes into the NODE's stored y
-      // only — the integration `pos` stays clean so bumps never accumulate down the section.
-      let ny = pos.y;
-      if (moveKind === 'moguls') {
-        moguPhase += moguStep;
-        const taper = Math.sin(Math.PI * (1 - segLeft / moguLen)); // 0 at both ends → fades in/out
-        ny += moguAmp * Math.sin(moguPhase) * taper;
-      }
-      nodes.push({ pos: { x: pos.x, y: ny, z: pos.z }, dir: heading, right, up, halfW, bank, kind: moveKind, tunnel, forkZone: curForkZone });
+      nodes.push({ pos: { x: pos.x, y: pos.y, z: pos.z }, dir: heading, right, up, halfW, bank, kind: moveKind, tunnel, forkZone: curForkZone });
       segLeft--;
     }
     return nodes;
