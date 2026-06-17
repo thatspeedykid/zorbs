@@ -113,22 +113,25 @@ const ZFORK = (() => {
       return (t) => { let s = 0; for (const c of comps) s += c.a * Math.sin(c.f * 6.2832 * t + c.p); return (s / tot) * Math.sin(Math.PI * t) * amp; };
     };
     const bump = (t, at, w) => { const z = (t - at) / w; return Math.exp(-z * z); };
-    // a few strong random FEATURES per route (kept clear of the mouth/merge): tight HAIRPIN turns,
-    // steep DROPS, CLIMBS, and hard-banked TWISTS — so each route actually plays differently.
+    const sstep = (a, b, t) => { const x = Math.max(0, Math.min(1, (t - a) / (b - a))); return x * x * (3 - 2 * x); };
+    // 3-5 STRONG random features per route. DROPS are deep flat-bottom valleys with steep edges
+    // (sudden + obvious). TURNS/SPIRALS are tight banked bends. Lateral is capped so the two routes
+    // never floor-overlap; drops carry no lateral so they can be as dramatic as we like.
     const mkFeatures = () => {
       if (!LOOP) return [];
-      const fs = [], n = 2 + Math.floor(rng() * 3);
+      const fs = [], n = 3 + Math.floor(rng() * 3);
       for (let i = 0; i < n; i++) {
-        const at = 0.24 + rng() * 0.52, w = 0.05 + rng() * 0.05, r = rng(), s = rng() < 0.5 ? -1 : 1;
-        if (r < 0.34)      fs.push({ at, w,       lat: s * base * (1.6 + rng()*1.2), dy: 0,               bank: s * 0.55 });  // hairpin
-        else if (r < 0.58) fs.push({ at, w,       lat: 0,                            dy: -(5 + rng()*6),  bank: 0 });          // steep drop
-        else if (r < 0.78) fs.push({ at, w,       lat: 0,                            dy: (4 + rng()*5),   bank: 0 });          // climb
-        else               fs.push({ at, w: w*0.7, lat: s * base * 0.8,              dy: -(2 + rng()*3),  bank: s * 0.95 });   // twist
+        // one feature per evenly-spaced slot (jittered) so two never stack into a cliff
+        const at = 0.18 + 0.64 * (i + 0.25 + rng() * 0.5) / n;
+        const r = rng(), s = rng() < 0.5 ? -1 : 1;
+        if (r < 0.44)       fs.push({ kind:'drop',   at, w: 0.05 + rng()*0.03, depth: 15 + rng()*11, lat: 0,                        bank: 0 });
+        else if (r < 0.67)  fs.push({ kind:'turn',   at, w: 0.04 + rng()*0.025, depth: 0,            lat: s*base*(1.8 + rng()*0.7), bank: s*1.3 });
+        else if (r < 0.86)  fs.push({ kind:'spiral', at, w: 0.05 + rng()*0.03, depth: 10 + rng()*7,  lat: s*base*(1.4 + rng()*0.6), bank: s*1.9 });
+        else                fs.push({ kind:'climb',  at, w: 0.05 + rng()*0.03, depth: -(8 + rng()*6), lat: 0,                       bank: 0 });
       }
       return fs;
     };
 
-    // build each route's lateral offset + elevation + feature-bank arrays
     const route = {};
     for (const key of ['A', 'B']) {
       const sign = key === 'A' ? -1 : 1;
@@ -137,7 +140,16 @@ const ZFORK = (() => {
       for (let k = 0; k <= lenF; k++) {
         const t = k / lenF;
         let L = centerOff(k, sign) + turnWave(t), Y = slopeWave(t), Bk = 0;
-        for (const f of feats) { const g = bump(t, f.at, f.w); L += f.lat * g; Y += f.dy * g; Bk += f.bank * g; }
+        for (const f of feats) {
+          const g = bump(t, f.at, f.w);
+          L += f.lat * g; Bk += f.bank * g;
+          if (f.kind === 'drop' || f.kind === 'spiral') {
+            // flat-bottom valley: steep descent edge, plateau at the bottom, steep climb out
+            Y -= f.depth * (sstep(f.at - 1.6*f.w, f.at - 0.55*f.w, t) - sstep(f.at + 0.55*f.w, f.at + 1.6*f.w, t));
+          } else if (f.kind === 'climb') {
+            Y -= f.depth * g;   // depth negative → rises
+          }
+        }
         lat.push(L); yy.push(Y); bnk.push(Bk);
       }
       route[key] = { lat, yy, bnk };
