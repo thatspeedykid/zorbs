@@ -405,6 +405,30 @@ const ZTRACK = (() => {
       }
     }
 
+    // PER-ROUTE BOOST PADS: each route gets its own boost strips — random per race & per side.
+    // Physics reads the ball's CURRENT (branch) node .boost, so setting it on branch nodes applies
+    // the burst; boost zones are tagged with branchId so the chevron renderer draws them on the route.
+    for (const f of forks) {
+      if (f.flavor !== 'divergent' || !f.branches) continue;
+      for (const bid in f.branches) {
+        const arr = f.branches[bid];
+        const tag = bid.charCodeAt(bid.length - 1);
+        const prng = mulberry32((seed ^ 0x51ed270b ^ (tag * 0x85ebca77)) >>> 0);
+        const lo = 24, hi = arr.length - 24;
+        let i = lo + Math.floor(prng() * 50);
+        while (i < hi) {
+          const len = 12 + Math.floor(prng() * 8);
+          let ok = (i + len) < hi;
+          for (let k = 0; ok && k < len; k++) { const nd = arr[i + k]; if (!nd || nd.meshSkip || nd.boost) ok = false; }
+          if (ok && prng() < 0.72) {
+            for (let k = 0; k < len; k++) arr[i + k].boost = 2;
+            boosts.push({ startIdx: i, endIdx: i + len - 1, side: 2, branchId: bid });
+            i += len + 60 + Math.floor(prng() * 55);
+          } else i += 12;
+        }
+      }
+    }
+
     // Build mesh for the main path, then add each fork's geometry.
     // lanesOnly forks (v2.1) live INSIDE the widened main corridor, so the main mesh
     // already covers their floor and outer walls — they only contribute the DIVIDER

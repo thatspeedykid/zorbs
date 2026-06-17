@@ -683,6 +683,10 @@ function buildCourse(seed) {
     return paths;
   }
   const _paths = _decoPaths();
+  function _branchNodesById(id) {
+    if (track.forks) for (const f of track.forks) { if (f.branches && f.branches[id]) return f.branches[id]; }
+    return null;
+  }
 
   // GLOWING TUBE RAILS along both edges of every path (cheap: every 4th node).
   function buildRail(side, color, radius, opacity) {
@@ -782,10 +786,12 @@ function buildCourse(seed) {
     const bx = bc.getContext('2d'); bx.strokeStyle = '#5a88ff'; bx.lineWidth = 7; bx.lineCap = 'round';
     bx.beginPath(); bx.moveTo(5,22); bx.lineTo(16,8); bx.lineTo(27,22); bx.stroke();
     for (const z of track.boosts) {
+      const arr = z.branchId ? _branchNodesById(z.branchId) : track.nodes;
+      if (!arr) continue;
       for (const side of [-1, 1]) {
         const pts = [];
         for (let i = z.startIdx; i <= z.endIdx; i++) {
-          const n = track.nodes[i];
+          const n = arr[i]; if (!n) continue;
           const off = n.halfW * 0.82 * side;
           pts.push(new THREE.Vector3(n.pos.x + n.right.x*off, n.pos.y + 0.16, n.pos.z + n.right.z*off));
         }
