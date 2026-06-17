@@ -127,6 +127,7 @@ const ZFORK = (() => {
     } else { JUNCT = 6; ROUTESKIP = 2; }
 
     const branches = {};
+    const INNERSKIP = LOOP ? JUNCT : 4;   // routes' inner wall is dropped this far from tip/merge (open mouth)
     for (const key of ['A', 'B']) {
       const sign = key === 'A' ? -1 : 1;
       const bid = forkId + '_' + key;
@@ -145,7 +146,13 @@ const ZFORK = (() => {
         const up = norm(cross(right, dir));
         const node = { pos: v(c.x, c.y, c.z), dir, right, up,
           halfW: RW, bank: 0, kind: 'route', tunnel: false, branchId: bid };
-        if (k < ROUTESKIP || k > lenF - ROUTESKIP) node.meshSkip = true;  // no route walls at the junction (floor stays analytic)
+        // Routes draw from the very split point (k=0) so they EMERGE from the spine — not detached.
+        // Their INNER wall is dropped near the tip/merge so the Y mouth is open and the two routes
+        // don't cross walls while they're still close to center. (Left route's inner edge = its
+        // right side; right route's inner edge = its left side.) Outer wall = the leaf edge, kept.
+        if (k < INNERSKIP || k > lenF - INNERSKIP) {
+          if (sign < 0) node.noWallR = true; else node.noWallL = true;
+        }
         nlist.push(node);
       }
       branches[bid] = nlist;
@@ -156,8 +163,8 @@ const ZFORK = (() => {
     for (let k = 0; k <= lenF; k++) {
       const m = mainNodes[splitIdx + k];
       if (m._baseHalfW == null) m._baseHalfW = m.halfW;
-      if (k > JUNCT && k < lenF - JUNCT) m.meshSkip = true;      // open loop interior
-      else if (k > 1 && k < lenF - 1) m.noWalls = true;          // throat: connective floor, NO walls in the Y mouth
+      if (k >= 1 && k <= lenF - 1) m.meshSkip = true;   // spine gone through the fork — the two routes carry the floor
+      else m.noWalls = true;                            // k=0 / k=lenF: floor-only blend so stem & outro meet the routes with no gap and no wall
     }
 
     return {
