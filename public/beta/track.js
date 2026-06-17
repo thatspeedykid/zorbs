@@ -49,15 +49,60 @@ const ZTRACK = (() => {
   // from the seed. Each section just feeds the same move params the old random block used, so all
   // the downstream machinery (mesh, physics, forks, boosts, obstacles) is untouched.
   function buildPlan(rng, total) {
-    // WHOLE-LEVEL LOOP: short stem off the platform, then ONE giant dead-straight split-zone that
-    // spans almost the entire level (the spine — two routes bulge off it into a big leaf/loop and
-    // rejoin), then a short finish straight. The level's whole skeleton IS the fork.
+    // SECTION-RHYTHM DIRECTOR (MoS-style): a level is a SEQUENCE of distinct set-pieces with
+    // pacing — calm stretches between events, never two heavy pieces back-to-back, ONE split
+    // somewhere in the middle (fed by a funnel bottleneck), and a funnel scramble at the finish
+    // for last-second switch-ups. The split is now just one section, not the whole level.
     const plan = [];
-    const intro = 24 + Math.floor(rng() * 12);
-    const outro = 38 + Math.floor(rng() * 22);
-    const splitLen = Math.max(180, total - intro - outro);
+    const intro = 22 + Math.floor(rng() * 10);
+    const outro = 40 + Math.floor(rng() * 18);
     plan.push({ kind: 'straight', len: intro });
-    plan.push({ kind: 'straight', len: splitLen, split: true });
+
+    const body = Math.max(220, total - intro - outro - 24); // reserve ~24 for finish scramble
+    let used = 0;
+    const splitAt = body * (0.40 + rng() * 0.16);  // place the split in the middle-ish
+    let splitPlaced = false;
+    let lastHeavy = false;
+    let dir = rng() < 0.5 ? 1 : -1;
+
+    while (used < body - 30) {
+      const remaining = body - used;
+      // --- place the ONE split, with a funnel bottleneck leading into it ---
+      if (!splitPlaced && used >= splitAt && remaining > 170) {
+        const fl = 16 + Math.floor(rng() * 8);
+        plan.push({ kind: 'funnel', len: fl, min: 0.42 + rng() * 0.12 }); used += fl;
+        const sl = 120 + Math.floor(rng() * 60);
+        plan.push({ kind: 'straight', len: sl, split: true }); used += sl;
+        splitPlaced = true; lastHeavy = true;
+        continue;
+      }
+      let sec;
+      const r = rng();
+      if (lastHeavy) {
+        // forced CALM after a heavy piece (straight or a gentle sweep)
+        if (r < 0.5) sec = { kind: 'straight', len: 14 + Math.floor(rng() * 12) };
+        else { dir = -dir; sec = { kind: 'sweep', dir, sharp: 0.018 + rng() * 0.014, len: 26 + Math.floor(rng() * 16) }; }
+        lastHeavy = false;
+      } else {
+        // EVENT piece
+        if (r < 0.24)      { dir = -dir; sec = { kind: 'sweep',  dir, sharp: 0.026 + rng() * 0.020, len: 28 + Math.floor(rng() * 18) }; lastHeavy = false; }
+        else if (r < 0.44) { sec = { kind: 'moguls', len: 22 + Math.floor(rng() * 16) }; lastHeavy = true; }
+        else if (r < 0.60) { sec = { kind: 'funnel', len: 16 + Math.floor(rng() * 12), min: 0.40 + rng() * 0.16 }; lastHeavy = true; }
+        else if (r < 0.73) { sec = { kind: 'narrower', len: 18 + Math.floor(rng() * 10), min: 0.34 + rng() * 0.10 }; lastHeavy = true; }
+        else if (r < 0.85) { sec = { kind: 'drop', len: 10 + Math.floor(rng() * 8), drop: 1.1 + rng() * 1.1 }; lastHeavy = true; }
+        else if (r < 0.95) { if (rng() > 0.4) dir = -dir; sec = { kind: 'spiral', dir, len: 28 + Math.floor(rng() * 12) }; lastHeavy = true; }
+        else               { sec = { kind: 'tunnel', dir: rng() < 0.5 ? 1 : -1, len: 16 + Math.floor(rng() * 12) }; lastHeavy = false; }
+      }
+      if (sec.len > remaining - 8) sec.len = Math.max(8, remaining - 8);
+      plan.push(sec); used += sec.len;
+    }
+    // safety: if the level was too short to cross splitAt, force a split now
+    if (!splitPlaced) {
+      const sl = Math.max(120, body - used - 10);
+      plan.push({ kind: 'straight', len: sl, split: true });
+    }
+    // FINISH SCRAMBLE: a funnel right before the line so the last second can change the winner
+    plan.push({ kind: 'funnel', len: 14 + Math.floor(rng() * 8), min: 0.48 + rng() * 0.12 });
     plan.push({ kind: 'straight', len: outro });
     return plan;
   }
@@ -90,6 +135,10 @@ const ZTRACK = (() => {
     let targetBank = 0;
     let moveKind = 'straight', extraDrop = 0, funnelMin = 0, tunnel = false;
     let funnelLen = 1, funnelPos = 0, spiralTurn = 0, spiralLen = 1, spiralCooldown = 0;
+    // MOGULS: washboard bumps laid into the floor across a section (jostle + separate the pack).
+    let moguAmp = 0, moguStep = 0, moguPhase = 0, moguLen = 1;
+    // NARROWER: hard width pinch to single-file that holds (a bottleneck), then reopens.
+    let narrowMin = 1, narrowLen = 1;
     let curForkZone = false;   // true while laying a marked split-zone (for divergent forks)
     // GENTLE LEVEL WINDING: a smooth low-frequency turn applied through the split-zone so the whole
     // loop bends instead of running dead straight. Amplitude kept tiny (radius >> route offset) so
@@ -153,6 +202,22 @@ const ZTRACK = (() => {
           targetTurn = sec.dir * (rng() * 0.025);
           targetBank = 0;
           tunnel = true;
+          segLeft = sec.len;
+        } else if (sec.kind === 'moguls') {
+          moveKind = 'moguls';
+          targetTurn = (rng() - 0.5) * 0.010;   // basically straight
+          targetBank = 0;
+          moguAmp = 1.0 + rng() * 0.6;           // bump height (felt, not a launch)
+          moguStep = 0.32 + rng() * 0.12;        // radians/node → ~14-18 nodes per bump (gentle crest)
+          moguPhase = 0;
+          moguLen = sec.len;
+          segLeft = sec.len;
+        } else if (sec.kind === 'narrower') {
+          moveKind = 'narrower';
+          targetTurn = (rng() - 0.5) * 0.010;
+          targetBank = 0;
+          narrowMin = sec.min;                   // throat width fraction (held, not a V)
+          narrowLen = sec.len;
           segLeft = sec.len;
         } else {
           // straight — split-zones now WIND gently (set per-node below); plain straights stay ~level
@@ -224,10 +289,24 @@ const ZTRACK = (() => {
         const ramp = Math.min(1, sp/0.25, (1-sp)/0.25);  // 0 at ends, 1 in the middle
         const e = Math.max(0, ramp); const es = e*e*(3-2*e);
         widthFactor *= 1 + 0.45 * es;                    // up to +45% in the middle only
+      } else if (moveKind === 'narrower') {
+        // PINCH to single-file and HOLD (a bottleneck), easing in/out so there's no hard step.
+        const np = 1 - (segLeft / narrowLen);            // 0..1 through the narrower
+        const ramp = Math.min(1, np / 0.22, (1 - np) / 0.22); // 0 at ends, 1 across the middle
+        const e = Math.max(0, ramp); const es = e * e * (3 - 2 * e);
+        widthFactor *= 1 - es * (1 - narrowMin);          // hold ~narrowMin across the plateau
       }
       const halfW = WIDTH * widthFactor;
 
-      nodes.push({ pos, dir: heading, right, up, halfW, bank, kind: moveKind, tunnel, forkZone: curForkZone });
+      // MOGULS: lay a tapered washboard into the floor. The bump goes into the NODE's stored y
+      // only — the integration `pos` stays clean so bumps never accumulate down the section.
+      let ny = pos.y;
+      if (moveKind === 'moguls') {
+        moguPhase += moguStep;
+        const taper = Math.sin(Math.PI * (1 - segLeft / moguLen)); // 0 at both ends → fades in/out
+        ny += moguAmp * Math.sin(moguPhase) * taper;
+      }
+      nodes.push({ pos: { x: pos.x, y: ny, z: pos.z }, dir: heading, right, up, halfW, bank, kind: moveKind, tunnel, forkZone: curForkZone });
       segLeft--;
     }
     return nodes;
