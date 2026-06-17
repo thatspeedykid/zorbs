@@ -110,7 +110,9 @@ const ZFORK = (() => {
     // loop routes are slightly ASYMMETRIC (one bulges wider) so it's an organic leaf, not a mirror
     const offsetAt = (k, sign) => {
       const amp = LOOP ? (sign < 0 ? 1.0 : 0.7) : 1.0;
-      return rawOff[Math.max(0, Math.min(lenF, Math.round(k)))] * sign * amp;
+      // Lanes start SIDE BY SIDE at ±RW (inner edges meet at center = a clean divider), then bulge
+      // apart. The routes are never both centered, so floors never overlap and inner walls never cross.
+      return sign * (RW + amp * rawOff[Math.max(0, Math.min(lenF, Math.round(k)))]);
     };
 
     // Hand the floor off from spine -> routes EXACTLY where the (narrower) route's inner edge
@@ -127,7 +129,6 @@ const ZFORK = (() => {
     } else { JUNCT = 6; ROUTESKIP = 2; }
 
     const branches = {};
-    const INNERSKIP = LOOP ? JUNCT : 4;   // routes' inner wall is dropped this far from tip/merge (open mouth)
     for (const key of ['A', 'B']) {
       const sign = key === 'A' ? -1 : 1;
       const bid = forkId + '_' + key;
@@ -146,13 +147,8 @@ const ZFORK = (() => {
         const up = norm(cross(right, dir));
         const node = { pos: v(c.x, c.y, c.z), dir, right, up,
           halfW: RW, bank: 0, kind: 'route', tunnel: false, branchId: bid };
-        // Routes draw from the very split point (k=0) so they EMERGE from the spine — not detached.
-        // Their INNER wall is dropped near the tip/merge so the Y mouth is open and the two routes
-        // don't cross walls while they're still close to center. (Left route's inner edge = its
-        // right side; right route's inner edge = its left side.) Outer wall = the leaf edge, kept.
-        if (k < INNERSKIP || k > lenF - INNERSKIP) {
-          if (sign < 0) node.noWallR = true; else node.noWallL = true;
-        }
+        // Routes draw from the split point. Lanes start touching at center and diverge, so the inner
+        // walls form a divider that OPENS (they never cross) — keep all walls for clean containment.
         nlist.push(node);
       }
       branches[bid] = nlist;
@@ -165,6 +161,19 @@ const ZFORK = (() => {
       if (m._baseHalfW == null) m._baseHalfW = m.halfW;
       if (k >= 1 && k <= lenF - 1) m.meshSkip = true;   // spine gone through the fork — the two routes carry the floor
       else m.noWalls = true;                            // k=0 / k=lenF: floor-only blend so stem & outro meet the routes with no gap and no wall
+    }
+
+    // Widen the spine into a MOUTH that spans both lanes right at the split & merge, ramping in/out
+    // so the road visibly widens into the Y and narrows out of it — no width mismatch at the handoff.
+    const MOUTH = 2 * RW, RAMP = 16;
+    mainNodes[splitIdx].halfW = MOUTH;
+    if (mainNodes[splitIdx + lenF]) mainNodes[splitIdx + lenF].halfW = MOUTH;
+    for (let j = 1; j <= RAMP; j++) {
+      const w = MOUTH - (MOUTH - base) * (j / RAMP);
+      const pre = mainNodes[splitIdx - j];
+      if (pre && !pre.isPlatform) { if (pre._wbak == null) pre._wbak = pre.halfW; pre.halfW = Math.max(pre.halfW, w); }
+      const post = mainNodes[splitIdx + lenF + j];
+      if (post) { if (post._wbak == null) post._wbak = post.halfW; post.halfW = Math.max(post.halfW, w); }
     }
 
     return {
