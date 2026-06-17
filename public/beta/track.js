@@ -91,6 +91,15 @@ const ZTRACK = (() => {
     let moveKind = 'straight', extraDrop = 0, funnelMin = 0, tunnel = false;
     let funnelLen = 1, funnelPos = 0, spiralTurn = 0, spiralLen = 1, spiralCooldown = 0;
     let curForkZone = false;   // true while laying a marked split-zone (for divergent forks)
+    // GENTLE LEVEL WINDING: a smooth low-frequency turn applied through the split-zone so the whole
+    // loop bends instead of running dead straight. Amplitude kept tiny (radius >> route offset) so
+    // the offset routes follow the bend without the inner one folding/fanning.
+    const windComps = [];
+    { const wn = 1 + Math.floor(rng() * 2);
+      for (let i = 0; i < wn; i++) windComps.push({ f: 0.6 + rng() * 0.9, p: rng() * 6.2832, a: 0.5 + rng() }); }
+    const windTot = windComps.reduce((s, c) => s + c.a, 0) || 1;
+    const WIND_AMP = 0.0022;
+    let splitN = 0, splitLen0 = 1;
 
 
     const worldUp = v(0, 1, 0);
@@ -146,16 +155,25 @@ const ZTRACK = (() => {
           tunnel = true;
           segLeft = sec.len;
         } else {
-          // straight — split-zones are forced DEAD straight so divergent forks don't fan/twist
+          // straight — split-zones now WIND gently (set per-node below); plain straights stay ~level
           targetTurn = sec.split ? 0 : (rng() - 0.5) * 0.012;
           targetBank = 0;
           segLeft = sec.len;
+          if (sec.split) { splitN = 0; splitLen0 = sec.len; }
         }
       }
 
       // hold the spiral's strong turn for its whole duration (don't ease it away)
       if (moveKind === 'spiral') targetTurn = spiralTurn;
       if (spiralCooldown > 0) spiralCooldown--;
+
+      // gentle level winding through the split-zone (varies smoothly so the whole loop bends)
+      if (curForkZone) {
+        const tw = splitLen0 > 0 ? splitN / splitLen0 : 0;
+        let w = 0; for (const c of windComps) w += c.a * Math.sin(c.f * 6.2832 * tw + c.p);
+        targetTurn = (w / windTot) * WIND_AMP;
+        splitN++;
+      }
 
       // ease turn and bank toward their targets (smooth transitions)
       turn += (targetTurn - turn) * 0.12;
@@ -168,9 +186,8 @@ const ZTRACK = (() => {
       const bankCap = Math.abs(turn) * 13 + 0.05;
       if (bank >  bankCap) bank =  bankCap;
       if (bank < -bankCap) bank = -bankCap;
-      // inside a split-zone, kill any leftover turn/bank from the prior sweep FAST so the section
-      // is truly straight by the time the divergent fork splits it (no fan/twist).
-      if (curForkZone) { turn *= 0.74; bank *= 0.5; }
+      // inside a split-zone, damp stray BANK but let the gentle wind turn stand (the loop bends).
+      if (curForkZone) { bank *= 0.5; }
 
       // rotate heading around world-up by 'turn'
       const cosT = Math.cos(turn), sinT = Math.sin(turn);
