@@ -100,19 +100,32 @@ const ZFORK = (() => {
       : (k) => { const t = 1 - Math.abs(2*k/lenF - 1); return t*t*(3-2*t); };
     const centerOff = (k, sign) => sign * (sign < 0 ? 1 : ASYM) * BULGE * shape(k);
     // The two routes overlap near the mouth (both still ~centered); their INNER walls would cross
-    // there, so drop them until the routes have actually separated (gap >= 0). Outer walls always on.
-    const innerCrosses = (k) => (BULGE * shape(k) * (1 + ASYM) - 2 * LW) < 0;
+    // there, so drop them until the routes have clearly separated — with a margin that also covers
+    // the per-route weave, so the weave can never push them into each other while a wall is up.
+    const WEAVEMARGIN = base * 3;
+    const innerCrosses = (k) => (BULGE * shape(k) * (1 + ASYM) - 2 * LW - WEAVEMARGIN) < 0;
 
-    // ---------- BRANCHES: two routes that fork from one point ----------
+    // ---------- BRANCHES: two routes that fork from one point, each with its OWN character ----------
+    // a few tapered sinusoids (zero at both route ends so the routes still meet the stem/outro).
+    const mkWave = (amp, maxFreq) => {
+      const comps = [], n = 2 + Math.floor(rng() * 3);
+      for (let i = 0; i < n; i++) comps.push({ f: 1 + Math.floor(rng() * maxFreq), p: rng() * 6.2832, a: 0.5 + rng() });
+      const tot = comps.reduce((s, c) => s + c.a, 0) || 1;
+      return (t) => { let s = 0; for (const c of comps) s += c.a * Math.sin(c.f * 6.2832 * t + c.p); return (s / tot) * Math.sin(Math.PI * t) * amp; };
+    };
     const branches = {};
     for (const key of ['A', 'B']) {
       const sign = key === 'A' ? -1 : 1;
       const bid = forkId + '_' + key;
+      // each route draws its OWN weave + slope → the two sides differ; the track seed → different each race
+      const turnWave  = LOOP ? mkWave(base * 1.4, 4) : (() => 0);   // lateral S-bends
+      const slopeWave = LOOP ? mkWave(4.5, 3)        : (() => 0);   // gentle dips / climbs
       const raw = [];
       for (let k = 0; k <= lenF; k++) {
         const m = mainNodes[splitIdx + k];
-        const off = centerOff(k, sign);
-        raw.push({ x: m.pos.x + m.right.x * off, y: m.pos.y, z: m.pos.z + m.right.z * off });
+        const t = k / lenF;
+        const off = centerOff(k, sign) + turnWave(t);
+        raw.push({ x: m.pos.x + m.right.x * off, y: m.pos.y + slopeWave(t), z: m.pos.z + m.right.z * off });
       }
       const nlist = [];
       for (let k = 0; k <= lenF; k++) {
@@ -126,6 +139,14 @@ const ZFORK = (() => {
         // inner edge = right side of the left route / left side of the right route — drop near mouth
         if (innerCrosses(k)) { if (sign < 0) node.noWallR = true; else node.noWallL = true; }
         nlist.push(node);
+      }
+      // BANK into the weave (tapered at ends). Modest — walls still contain, so it's a subtle lean.
+      const BANK_GAIN = 5.0, BANK_MAX = 0.22;
+      for (let k = 1; k < lenF; k++) {
+        const h0 = Math.atan2(nlist[k-1].dir.x, nlist[k-1].dir.z);
+        const h1 = Math.atan2(nlist[k+1].dir.x, nlist[k+1].dir.z);
+        let dh = h1 - h0; while (dh > Math.PI) dh -= 6.2832; while (dh < -Math.PI) dh += 6.2832;
+        nlist[k].bank = Math.max(-BANK_MAX, Math.min(BANK_MAX, dh * BANK_GAIN)) * Math.sin(Math.PI * k / lenF);
       }
       branches[bid] = nlist;
     }
