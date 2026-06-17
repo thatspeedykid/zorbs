@@ -79,55 +79,29 @@ const ZFORK = (() => {
       turnAcc += Math.acos(dot);
     }
     if (!LOOP && turnAcc > 0.22) return null;    // ~13° total — must be genuinely straight or it fans
-    // STRAIGHTNESS GATE: offsetting the main path on a CURVE twists the ribbon into a
-    // fan/seashell. Only build a divergent fork where the section is near-straight; the
-    // caller falls back to a safe lane-fork otherwise.
-    let heading = 0;
-    for (let k = splitIdx; k < end; k++) {
-      const a = mainNodes[k].dir, b = mainNodes[k+1].dir;
-      const dot = Math.max(-1, Math.min(1, a.x*b.x + a.y*b.y + a.z*b.z));
-      heading += Math.acos(dot);
-    }
-    if (!LOOP && heading > 0.35) return null;   // too curvy → not a clean divergent fork
+    // STRAIGHTNESS GATE (small forks only — the loop spine is force-straight by the director).
+    if (!LOOP && turnAcc > 0.30) return null;
 
     const base = mainNodes[splitIdx].halfW;
-    const RW = base * (LOOP ? 1.0 : 0.82);         // route half-width
     let spanLen = 0;
     for (let k = splitIdx; k < end; k++) { const a = mainNodes[k].pos, b = mainNodes[k+1].pos; spanLen += Math.hypot(b.x-a.x, b.z-a.z); }
 
-    // OFFSET PROFILE. LOOP: a big smooth leaf — each route arcs far out and back so the two
-    // together enclose the whole level. Small: an angular Y (diamond) fork feature.
-    const rawOff = [];
-    if (LOOP) {
-      const PEAK = spanLen * 0.30;                  // leaf width ~60% of length
-      for (let k = 0; k <= lenF; k++) rawOff.push(PEAK * Math.sin(Math.PI * k / lenF));
-    } else {
-      const PEAK = base * 3.4;
-      for (let k = 0; k <= lenF; k++) rawOff.push(PEAK * (1 - Math.abs(2 * k / lenF - 1)));
-      const c = rawOff.slice();
-      for (let k = 1; k < lenF; k++) rawOff[k] = (c[k - 1] + 2 * c[k] + c[k + 1]) / 4;
-    }
-    // loop routes are slightly ASYMMETRIC (one bulges wider) so it's an organic leaf, not a mirror
-    const offsetAt = (k, sign) => {
-      const amp = LOOP ? (sign < 0 ? 1.0 : 0.7) : 1.0;
-      // Lanes start SIDE BY SIDE at ±RW (inner edges meet at center = a clean divider), then bulge
-      // apart. The routes are never both centered, so floors never overlap and inner walls never cross.
-      return sign * (RW + amp * rawOff[Math.max(0, Math.min(lenF, Math.round(k)))]);
-    };
+    // ---------- TUNABLES (all the shape lives here) ----------
+    const LW    = base * 0.66;                                  // lane half-width
+    const MOUTH = LW * 2;                                       // junction pad = both lanes side by side
+    const BULGE = LOOP ? Math.min(spanLen * 0.11, 55)           // how far lane CENTERS bow apart (capped → tidy)
+                       : base * 2.4;
+    const ASYM  = 0.72;                                         // route B bows a bit less → organic, not mirrored
 
-    // Hand the floor off from spine -> routes EXACTLY where the (narrower) route's inner edge
-    // clears the spine edge, so there's no wedge gap and no crossing walls at the fork/merge.
-    let JUNCT, ROUTESKIP;
-    if (LOOP) {
-      const minAmp = 0.7;
-      let transK = 3;
-      while (transK < lenF * 0.5 - 1 && (rawOff[transK] * minAmp - RW) < base) transK++;
-      // OVERLAP the handoff: routes start a few nodes BEFORE the spine ends, and the spine runs a
-      // few nodes PAST where the routes start — so the floor is always continuous (no detached slabs).
-      ROUTESKIP = Math.max(2, transK - 8);
-      JUNCT = transK + 8;
-    } else { JUNCT = 6; ROUTESKIP = 2; }
+    // Lane CENTER offset from the spine. Starts at ±LW (the two lanes sit SIDE BY SIDE, splitting the
+    // mouth down the middle — never both centered, so floors never overlap and walls never cross),
+    // then bows out to ±(LW+BULGE) and back. Smooth sine for the loop; soft triangle for a small Y.
+    const shape = LOOP
+      ? (k) => Math.sin(Math.PI * k / lenF)
+      : (k) => { const t = 1 - Math.abs(2*k/lenF - 1); return t*t*(3-2*t); };
+    const centerOff = (k, sign) => sign * (LW + (sign < 0 ? 1 : ASYM) * BULGE * shape(k));
 
+    // ---------- BRANCHES: two lanes ----------
     const branches = {};
     for (const key of ['A', 'B']) {
       const sign = key === 'A' ? -1 : 1;
@@ -135,7 +109,7 @@ const ZFORK = (() => {
       const raw = [];
       for (let k = 0; k <= lenF; k++) {
         const m = mainNodes[splitIdx + k];
-        const off = offsetAt(k, sign);
+        const off = centerOff(k, sign);
         raw.push({ x: m.pos.x + m.right.x * off, y: m.pos.y, z: m.pos.z + m.right.z * off });
       }
       const nlist = [];
@@ -145,35 +119,30 @@ const ZFORK = (() => {
         if (Math.hypot(nx.x - pv.x, nx.z - pv.z) < 1e-4) { const md = mainNodes[splitIdx + k].dir; dir = norm(v(md.x, md.y, md.z)); }
         const right = norm(cross(dir, worldUp));
         const up = norm(cross(right, dir));
-        const node = { pos: v(c.x, c.y, c.z), dir, right, up,
-          halfW: RW, bank: 0, kind: 'route', tunnel: false, branchId: bid };
-        // Routes draw from the split point. Lanes start touching at center and diverge, so the inner
-        // walls form a divider that OPENS (they never cross) — keep all walls for clean containment.
-        nlist.push(node);
+        nlist.push({ pos: v(c.x, c.y, c.z), dir, right, up,
+          halfW: LW, bank: 0, kind: 'route', tunnel: false, branchId: bid });
       }
       branches[bid] = nlist;
     }
 
-    // The main floor SKIPS through the separated middle → real open space between the two tracks.
-    // Floor support is analytic per-branch, so committed balls ride their own ribbon regardless.
+    // ---------- MAIN SPINE through the fork ----------
+    // The spine carries NO floor in the middle (open loop interior). Only the two junction nodes
+    // (k=0 and k=lenF) remain, as a floor-only PAD that the stem & outro meet and the lanes tile
+    // exactly (pad halfW = MOUTH = both lanes side by side). No spine walls anywhere in the fork.
     for (let k = 0; k <= lenF; k++) {
       const m = mainNodes[splitIdx + k];
       if (m._baseHalfW == null) m._baseHalfW = m.halfW;
-      if (k >= 1 && k <= lenF - 1) m.meshSkip = true;   // spine gone through the fork — the two routes carry the floor
-      else m.noWalls = true;                            // k=0 / k=lenF: floor-only blend so stem & outro meet the routes with no gap and no wall
+      if (k === 0 || k === lenF) { m.halfW = MOUTH; m.noWalls = true; }
+      else m.meshSkip = true;
     }
-
-    // Widen the spine into a MOUTH that spans both lanes right at the split & merge, ramping in/out
-    // so the road visibly widens into the Y and narrows out of it — no width mismatch at the handoff.
-    const MOUTH = 2 * RW, RAMP = 16;
-    mainNodes[splitIdx].halfW = MOUTH;
-    if (mainNodes[splitIdx + lenF]) mainNodes[splitIdx + lenF].halfW = MOUTH;
+    // ramp the stem & outro width up to the mouth so the road eases into/out of the Y (no width step)
+    const RAMP = 10;
     for (let j = 1; j <= RAMP; j++) {
-      const w = MOUTH - (MOUTH - base) * (j / RAMP);
+      const w = base + (MOUTH - base) * (1 - j / RAMP);
       const pre = mainNodes[splitIdx - j];
-      if (pre && !pre.isPlatform) { if (pre._wbak == null) pre._wbak = pre.halfW; pre.halfW = Math.max(pre.halfW, w); }
+      if (pre && !pre.isPlatform && pre._wbak == null) { pre._wbak = pre.halfW; pre.halfW = Math.max(pre.halfW, w); }
       const post = mainNodes[splitIdx + lenF + j];
-      if (post) { if (post._wbak == null) post._wbak = post.halfW; post.halfW = Math.max(post.halfW, w); }
+      if (post && post._wbak == null) { post._wbak = post.halfW; post.halfW = Math.max(post.halfW, w); }
     }
 
     return {
