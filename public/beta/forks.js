@@ -105,27 +105,54 @@ const ZFORK = (() => {
     const WEAVEMARGIN = base * 3;
     const innerCrosses = (k) => (BULGE * shape(k) * (1 + ASYM) - 2 * LW - WEAVEMARGIN) < 0;
 
-    // ---------- BRANCHES: two routes that fork from one point, each with its OWN character ----------
-    // a few tapered sinusoids (zero at both route ends so the routes still meet the stem/outro).
+    // ---------- BRANCHES: two routes, each with its OWN character + random FEATURES ----------
     const mkWave = (amp, maxFreq) => {
       const comps = [], n = 2 + Math.floor(rng() * 3);
       for (let i = 0; i < n; i++) comps.push({ f: 1 + Math.floor(rng() * maxFreq), p: rng() * 6.2832, a: 0.5 + rng() });
       const tot = comps.reduce((s, c) => s + c.a, 0) || 1;
       return (t) => { let s = 0; for (const c of comps) s += c.a * Math.sin(c.f * 6.2832 * t + c.p); return (s / tot) * Math.sin(Math.PI * t) * amp; };
     };
+    const bump = (t, at, w) => { const z = (t - at) / w; return Math.exp(-z * z); };
+    // a few strong random FEATURES per route (kept clear of the mouth/merge): tight HAIRPIN turns,
+    // steep DROPS, CLIMBS, and hard-banked TWISTS — so each route actually plays differently.
+    const mkFeatures = () => {
+      if (!LOOP) return [];
+      const fs = [], n = 2 + Math.floor(rng() * 3);
+      for (let i = 0; i < n; i++) {
+        const at = 0.24 + rng() * 0.52, w = 0.05 + rng() * 0.05, r = rng(), s = rng() < 0.5 ? -1 : 1;
+        if (r < 0.34)      fs.push({ at, w,       lat: s * base * (1.6 + rng()*1.2), dy: 0,               bank: s * 0.55 });  // hairpin
+        else if (r < 0.58) fs.push({ at, w,       lat: 0,                            dy: -(5 + rng()*6),  bank: 0 });          // steep drop
+        else if (r < 0.78) fs.push({ at, w,       lat: 0,                            dy: (4 + rng()*5),   bank: 0 });          // climb
+        else               fs.push({ at, w: w*0.7, lat: s * base * 0.8,              dy: -(2 + rng()*3),  bank: s * 0.95 });   // twist
+      }
+      return fs;
+    };
+
+    // build each route's lateral offset + elevation + feature-bank arrays
+    const route = {};
+    for (const key of ['A', 'B']) {
+      const sign = key === 'A' ? -1 : 1;
+      const turnWave = mkWave(base * 1.5, 4), slopeWave = mkWave(5, 3), feats = mkFeatures();
+      const lat = [], yy = [], bnk = [];
+      for (let k = 0; k <= lenF; k++) {
+        const t = k / lenF;
+        let L = centerOff(k, sign) + turnWave(t), Y = slopeWave(t), Bk = 0;
+        for (const f of feats) { const g = bump(t, f.at, f.w); L += f.lat * g; Y += f.dy * g; Bk += f.bank * g; }
+        lat.push(L); yy.push(Y); bnk.push(Bk);
+      }
+      route[key] = { lat, yy, bnk };
+    }
+
     const branches = {};
+    const SAFEGAP = base * 1.2;   // min clearance between the routes' inner edges; below it, drop the inner wall
     for (const key of ['A', 'B']) {
       const sign = key === 'A' ? -1 : 1;
       const bid = forkId + '_' + key;
-      // each route draws its OWN weave + slope → the two sides differ; the track seed → different each race
-      const turnWave  = LOOP ? mkWave(base * 1.4, 4) : (() => 0);   // lateral S-bends
-      const slopeWave = LOOP ? mkWave(4.5, 3)        : (() => 0);   // gentle dips / climbs
+      const R = route[key];
       const raw = [];
       for (let k = 0; k <= lenF; k++) {
         const m = mainNodes[splitIdx + k];
-        const t = k / lenF;
-        const off = centerOff(k, sign) + turnWave(t);
-        raw.push({ x: m.pos.x + m.right.x * off, y: m.pos.y + slopeWave(t), z: m.pos.z + m.right.z * off });
+        raw.push({ x: m.pos.x + m.right.x * R.lat[k], y: m.pos.y + R.yy[k], z: m.pos.z + m.right.z * R.lat[k] });
       }
       const nlist = [];
       for (let k = 0; k <= lenF; k++) {
@@ -134,19 +161,20 @@ const ZFORK = (() => {
         if (Math.hypot(nx.x - pv.x, nx.z - pv.z) < 1e-4) { const md = mainNodes[splitIdx + k].dir; dir = norm(v(md.x, md.y, md.z)); }
         const right = norm(cross(dir, worldUp));
         const up = norm(cross(right, dir));
-        const node = { pos: v(c.x, c.y, c.z), dir, right, up,
-          halfW: LW, bank: 0, kind: 'route', tunnel: false, branchId: bid };
-        // inner edge = right side of the left route / left side of the right route — drop near mouth
-        if (innerCrosses(k)) { if (sign < 0) node.noWallR = true; else node.noWallL = true; }
+        const node = { pos: v(c.x, c.y, c.z), dir, right, up, halfW: LW, bank: 0, kind: 'route', tunnel: false, branchId: bid };
+        // ACTUAL inner-edge gap between the two routes — robust against any feature swing
+        const gap = (route.B.lat[k] - LW) - (route.A.lat[k] + LW);
+        if (gap < SAFEGAP) { if (sign < 0) node.noWallR = true; else node.noWallL = true; }
         nlist.push(node);
       }
-      // BANK into the weave (tapered at ends). Modest — walls still contain, so it's a subtle lean.
-      const BANK_GAIN = 5.0, BANK_MAX = 0.22;
+      // BANK = path curvature + explicit feature twist, tapered at the ends.
+      const BANK_GAIN = 5.0, BANK_MAX = 0.34;
       for (let k = 1; k < lenF; k++) {
         const h0 = Math.atan2(nlist[k-1].dir.x, nlist[k-1].dir.z);
         const h1 = Math.atan2(nlist[k+1].dir.x, nlist[k+1].dir.z);
         let dh = h1 - h0; while (dh > Math.PI) dh -= 6.2832; while (dh < -Math.PI) dh += 6.2832;
-        nlist[k].bank = Math.max(-BANK_MAX, Math.min(BANK_MAX, dh * BANK_GAIN)) * Math.sin(Math.PI * k / lenF);
+        const b = dh * BANK_GAIN + R.bnk[k];
+        nlist[k].bank = Math.max(-BANK_MAX, Math.min(BANK_MAX, b)) * Math.sin(Math.PI * k / lenF);
       }
       branches[bid] = nlist;
     }

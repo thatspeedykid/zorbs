@@ -416,7 +416,16 @@ const ZTRACK = (() => {
               radius: 0.6 + prng() * 0.18, height: 2.6, idx: m, branchId: bid,
             });
             cnt++;
-            m += 55 + Math.floor(prng() * 50);                     // medium spacing
+            // occasionally drop a second post just after, on the opposite side (a little gauntlet)
+            if (prng() < 0.35 && m + 6 < hi) {
+              const nd2 = arr[m + 4 + Math.floor(prng() * 4)];
+              if (nd2 && !nd2.meshSkip) {
+                const off2 = -side * nd2.halfW * (0.30 + prng() * 0.30);
+                obstacles.push({ pos: { x: nd2.pos.x + nd2.right.x * off2, y: nd2.pos.y, z: nd2.pos.z + nd2.right.z * off2 },
+                  radius: 0.6 + prng() * 0.18, height: 2.6, idx: m + 4, branchId: bid });
+              }
+            }
+            m += 36 + Math.floor(prng() * 42);                     // denser (was 55–105)
           } else m += 8;
         }
       }
