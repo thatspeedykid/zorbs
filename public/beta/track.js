@@ -238,7 +238,7 @@ const ZTRACK = (() => {
       const rw = add(rf, scale(bankUp, 1.5));          // right wall top
       const lc = add(lf, scale(bankUp, 3.2));          // left ceiling
       const rc = add(rf, scale(bankUp, 3.2));          // right ceiling
-      return { lf, rf, lw, rw, lc, rc, tunnel: !!n.tunnel };
+      return { lf, rf, lw, rw, lc, rc, tunnel: !!n.tunnel, noWalls: !!n.noWalls };
     }
     function applyBank(n) {
       // rotate the up vector around the heading by the bank angle
@@ -265,11 +265,13 @@ const ZTRACK = (() => {
         pushQuad(floorPos, floorIdx, prev.lf, prev.rf, cur.rf, cur.lf, vi); vi += 4;
         // UVs matching the quad's vertex order (prev.lf, prev.rf, cur.rf, cur.lf):
         floorUV.push(0, vPrev,  1, vPrev,  1, vCur,  0, vCur);
-        // taller walls inside tunnels (use ceiling height as wall top there)
-        const pLW = prev.tunnel ? prev.lc : prev.lw, pRW = prev.tunnel ? prev.rc : prev.rw;
-        const cLW = cur.tunnel ? cur.lc : cur.lw,  cRW = cur.tunnel ? cur.rc : cur.rw;
-        pushQuad(wallPos, wallIdx, prev.lf, pLW, cLW, cur.lf, wvi); wvi += 4;
-        pushQuad(wallPos, wallIdx, prev.rf, pRW, cRW, cur.rf, wvi); wvi += 4;
+        // walls — skipped on floor-only nodes (the fork throat, so no wall blocks the Y split)
+        if (!prev.noWalls && !cur.noWalls) {
+          const pLW = prev.tunnel ? prev.lc : prev.lw, pRW = prev.tunnel ? prev.rc : prev.rw;
+          const cLW = cur.tunnel ? cur.lc : cur.lw,  cRW = cur.tunnel ? cur.rc : cur.rw;
+          pushQuad(wallPos, wallIdx, prev.lf, pLW, cLW, cur.lf, wvi); wvi += 4;
+          pushQuad(wallPos, wallIdx, prev.rf, pRW, cRW, cur.rf, wvi); wvi += 4;
+        }
         // ceiling only where BOTH ends are tunnel
         if (prev.tunnel && cur.tunnel) {
           pushQuad(roofPos, roofIdx, prev.lc, prev.rc, cur.rc, cur.lc, rvi); rvi += 4;

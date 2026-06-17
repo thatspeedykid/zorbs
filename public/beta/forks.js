@@ -156,7 +156,8 @@ const ZFORK = (() => {
     for (let k = 0; k <= lenF; k++) {
       const m = mainNodes[splitIdx + k];
       if (m._baseHalfW == null) m._baseHalfW = m.halfW;
-      if (k > JUNCT && k < lenF - JUNCT) m.meshSkip = true;
+      if (k > JUNCT && k < lenF - JUNCT) m.meshSkip = true;      // open loop interior
+      else if (k > 1 && k < lenF - 1) m.noWalls = true;          // throat: connective floor, NO walls in the Y mouth
     }
 
     return {
