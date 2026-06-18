@@ -120,22 +120,25 @@ const ZPHYSICS = (() => {
     spinners = [];
     if (forkData && forkData.spinners) {
       for (const sp of forkData.spinners) {
-        // Post center sits at ball-height so arms sweep at marble level.
-        // armHeight is the arm's cross-section half-height in the collider (0.85).
-        const ARM_H = sp.armHeight || 0.85;
-        const ARM_W = 0.28;   // arm thickness (a thin plank)
+        // Arms sweep at ball-center height: ball sits on floor, center = floor + BALL_R.
+        // armHeight in data = 0.85 (just above floor). Hub positioned at floor + BALL_R so
+        // arms hit the marble equator cleanly.
+        const ARM_H = BALL_R;   // hub height = ball radius above floor
+        const ARM_W = 0.28;
         const armL = sp.armLen;
         const spBd = RAPIER.RigidBodyDesc.kinematicPositionBased()
           .setTranslation(sp.pos.x, sp.pos.y + ARM_H, sp.pos.z);
         const spBody = world.createRigidBody(spBd);
-        // Two arms: offset ±armL/2 along local-X (will rotate with the body)
-        const mk = (signX) => {
+        // Two arms: offset ±armL/2 along local-X. ColliderDesc.setTranslation(x,y,z) sets
+        // the local-to-parent offset (not world position); the body's rotation carries them.
+        const mkArm = (signX) => {
           const cd = RAPIER.ColliderDesc.cuboid(armL * 0.5, ARM_H * 0.5, ARM_W)
-            .setTranslationWrtParent({ x: signX * armL * 0.5, y: 0, z: 0 })
-            .setRestitution(0.55).setFriction(0.1);
+            .setTranslation(signX * armL * 0.5, 0, 0)
+            .setRestitution(0.25)   // gentle deflect, not a violent launch
+            .setFriction(0.05);
           world.createCollider(cd, spBody);
         };
-        mk(1); mk(-1);
+        mkArm(1); mkArm(-1);
         spinners.push({
           body: spBody,
           pos: { x: sp.pos.x, y: sp.pos.y + ARM_H, z: sp.pos.z },
@@ -269,9 +272,9 @@ const ZPHYSICS = (() => {
     // exactly with render time => no temporal aliasing => smooth at any refresh rate.
     const dt = Math.max(0.002, Math.min(0.033, realDt));
     world.timestep = dt;
+    processSpinners(dt);   // set kinematic positions BEFORE the solver step (required by Rapier)
     fixedStep(dt);
     processBumpers(dt);
-    processSpinners(dt);
   }
 
   // Advance each spinner's kinematic rotation by dt. Rapier's solver handles the rest:

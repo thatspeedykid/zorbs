@@ -105,6 +105,14 @@ const ZFORK = (() => {
     const spacing = 2 * maxOuter / (N - 1);
     const offs = [];
     for (let i = 0; i < N; i++) offs.push((i - (N - 1) / 2) * spacing);   // symmetric lane offsets, left→right
+    // CENTER LANE FIX: for odd N the middle lane has offs=0 (it runs on the spine and never
+    // diverges visually). Give it a seeded offset of ~35-45% of spacing toward one side so
+    // it reads as a clearly distinct path between the outer lanes.
+    if (N % 2 === 1) {
+      const cIdx = (N - 1) / 2;
+      const cSign = rng() < 0.5 ? 1 : -1;
+      offs[cIdx] = cSign * spacing * (0.35 + rng() * 0.10);   // 35–45% of spacing, seeded side
+    }
 
     // WANDER is active ONLY in the flat HOLD (where the spread adds no lateral slope), so its turns
     // never stack on the fan-out slope and fold the lane. Amplitude is bounded so neighbours can't touch.
@@ -178,11 +186,30 @@ const ZFORK = (() => {
       branches[bid] = nlist;
     }
 
-    // ---- spine through the fan: floor-only bridges at the two ends, open interior (lanes carry it) ----
+    // ---- spine through the fan: skip mesh entirely (branches carry all floor+walls) ----
+    // The outer branch walls at k=0 and k=lenF are widened to match the spine so there's
+    // no visible seam or gap at the junction. Spine meshSkip from k=0..lenF inclusive.
     for (let k = 0; k <= lenF; k++) {
       const m = mainNodes[splitIdx + k];
       if (m._baseHalfW == null) m._baseHalfW = m.halfW;
-      if (k === 0 || k === lenF) m.noWalls = true; else m.meshSkip = true;
+      m.meshSkip = true;
+    }
+    // Widen the outermost branch nodes at mouths (k=0 and k=lenF) to cover the full spine
+    // width, so the branch wall meets the spine wall flush with no gap.
+    const outerL = branchOrder[0], outerR = branchOrder[branchOrder.length - 1];
+    for (const bid of branchOrder) {
+      const arr = branches[bid];
+      const isLeft = bid === outerL, isRight = bid === outerR;
+      for (const ki of [0, lenF]) {
+        const nd = arr[ki], spine = mainNodes[splitIdx + ki];
+        // At mouths, widen this lane out to the spine's outer half-width so walls flush
+        // The outermost lanes are responsible for covering the full outer wall span.
+        if (isLeft) { nd.halfW = Math.max(nd.halfW, Math.abs(route[0].lat[ki]) + spine.halfW * 0.15); }
+        if (isRight) { nd.halfW = Math.max(nd.halfW, Math.abs(route[N-1].lat[ki]) + spine.halfW * 0.15); }
+        // Remove inner walls at mouths so adjacent branches merge cleanly
+        if (!isLeft)  nd.noWallL = true;
+        if (!isRight) nd.noWallR = true;
+      }
     }
 
     const rejoinIdx = {}, ends = [];
