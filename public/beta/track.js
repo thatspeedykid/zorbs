@@ -55,7 +55,7 @@ const ZTRACK = (() => {
     // for last-second switch-ups. The split is now just one section, not the whole level.
     const plan = [];
     const intro = 22 + Math.floor(rng() * 10);
-    const outro = 40 + Math.floor(rng() * 18);
+    const outro = 16 + Math.floor(rng() * 8);   // short rollout AFTER the finish line (line is at the throat)
     plan.push({ kind: 'straight', len: intro });
 
     const body = Math.max(220, total - intro - outro - 24); // reserve ~24 for finish scramble
@@ -102,8 +102,9 @@ const ZTRACK = (() => {
       const sl = Math.max(280, body - used - 10);
       plan.push({ kind: 'straight', len: sl, split: true });
     }
-    // FINISH SCRAMBLE: a funnel right before the line so the last second can change the winner
-    plan.push({ kind: 'funnel', len: 14 + Math.floor(rng() * 8), min: 0.48 + rng() * 0.12 });
+    // FINISH SCRAMBLE: a funnel right before the line; the line sits at its throat so the field is
+    // bunched as it crosses (photo finishes). Pinch kept gentle (no jam) — placement does the work.
+    plan.push({ kind: 'funnel', len: 22 + Math.floor(rng() * 10), min: 0.44 + rng() * 0.10, isFinish: true });
     plan.push({ kind: 'straight', len: outro });
     return plan;
   }
@@ -140,6 +141,7 @@ const ZTRACK = (() => {
     let moguAmp = 0, moguStep = 0, moguPhase = 0, moguLen = 1;
     // NARROWER: hard width pinch to single-file that holds (a bottleneck), then reopens.
     let narrowMin = 1, narrowLen = 1;
+    let curFinish = false, finishMarked = false;   // mark the finish line at the finish-funnel throat
     let curForkZone = false;   // true while laying a marked split-zone (for divergent forks)
     // GENTLE LEVEL WINDING: a smooth low-frequency turn applied through the split-zone so the whole
     // loop bends instead of running dead straight. Amplitude kept tiny (radius >> route offset) so
@@ -170,9 +172,11 @@ const ZTRACK = (() => {
       if (segLeft <= 0) {
         // COURSE DIRECTOR drives the next move — pop the next planned section and set the same
         // move params the old random block used. Fallback to a straight if the plan is exhausted.
-        const sec = plan[planIdx++] || { kind: 'straight', len: 20 };
+        const sec = plan[planIdx++];
+        if (!sec) break;   // plan fully laid (track ends just after the short finish runout) — no filler
         moveKind = 'straight'; extraDrop = 0; funnelMin = 0; tunnel = false;
         curForkZone = (sec.kind === 'straight' && sec.split === true);
+        curFinish = !!sec.isFinish;
         if (sec.kind === 'sweep') {
           targetTurn = sec.dir * sec.sharp;
           targetBank = sec.dir * Math.min(0.66, sec.sharp * 11);   // stronger bank → balls carry speed through
@@ -299,7 +303,10 @@ const ZTRACK = (() => {
       }
       const halfW = WIDTH * widthFactor;
 
-      nodes.push({ pos: { x: pos.x, y: pos.y, z: pos.z }, dir: heading, right, up, halfW, bank, kind: moveKind, tunnel, forkZone: curForkZone });
+      const node = { pos: { x: pos.x, y: pos.y, z: pos.z }, dir: heading, right, up, halfW, bank, kind: moveKind, tunnel, forkZone: curForkZone };
+      // FINISH LINE at the finish-funnel throat (tightest = field most bunched = photo finishes)
+      if (curFinish && !finishMarked && moveKind === 'funnel' && funnelPos >= 0.5) { node.finishLine = true; finishMarked = true; }
+      nodes.push(node);
       segLeft--;
     }
     return nodes;
@@ -562,7 +569,7 @@ const ZTRACK = (() => {
     }));
 
     const start = nodes[0];
-    const finish = nodes[nodes.length - 1];
+    const finish = nodes.find(n => n.finishLine) || nodes[nodes.length - 1];
     return { seed, nodes, mesh, collider, start, finish, boosts, obstacles,
       platform: { startIdx: 0, endIdx: platStart },
       forks, forkAtIdx, branchMeshes, branchColliders };
