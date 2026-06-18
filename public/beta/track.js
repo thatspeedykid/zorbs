@@ -568,9 +568,69 @@ const ZTRACK = (() => {
       })()
     }));
 
+    // SPINNERS: rotating arm obstacles. Each spinner is a Y-axis kinematic body whose two arms
+    // sweep across the track, knocking marbles sideways. Placed CENTER (no lateral offset) so
+    // the arms reach both sides evenly. armLen capped at halfW*0.65 — one side always clear
+    // at any moment during rotation. Sparser than bumpers (race can stall if overdone).
+    // Own rng seed so the rest of the layout is untouched.
+    const spinners = [];
+    {
+      const srng = mulberry32((seed ^ 0x1a2b3c4d) >>> 0);
+      // Main path: ~1 spinner per 140 nodes, only on clear open track
+      let i = platStart + 90;
+      while (i < nodes.length - 80) {
+        const nd = nodes[i];
+        const bad = !nd || nd.isPlatform || nd.branchId || nd.kind === 'fork' || nd.tunnel ||
+                    nd.boost || nd.meshSkip || /drum/.test(nd.kind || '');
+        if (!bad) {
+          const armLen = Math.min(nd.halfW * 0.65, 5.5);   // always leaves one side open
+          spinners.push({
+            pos: { x: nd.pos.x, y: nd.pos.y, z: nd.pos.z },   // dead-center on track
+            armLen,
+            armHeight: 0.85,    // arm cross-section half-height (ball radius 0.5 → sits at ~floor+0.85)
+            rate: 1.8 + srng() * 2.0,    // 1.8–3.8 rad/s — tuneable live
+            dir: srng() < 0.5 ? 1 : -1,  // CW or CCW
+            idx: i,
+          });
+          i += 120 + Math.floor(srng() * 60);   // 120–180 node gap (sparse)
+        } else {
+          i += 10;
+        }
+      }
+      // Per-branch spinners: each divergent lane gets 1-2 spinners mid-route
+      for (const f of forks) {
+        if (f.flavor !== 'divergent' || !f.branches) continue;
+        for (const bid in f.branches) {
+          const arr = f.branches[bid];
+          const tag = bid.charCodeAt(bid.length - 1);
+          const prng = mulberry32((seed ^ 0xdeadbeef ^ (tag * 0xc2b2ae35)) >>> 0);
+          const lo = 22, hi = arr.length - 22;
+          let m = lo + Math.floor(prng() * 20);
+          let cnt = 0;
+          while (m < hi && cnt < 2) {
+            const nd = arr[m];
+            if (nd && !nd.meshSkip) {
+              const armLen = Math.min(nd.halfW * 0.65, 4.5);
+              spinners.push({
+                pos: { x: nd.pos.x, y: nd.pos.y, z: nd.pos.z },
+                armLen,
+                armHeight: 0.85,
+                rate: 2.0 + prng() * 2.2,
+                dir: prng() < 0.5 ? 1 : -1,
+                idx: m,
+                branchId: bid,
+              });
+              cnt++;
+              m += 50 + Math.floor(prng() * 40);
+            } else m += 8;
+          }
+        }
+      }
+    }
+
     const start = nodes[0];
     const finish = nodes.find(n => n.finishLine) || nodes[nodes.length - 1];
-    return { seed, nodes, mesh, collider, start, finish, boosts, obstacles,
+    return { seed, nodes, mesh, collider, start, finish, boosts, obstacles, spinners,
       platform: { startIdx: 0, endIdx: platStart },
       forks, forkAtIdx, branchMeshes, branchColliders };
   }

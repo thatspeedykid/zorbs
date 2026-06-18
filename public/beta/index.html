@@ -565,7 +565,7 @@ let _planet = null, _clouds = null;
 })();
 
 // ---- build the course ----
-let track = null, trackMeshes = [], _bumperVis = [];
+let track = null, trackMeshes = [], _bumperVis = [], _spinnerVis = [];
 let _pulse = null;                  // streaking-pulse animation state (set in buildCourse)
 let _boostMats = [];                // boost-pad chevron textures (scrolled each frame)
 const _tmpV = new THREE.Vector3();  // scratch vector reused each frame (no per-frame alloc)
@@ -642,6 +642,7 @@ function weldVertices(geo) {
 
 function buildCourse(seed) {
   trackMeshes.forEach(m => scene.remove(m)); trackMeshes = [];
+  _bumperVis = []; _spinnerVis = [];
   // EXPERIMENTAL: ?forks=divergent enables the true divergent-route forks (two separate
   // ribbons that bow apart and rejoin). Default is the clean side-by-side lane forks.
   if (typeof ZFORK !== 'undefined' && ZFORK.setDivergent)
@@ -851,6 +852,43 @@ function buildCourse(seed) {
       burst.position.y = H; grp.add(burst);
       scene.add(grp); trackMeshes.push(grp);
       _bumperVis.push({ grp, post, cap, arcs, burst, baseY, H, R, last: 0, burstT: 0 });
+    }
+  }
+
+  // SPINNERS — rotating arm obstacles. Orange-red glowing arms on a hub post.
+  // The visual group rotates to match the physics kinematic body angle each frame.
+  _spinnerVis = [];
+  if (track.spinners && track.spinners.length) {
+    for (const sp of track.spinners) {
+      const ARM_H = sp.armHeight || 0.85;
+      const armL = sp.armLen;
+      const grp = new THREE.Group();
+      grp.position.set(sp.pos.x, sp.pos.y + ARM_H, sp.pos.z);
+      // hub: small cylinder at the pivot point
+      const hub = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.22, 0.22, ARM_H * 2.2, 12),
+        new THREE.MeshStandardMaterial({ color: 0xff4400, emissive: 0xff2200, emissiveIntensity: 1.1, metalness: 0.6, roughness: 0.25 })
+      );
+      grp.add(hub);
+      // two arms: flat orange bars extending left and right
+      const armMat = new THREE.MeshStandardMaterial({ color: 0xff6600, emissive: 0xff3300, emissiveIntensity: 0.85, metalness: 0.5, roughness: 0.3 });
+      for (const signX of [1, -1]) {
+        const arm = new THREE.Mesh(
+          new THREE.BoxGeometry(armL, ARM_H * 0.55, 0.28),
+          armMat
+        );
+        arm.position.x = signX * armL * 0.5;
+        grp.add(arm);
+      }
+      // a faint glow ring in the spin plane so it reads as "active" even at rest
+      const glow = new THREE.Mesh(
+        new THREE.TorusGeometry(armL * 0.52, 0.06, 8, 28),
+        new THREE.MeshBasicMaterial({ color: 0xff8844, transparent: true, opacity: 0.35 })
+      );
+      glow.rotation.x = Math.PI / 2;
+      grp.add(glow);
+      scene.add(grp); trackMeshes.push(grp);
+      _spinnerVis.push({ grp, initAngle: 0 });
     }
   }
 }
@@ -1254,7 +1292,7 @@ function startRace(seed, names) {
   _mapView = null;   // re-frame the overhead map cam for the new track
   buildCourse(seed);
   ZPHYSICS.clearBalls();
-  ZPHYSICS.setTrack(track.collider, track.nodes, { forks: track.forks, branchColliders: track.branchColliders, obstacles: track.obstacles });  // new track each race
+  ZPHYSICS.setTrack(track.collider, track.nodes, { forks: track.forks, branchColliders: track.branchColliders, obstacles: track.obstacles, spinners: track.spinners });  // new track each race
   zorbs.forEach(z => { scene.remove(z.mesh); if(z.ring) scene.remove(z.ring); if(z.ringGlow) scene.remove(z.ringGlow); if(z.trail) scene.remove(z.trail); if(z.streak) scene.remove(z.streak); if(z.label) scene.remove(z.label); });
   _explosions.forEach(e => { scene.remove(e.pts); scene.remove(e.flash); }); _explosions.length = 0;
   _resultSent = false; _officialOrder = null; _officialSlot = -1; _boostQueue.length = 0;
@@ -1518,6 +1556,7 @@ function loop(now) {
 
   updateCamera(dt);
   updateBumpers();
+  updateSpinners();
 
   if (composer && !_LITE) composer.render(); else renderer.render(scene, camera);   // bloom off in lite mode
 }
@@ -1586,6 +1625,15 @@ function playZap(vol){
     const g = ctx.createGain(); g.gain.value = Math.min(0.22, vol * 0.22);
     src.connect(bp); bp.connect(g); g.connect(ctx.destination); src.start();
   } catch(_){}
+}
+function updateSpinners() {
+  if (!_spinnerVis.length || !ZPHYSICS.getSpinners) return;
+  const sps = ZPHYSICS.getSpinners();
+  for (let k = 0; k < _spinnerVis.length; k++) {
+    const vis = _spinnerVis[k], sp = sps[k]; if (!sp) continue;
+    // Match the visual rotation to the physics kinematic angle (Y-axis rotation)
+    vis.grp.rotation.y = sp.angle;
+  }
 }
 // drive the electric-bumper visuals from the physics charge: post bobs UP as it charges, arcs
 // flicker, and at the peak (discharge) a mushroom cap bursts + a static zap plays.
@@ -1979,7 +2027,7 @@ async function boot() {
   const seed = await fetchRaceSeed();
   buildCourse(seed);
   // give the physics the track collider
-  ZPHYSICS.setTrack(track.collider, track.nodes, { forks: track.forks, branchColliders: track.branchColliders, obstacles: track.obstacles });
+  ZPHYSICS.setTrack(track.collider, track.nodes, { forks: track.forks, branchColliders: track.branchColliders, obstacles: track.obstacles, spinners: track.spinners });
   // demo: spawn a field of test balls and race. A few are given the premium skins so
   // Galaxy / Lava / Glass / Chrome are actually visible in the demo (they were all
   // Classic before, so the paid skins never showed on screen).

@@ -26,6 +26,8 @@ const ZPHYSICS = (() => {
   let bumpers = [];
   let bumpSimT = 0;
   const BUMP_CYCLE = 2.4, SHOCK_KICK = 9, SHOCK_UP = 5;
+  // spinners: kinematic arms that rotate around a Y post and physically bat marbles sideways
+  let spinners = [];
 
   // ---- load Rapier from CDN (browser) or require (node) ----
   async function load() {
@@ -111,7 +113,40 @@ const ZPHYSICS = (() => {
         bumpers.push({ pos: ob.pos, shockR: ob.radius + 1.8, off: (k * 0.7) % BUMP_CYCLE, last: 0, charge: 0 });
       });
     }
-  }
+    // SPINNERS: kinematic rigid bodies that rotate around a Y-axis post. Each spinner has
+    // two arm colliders (box shapes) that the solver pushes marbles with automatically —
+    // no manual impulse injection needed. We rotate the kinematic body each step by setting
+    // its next rotation; Rapier's solver handles the contact response.
+    spinners = [];
+    if (forkData && forkData.spinners) {
+      for (const sp of forkData.spinners) {
+        // Post center sits at ball-height so arms sweep at marble level.
+        // armHeight is the arm's cross-section half-height in the collider (0.85).
+        const ARM_H = sp.armHeight || 0.85;
+        const ARM_W = 0.28;   // arm thickness (a thin plank)
+        const armL = sp.armLen;
+        const spBd = RAPIER.RigidBodyDesc.kinematicPositionBased()
+          .setTranslation(sp.pos.x, sp.pos.y + ARM_H, sp.pos.z);
+        const spBody = world.createRigidBody(spBd);
+        // Two arms: offset ±armL/2 along local-X (will rotate with the body)
+        const mk = (signX) => {
+          const cd = RAPIER.ColliderDesc.cuboid(armL * 0.5, ARM_H * 0.5, ARM_W)
+            .setTranslationWrtParent({ x: signX * armL * 0.5, y: 0, z: 0 })
+            .setRestitution(0.55).setFriction(0.1);
+          world.createCollider(cd, spBody);
+        };
+        mk(1); mk(-1);
+        spinners.push({
+          body: spBody,
+          pos: { x: sp.pos.x, y: sp.pos.y + ARM_H, z: sp.pos.z },
+          rate: sp.rate,
+          dir: sp.dir,
+          angle: 0,
+          armLen: armL,
+        });
+      }
+    }
+  }   // end setTrack
 
   // The node list a ball is currently following (its committed branch, or main path).
   function ballNodes(b) {
@@ -236,6 +271,21 @@ const ZPHYSICS = (() => {
     world.timestep = dt;
     fixedStep(dt);
     processBumpers(dt);
+    processSpinners(dt);
+  }
+
+  // Advance each spinner's kinematic rotation by dt. Rapier's solver handles the rest:
+  // the kinematic body sweeps through the ball's position and pushes it via contact.
+  function processSpinners(dt) {
+    if (!spinners.length) return;
+    for (const sp of spinners) {
+      sp.angle += sp.dir * sp.rate * dt;
+      // Quaternion for Y-axis rotation: (0, sin(a/2), 0, cos(a/2))
+      const ha = sp.angle * 0.5;
+      const s = Math.sin(ha), c = Math.cos(ha);
+      sp.body.setNextKinematicTranslation(sp.pos);
+      sp.body.setNextKinematicRotation({ x: 0, y: s, z: 0, w: c });
+    }
   }
 
   // Electric bumpers: a charge rises up each post (sawtooth 0→1). When it wraps (reaches the
@@ -491,6 +541,7 @@ const ZPHYSICS = (() => {
   return {
     init, setTrack, addBall, removeBall, clearBalls, giveBoost,
     getBumpers: () => bumpers,
+    getSpinners: () => spinners,
     step, snapshot, eliminate, checkFalls, leader,
     nearestNode,
     isReady: () => ready,
