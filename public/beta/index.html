@@ -1202,7 +1202,10 @@ let _miniBounds = null;
 function computeMiniBounds(){
   if (!track || !track.nodes || !track.nodes.length) { _miniBounds = null; return; }
   let a=1e9,b=-1e9,c=1e9,d=-1e9;
-  for (const n of track.nodes){ const x=n.pos.x, z=n.pos.z; if(x<a)a=x; if(x>b)b=x; if(z<c)c=z; if(z>d)d=z; }
+  const acc = (x,z)=>{ if(x<a)a=x; if(x>b)b=x; if(z<c)c=z; if(z>d)d=z; };
+  for (const n of track.nodes){ acc(n.pos.x, n.pos.z); }
+  // include the fan lanes — they spread far wider than the spine, so the bounds must cover them
+  if (track.forks) for (const f of track.forks) for (const bid in f.branches) for (const n of f.branches[bid]) acc(n.pos.x, n.pos.z);
   _miniBounds = { minx:a, maxx:b, minz:c, maxz:d };
 }
 function drawMinimap(snap){
@@ -1217,6 +1220,13 @@ function drawMinimap(snap){
   for (let i=0;i<track.nodes.length;i+=2){ const n=track.nodes[i]; if(n.meshSkip){pen=false;continue;}
     const X=px(n.pos.x), Z=pz(n.pos.z); if(!pen){miniCtx.moveTo(X,Z);pen=true;} else miniCtx.lineTo(X,Z); }
   miniCtx.strokeStyle='rgba(130,205,255,.55)'; miniCtx.lineWidth=2.5; miniCtx.lineJoin='round'; miniCtx.stroke();
+  // fan lanes — the spine is hidden (meshSkip) through the fork, so draw each branch lane to fill it
+  if (track.forks) for (const f of track.forks) for (const bid in f.branches){
+    const br = f.branches[bid]; if (!br || !br.length) continue;
+    miniCtx.beginPath();
+    for (let i=0;i<br.length;i+=2){ const n=br[i]; const X=px(n.pos.x), Z=pz(n.pos.z); if(i===0) miniCtx.moveTo(X,Z); else miniCtx.lineTo(X,Z); }
+    miniCtx.stroke();
+  }
   // start (green) + finish (gold)
   const s0 = track.start || track.nodes[0];
   const fN = track.finish || track.nodes[track.nodes.length-1];
