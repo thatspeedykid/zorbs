@@ -96,9 +96,11 @@ const ZFORK = (() => {
     // how many lanes FIT side-by-side without colliding (largest count whose spacing >= minSpacing)
     let roomMax = 4;
     while (roomMax >= 2 && (2 * maxOuter / (roomMax - 1)) < minSpacing) roomMax--;
-    // RANDOM 1-4 lanes per seed, capped to what fits. N=1 means NO split — this zone stays a single
-    // descending path (return null and the caller leaves it as a normal winding section).
-    let N = Math.min(1 + Math.floor(rng() * 4), roomMax);
+    // RANDOM lane count per seed, weighted toward fans: ~10% single, the rest 2-4 lanes. Capped to
+    // what fits. N=1 means NO split (single descending path) — kept as a rare surprise, not the norm.
+    const wr = rng();
+    const want = wr < 0.10 ? 1 : wr < 0.40 ? 2 : wr < 0.72 ? 3 : 4;
+    let N = Math.min(want, roomMax);
     if (N < 2) return null;
     const spacing = 2 * maxOuter / (N - 1);
     const offs = [];
