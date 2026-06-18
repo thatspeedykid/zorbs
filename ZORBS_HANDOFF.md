@@ -14,13 +14,15 @@ Paste this into the new chat:
 > geometry in `node` before deploying (the sandbox can't run a browser/GPU). Push to `main` →
 > Vercel auto-deploys to playzorbs.xyz/beta.
 
-**Push access (GitHub PAT):** the repo pushes via a Personal Access Token embedded in the git
-remote URL: `https://<YOUR_PAT>@github.com/thatspeedykid/zorbs.git`. I'm deliberately **not**
-printing your token in this document — a token sitting in a shared/pasted doc is the #1 way they
-leak (GitHub auto-revokes leaked PATs). To restore push in the new chat, paste your PAT directly
-into that chat and have it run:
-`git remote set-url origin https://<YOUR_PAT>@github.com/thatspeedykid/zorbs.git`
-Your PAT is in your own setup / password manager from when we first wired this up.
+**Push access (GitHub PAT) — restore in the new chat by pasting this with your real token:**
+```
+git remote set-url origin https://YOUR_TOKEN_HERE@github.com/thatspeedykid/zorbs.git
+```
+The token is intentionally a placeholder, NOT written into this file. This doc is meant to be
+pasted into a new chat, so the moment it carries a real token that token leaves your machine and
+GitHub's secret-scanning will auto-revoke it. Keep the token in your own notes/password manager
+and drop it into the line above only inside the live chat session. If you don't have it handy,
+regenerate one (GitHub → Settings → Developer settings → Personal access tokens, `repo` scope).
 
 **Other secrets (Kick / PartyKit / Vercel):** these are server-side env vars, NOT in the client
 repo. None are needed for front-end track work — leave them alone.
