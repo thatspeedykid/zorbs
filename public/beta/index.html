@@ -655,6 +655,15 @@ function buildCourse(seed) {
   const lenRng = (Math.abs((seed * 2654435761) >>> 0) % 200);   // 0..199
   const trackLen = 760 + lenRng;                                  // 760..959 (longer: room for a wide fan)
   track = ZTRACK.generate(seed, trackLen, _fieldSize || 20);
+  // DIAGNOSTIC: show the seed + lane count so it's obvious whether each race is a new track.
+  try {
+    let dbg = document.getElementById('seedDbg');
+    if (!dbg) { dbg = document.createElement('div'); dbg.id = 'seedDbg';
+      dbg.style.cssText = 'position:fixed;top:6px;right:8px;z-index:9999;font:11px monospace;color:#9fd6ff;background:rgba(0,0,0,.45);padding:3px 7px;border-radius:6px;pointer-events:none';
+      document.body.appendChild(dbg); }
+    const lanes = (track.forks && track.forks[0]) ? track.forks[0].branchOrder.length : 1;
+    dbg.textContent = 'seed ' + (seed >>> 0) + ' · ' + lanes + ' lane' + (lanes === 1 ? '' : 's');
+  } catch (_) {}
   if (typeof computeMiniBounds === 'function') computeMiniBounds();
   meshFrom(track.mesh.floor, FLOOR_MAT, true);   // weld = smooth-shaded ramp
   meshFrom(track.mesh.walls, WALL_MAT);
