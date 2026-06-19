@@ -479,6 +479,27 @@ const ZPHYSICS = (() => {
         if (onPad) b.boost = Math.min(2.2, Math.max(b.boost, BOOST_PAD_STRENGTH));
       }
 
+      // LAUNCH-PINS: a discrete one-time pop, not a continuous force. Triggers once per
+      // pad crossing (cooldown via b._launchCD keyed to this node range so re-entering
+      // the SAME pad next frame can't re-fire, but a different pad later still can).
+      // _launchT is a brief grace window during which the floor-snap below is skipped,
+      // so the upward impulse actually gets to arc instead of being clamped back to the
+      // surface on the very next line.
+      if (n.launch && (!b._launchCD || b._launchCD <= 0)) {
+        const m2 = b.body.mass() || 1;
+        const lv0 = b.body.linvel();
+        b.body.applyImpulse({
+          x: fx * n.launch.fwdBoost * n.launch.power * m2,
+          y: n.launch.power * m2,
+          z: fz * n.launch.fwdBoost * n.launch.power * m2,
+        }, true);
+        b._launchCD = 1.2;     // seconds before this ball can trigger another launch-pin
+        b._launchT = 0.5;      // seconds of grace where floor-snap is suppressed (let it arc)
+        b._justLaunched = true;   // one-shot edge for the renderer to trigger a flash
+      }
+      if (b._launchCD > 0) b._launchCD -= dt;
+      if (b._launchT > 0) b._launchT -= dt;
+
       // total drive: forward + gentle lane-seek + boost. Applied as a force each
       // fixed step (consistent), and kept modest so ball-ball contacts still win.
       const drive = DRIVE_FORCE * b.speedMul * (1 + b.boost);
@@ -509,7 +530,11 @@ const ZPHYSICS = (() => {
         : Math.abs(curLat) <= n.halfW + edgeMargin);
       // GROUNDED = at or below the surface (within a small band). When grounded, rest the
       // ball ON the surface with zero vertical velocity. No gap-chasing = no vibration.
-      if (onSurface && gap > -0.35) {        // touching or pressed into floor
+      // LAUNCH GRACE: while b._launchT is counting down, skip the snap entirely so the
+      // upward impulse from a launch-pin actually arcs instead of being clamped back to
+      // the floor on the very next physics step (the bug this exists to avoid).
+      const inLaunchGrace = b._launchT > 0;
+      if (!inLaunchGrace && onSurface && gap > -0.35) {        // touching or pressed into floor
         b._grounded = true;
         // place on the surface
         b.body.setTranslation({ x: tpos.x, y: floorY, z: tpos.z }, true);
@@ -565,7 +590,8 @@ const ZPHYSICS = (() => {
     for (const [id, b] of balls) {
       const t = b.body.translation();
       const lv = b.body.linvel();
-      out[id] = { x: t.x, y: t.y, z: t.z, vx: lv.x, vz: lv.z, alive: b.alive, hint: b.hint, branch: b.branch||null, progress: b.progress||b.hint, boost: b.boost||0 };
+      out[id] = { x: t.x, y: t.y, z: t.z, vx: lv.x, vz: lv.z, alive: b.alive, hint: b.hint, branch: b.branch||null, progress: b.progress||b.hint, boost: b.boost||0, justLaunched: !!b._justLaunched };
+      b._justLaunched = false;   // one-shot edge — cleared right after this snapshot reads it
     }
     return out;
   }

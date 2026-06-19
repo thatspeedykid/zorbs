@@ -565,7 +565,7 @@ let _planet = null, _clouds = null;
 })();
 
 // ---- build the course ----
-let track = null, trackMeshes = [], _bumperVis = [], _spinnerVis = [];
+let track = null, trackMeshes = [], _bumperVis = [], _spinnerVis = [], _launchVis = [];
 let _pulse = null;                  // streaking-pulse animation state (set in buildCourse)
 let _boostMats = [];                // boost-pad chevron textures (scrolled each frame)
 const _tmpV = new THREE.Vector3();  // scratch vector reused each frame (no per-frame alloc)
@@ -642,7 +642,7 @@ function weldVertices(geo) {
 
 function buildCourse(seed) {
   trackMeshes.forEach(m => scene.remove(m)); trackMeshes = [];
-  _bumperVis = []; _spinnerVis = [];
+  _bumperVis = []; _spinnerVis = []; _launchVis = [];
   // EXPERIMENTAL: ?forks=divergent enables the true divergent-route forks (two separate
   // ribbons that bow apart and rejoin). Default is the clean side-by-side lane forks.
   if (typeof ZFORK !== 'undefined' && ZFORK.setDivergent)
@@ -889,6 +889,84 @@ function buildCourse(seed) {
       grp.add(glow);
       scene.add(grp); trackMeshes.push(grp);
       _spinnerVis.push({ grp, initAngle: 0 });
+    }
+  }
+
+  // LAUNCH-PINS — a glowing pad embedded flush in the floor that flashes when a ball
+  // crosses it. Resolve world position from the node range (main path or a branch).
+  _launchVis = [];
+  if (track.launchPins && track.launchPins.length) {
+    const resolveNodes = (lp) => {
+      if (lp.branchId) {
+        for (const f of track.forks) { if (f.branches && f.branches[lp.branchId]) return f.branches[lp.branchId]; }
+        return null;
+      }
+      return track.nodes;
+    };
+    for (const lp of track.launchPins) {
+      const arr = resolveNodes(lp);
+      if (!arr) continue;
+      const midIdx = Math.floor((lp.startIdx + lp.endIdx) / 2);
+      const nd = arr[midIdx]; if (!nd) continue;
+      const grp = new THREE.Group();
+      grp.position.set(nd.pos.x, nd.pos.y + 0.06, nd.pos.z);   // flush with the floor, tiny lift to avoid z-fighting
+      // orient flat in the track's local plane (use node's right/dir so it sits naturally on slopes)
+      const padW = Math.min(nd.halfW * 1.5, 6.5);
+      const pad = new THREE.Mesh(
+        new THREE.CircleGeometry(padW * 0.5, 28),
+        new THREE.MeshStandardMaterial({ color: 0xffd700, emissive: 0xffaa00, emissiveIntensity: 0.9, metalness: 0.3, roughness: 0.4, transparent: true, opacity: 0.85, side: THREE.DoubleSide })
+      );
+      pad.rotation.x = -Math.PI / 2;   // lie flat
+      grp.add(pad);
+      // pulsing ring outline
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(padW * 0.48, padW * 0.56, 28),
+        new THREE.MeshBasicMaterial({ color: 0xffe27a, transparent: true, opacity: 0.9, side: THREE.DoubleSide })
+      );
+      ring.rotation.x = -Math.PI / 2;
+      grp.add(ring);
+      // upward chevron arrows (read as "this launches you")
+      const chevronMat = new THREE.MeshBasicMaterial({ color: 0xfff3c4, transparent: true, opacity: 0.7 });
+      const chevrons = [];
+      for (let c = 0; c < 3; c++) {
+        const chev = new THREE.Mesh(new THREE.ConeGeometry(padW * 0.16, padW * 0.22, 4), chevronMat);
+        chev.position.y = 0.3 + c * 0.55;
+        chev.rotation.y = Math.PI / 4;
+        grp.add(chev); chevrons.push(chev);
+      }
+      scene.add(grp); trackMeshes.push(grp);
+      _launchVis.push({ grp, pad, ring, chevrons, pos: { x: nd.pos.x, y: nd.pos.y, z: nd.pos.z }, flashT: 0 });
+    }
+  }
+}
+
+// Trigger the flash animation on the nearest launch-pin visual to a world position
+// (called when physics reports a ball got launched — see updateLaunchPins below).
+function flashLaunchPin(pos) {
+  let best = null, bestD = 1e9;
+  for (const lv of _launchVis) {
+    const dx = lv.pos.x - pos.x, dz = lv.pos.z - pos.z;
+    const d = dx * dx + dz * dz;
+    if (d < bestD) { bestD = d; best = lv; }
+  }
+  if (best && bestD < 25) best.flashT = 1;
+}
+function updateLaunchPins(now) {
+  for (const lv of _launchVis) {
+    // idle pulse: gentle breathing glow
+    const pulse = 0.7 + 0.3 * Math.sin(now / 1000 * 3 + lv.pos.x * 0.3);
+    lv.ring.material.opacity = 0.5 + pulse * 0.4;
+    for (const c of lv.chevrons) c.position.y = (c.position.y + 0.4 * (1/60)) % 1.65 + 0.3;
+    // flash burst on trigger
+    if (lv.flashT > 0) {
+      lv.flashT = Math.max(0, lv.flashT - 0.045);
+      const e = lv.flashT;
+      lv.pad.material.opacity = 0.85 + e * 0.15;
+      lv.pad.scale.setScalar(1 + (1 - e) * 0.5);
+      lv.ring.scale.setScalar(1 + (1 - e) * 1.8);
+    } else {
+      lv.pad.scale.setScalar(1);
+      lv.ring.scale.setScalar(1);
     }
   }
 }
@@ -1484,6 +1562,7 @@ function loop(now) {
     if (s) {
       z.mesh.position.set(s.x, s.y, s.z);
       if (z.label) { z.label.position.set(s.x, s.y + BALL_R + 0.95, s.z); z.label.material.opacity = z.eliminated ? 0.35 : 1; }
+      if (s.justLaunched) flashLaunchPin({ x: s.x, z: s.z });
     }
     // spawn animation
     if (z.spawnT < 1) {
@@ -1557,6 +1636,7 @@ function loop(now) {
   updateCamera(dt);
   updateBumpers();
   updateSpinners();
+  updateLaunchPins(now);
 
   if (composer && !_LITE) composer.render(); else renderer.render(scene, camera);   // bloom off in lite mode
 }

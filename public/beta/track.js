@@ -534,6 +534,58 @@ const ZTRACK = (() => {
       }
     }
 
+    // LAUNCH-PINS: a flat pad embedded in the floor that fires a one-time upward+forward
+    // impulse when a ball crosses it (a discrete event, unlike the continuous boost strips).
+    // Tagged on nodes as n.launch = {power, fwdBoost} over a short span so physics can detect
+    // entry. Sparse — bigger disruption than a bumper, so overdoing it stalls the race.
+    // Skips the same hazards as boosts/obstacles (platform, fork, tunnel, existing boost/launch).
+    const launchPins = [];
+    {
+      const lrng = mulberry32((seed ^ 0x2f8a3c91) >>> 0);
+      const GAP_MIN = 130, GAP_VAR = 90, PAD_LEN = 6;   // short pad, wide gaps (rare event)
+      let i = platStart + 110;
+      while (i < nodes.length - 70) {
+        const nd = nodes[i];
+        const bad = !nd || nd.isPlatform || nd.branchId || nd.kind === 'fork' || nd.tunnel ||
+                    nd.boost || nd.meshSkip || /drum/.test(nd.kind || '');
+        if (!bad) {
+          let ok = true;
+          for (let k = 0; k < PAD_LEN; k++) {
+            const n2 = nodes[i + k];
+            if (!n2 || n2.isPlatform || n2.branchId || n2.kind === 'fork' || n2.tunnel || n2.boost || n2.meshSkip) { ok = false; break; }
+          }
+          if (ok) {
+            // power/fwdBoost are the "feel" knobs — tuned live, not blind-guessed here.
+            const power = 7.5 + lrng() * 3.0;        // upward impulse strength
+            const fwdBoost = 0.55 + lrng() * 0.35;    // extra forward kick fraction
+            for (let k = 0; k < PAD_LEN; k++) nodes[i + k].launch = { power, fwdBoost };
+            launchPins.push({ startIdx: i, endIdx: i + PAD_LEN - 1, power, fwdBoost });
+            i += PAD_LEN + GAP_MIN + Math.floor(lrng() * GAP_VAR);
+          } else { i += 10; }
+        } else { i += 10; }
+      }
+      // Per-branch: each divergent lane gets at most ONE launch-pin (rare surprise per route)
+      for (const f of forks) {
+        if (f.flavor !== 'divergent' || !f.branches) continue;
+        for (const bid in f.branches) {
+          const arr = f.branches[bid];
+          const tag = bid.charCodeAt(bid.length - 1);
+          const prng = mulberry32((seed ^ 0x6a3f1d57 ^ (tag * 0xb5297a4d)) >>> 0);
+          if (prng() > 0.45) continue;   // not every lane gets one
+          const lo = 30, hi = arr.length - 30;
+          let m = lo + Math.floor(prng() * (hi - lo - PAD_LEN));
+          let ok = true;
+          for (let k = 0; k < PAD_LEN; k++) { const n2 = arr[m + k]; if (!n2 || n2.meshSkip || n2.boost) { ok = false; break; } }
+          if (ok) {
+            const power = 7.0 + prng() * 3.0;
+            const fwdBoost = 0.5 + prng() * 0.4;
+            for (let k = 0; k < PAD_LEN; k++) arr[m + k].launch = { power, fwdBoost };
+            launchPins.push({ startIdx: m, endIdx: m + PAD_LEN - 1, power, fwdBoost, branchId: bid });
+          }
+        }
+      }
+    }
+
     // Build mesh for the main path, then add each fork's geometry.
     // lanesOnly forks (v2.1) live INSIDE the widened main corridor, so the main mesh
     // already covers their floor and outer walls — they only contribute the DIVIDER
@@ -638,7 +690,7 @@ const ZTRACK = (() => {
 
     const start = nodes[0];
     const finish = nodes.find(n => n.finishLine) || nodes[nodes.length - 1];
-    return { seed, nodes, mesh, collider, start, finish, boosts, obstacles, spinners,
+    return { seed, nodes, mesh, collider, start, finish, boosts, obstacles, spinners, launchPins,
       platform: { startIdx: 0, endIdx: platStart },
       forks, forkAtIdx, branchMeshes, branchColliders };
   }
