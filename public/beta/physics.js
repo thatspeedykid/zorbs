@@ -519,8 +519,21 @@ const ZPHYSICS = (() => {
         lanePull = LANE_PULL * 2.0;
       }
       const latErr = (targetLane - curLat);             // toward preferred/churn lane
-      const laneFx = r.x * latErr * lanePull;
-      const laneFz = r.z * latErr * lanePull;
+      // DAMPING: the lane-seek was pure-proportional (force ∝ position error only), which
+      // is an undamped spring — every frame it overshoots the target, swings past, gets
+      // pulled back, overshoots again, and on 'route' nodes (lanePull doubled to 4.4 for
+      // divergent fork lanes) the overshoot GROWS frame over frame instead of settling,
+      // producing a real, escalating side-to-side zig-zag down the whole branch (confirmed
+      // in simulation: curLat swinging roughly ±3 to ±4.4 and widening). Adding a term
+      // proportional to LATERAL VELOCITY (a standard PD controller) brakes the ball as it
+      // approaches the target instead of slamming through it, so it settles instead of
+      // oscillating. Velocity is split into along-forward and along-right components; only
+      // the lateral (right) component is damped — forward speed is untouched.
+      const lv0 = b.body.linvel();
+      const latVel = lv0.x * r.x + lv0.z * r.z;          // current lateral velocity
+      const LANE_DAMP = 0.55;                            // damping ratio relative to lanePull
+      const laneFx = r.x * (latErr * lanePull - latVel * lanePull * LANE_DAMP);
+      const laneFz = r.z * (latErr * lanePull - latVel * lanePull * LANE_DAMP);
 
       const m = b.body.mass() || 1;
       // SPIRAL DOWNFORCE: tight downward coils can let a ball float off the curved surface;
