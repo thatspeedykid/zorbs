@@ -25,7 +25,7 @@ const ZPHYSICS = (() => {
   // electric bumpers: energy charges up each post; at the top it discharges, shocking nearby balls
   let bumpers = [];
   let bumpSimT = 0;
-  const BUMP_CYCLE = 2.4, SHOCK_KICK = 9, SHOCK_UP = 5;
+  const BUMP_RISE_CYCLE = 4.2, SHOCK_KICK = 9, SHOCK_UP = 5;   // seconds for one full hide→rise→hold→retract cycle
   // spinners: kinematic arms that rotate around a Y post and physically bat marbles sideways
   let spinners = [];
 
@@ -102,27 +102,38 @@ const ZPHYSICS = (() => {
     if (forkData && forkData.branchColliders) {
       for (const bc of forkData.branchColliders) mk(bc.buffers);
     }
-    // OBSTACLES: static bumper pillars (Y-aligned cylinders). Restitution gives a real bounce.
-    // BURIED FOOT: the collider is anchored to the raw centerline node's Y, but the ball
-    // actually rides the smooth analytic floor (catmull-rom interpolated — see smoothFloorY),
-    // which can sit a bit BELOW the raw node on curve/bank transitions. That left a gap under
-    // the post a ball could wedge into (trapped half above, half below the visible floor).
-    // Fix: extend the post deep below the node anchor (a "buried foot") so its bottom is
-    // always well under the real floor regardless of interpolation drift, while the visible
-    // TOP half (above the anchor) stays exactly as before.
-    const POST_BURY = 4.0;   // how far below the anchor the collider/mesh extends
+    // OBSTACLES: bumper pillars that RETRACT into the track and rise back up on a slow
+    // cycle — telegraphed, not a permanent wall. Previously these were static colliders
+    // baked directly into the fixed trackBody, which meant they could never move after
+    // creation. Now each post is its own kinematicPositionBased body (like a spinner)
+    // so its Y can be animated every frame: hidden flush with the floor → rises slowly →
+    // holds up briefly → retracts back down. While retracted (at or below the floor) it
+    // physically cannot block a ball, matching the visual of it being "in" the track.
+    // BURIED FOOT: the collider extends well below the node's raw Y (see prior comment
+    // history) so even at full extension its base is always under the real analytic floor
+    // — no gap a ball could wedge into.
+    const POST_BURY = 4.0;        // how far below the anchor the collider extends downward
     bumpers = [];
     if (forkData && forkData.obstacles) {
       forkData.obstacles.forEach((ob, k) => {
         const totalH = ob.height + POST_BURY;
-        // center the taller cylinder so its TOP stays at ob.pos.y + ob.height (unchanged),
-        // and its bottom now reaches ob.pos.y - POST_BURY (buried well under any floor dip).
-        const centerY = ob.pos.y + ob.height / 2 - POST_BURY / 2;
+        const spBd = RAPIER.RigidBodyDesc.kinematicPositionBased()
+          .setTranslation(ob.pos.x, ob.pos.y, ob.pos.z);   // Y updated every frame in processBumpers
+        const body = world.createRigidBody(spBd);
+        // Collider is centered on the body's local origin; local Y offset places it so the
+        // TOP of the cylinder sits at +ob.height above the body's translation when fully up,
+        // and the BURIED base hangs POST_BURY below — same geometry as before, just on a
+        // body we can now move instead of a fixed offset baked into the static mesh.
+        const localCenterY = ob.height / 2 - POST_BURY / 2;
         const cd = RAPIER.ColliderDesc.cylinder(totalH / 2, ob.radius)
-          .setTranslation(ob.pos.x, centerY, ob.pos.z)
+          .setTranslation(0, localCenterY, 0)
           .setRestitution(0.45).setFriction(0.2);
-        world.createCollider(cd, trackBody);
-        bumpers.push({ pos: ob.pos, shockR: ob.radius + 1.8, off: (k * 0.7) % BUMP_CYCLE, last: 0, charge: 0 });
+        world.createCollider(cd, body);
+        bumpers.push({
+          body, basePos: { x: ob.pos.x, y: ob.pos.y, z: ob.pos.z }, height: ob.height,
+          shockR: ob.radius + 1.8, off: (k * 0.7) % BUMP_RISE_CYCLE, last: 0, charge: 0,
+          riseY: 0,   // current vertical offset (0 = fully retracted/hidden, ob.height = fully up)
+        });
       });
     }
     // SPINNERS: kinematic rigid bodies that rotate around a Y-axis post. Each spinner has
@@ -233,8 +244,12 @@ const ZPHYSICS = (() => {
     const N = nodeArr || nodes;
     if (!N) return 0;
     let best = hint || 0, bestD = Infinity;
+    // Window widened (was -8..+24) for extra margin: a ball on a steep drop/spiral or one
+    // that's just been knocked by a spinner/launch-pin can advance several nodes per frame;
+    // too-narrow a window let the hint quietly fall behind and get stuck re-confirming a
+    // stale node (see the vertical de-localization guard above this call site).
     const lo = Math.max(0, (hint || 0) - 8);
-    const hi = Math.min(N.length - 1, (hint || 0) + 24);
+    const hi = Math.min(N.length - 1, (hint || 0) + 40);
     for (let i = lo; i <= hi; i++) {
       const n = N[i].pos;
       const dx = n.x - pos.x, dy = n.y - pos.y, dz = n.z - pos.z;
@@ -316,8 +331,8 @@ const ZPHYSICS = (() => {
     const dt = Math.max(0.002, Math.min(0.033, realDt));
     world.timestep = dt;
     processSpinners(dt);   // set kinematic positions BEFORE the solver step (required by Rapier)
+    processBumpers(dt);    // bumpers are now kinematic too — same ordering requirement
     fixedStep(dt);
-    processBumpers(dt);
   }
 
   // Quaternion multiply: a * b (Hamilton product, both {x,y,z,w})
@@ -350,16 +365,45 @@ const ZPHYSICS = (() => {
 
   // Electric bumpers: a charge rises up each post (sawtooth 0→1). When it wraps (reaches the
   // top) the bumper DISCHARGES, shocking every ball within reach with a chaotic launch.
+  // RISE/RETRACT CYCLE: a smoothstep ease through four phases so the post telegraphs its
+  // danger instead of just standing there the whole race —
+  //   hidden (flush with floor, harmless) → RISE (slow, visible warning) → HOLD (fully up,
+  //   this is the only window it can actually hit a ball) → RETRACT (slow) → repeat.
+  // riseFrac returned is 0 (fully retracted) to 1 (fully risen).
+  function bumperRiseFrac(t01) {
+    const HIDE = 0.10, RISE = 0.30, HOLD = 0.20, RETRACT = 0.30;  // fractions of BUMP_RISE_CYCLE, sums to 0.90 + trailing hide
+    const sstep = (e) => e * e * (3 - 2 * e);
+    if (t01 < HIDE) return 0;
+    if (t01 < HIDE + RISE) return sstep((t01 - HIDE) / RISE);
+    if (t01 < HIDE + RISE + HOLD) return 1;
+    if (t01 < HIDE + RISE + HOLD + RETRACT) return 1 - sstep((t01 - HIDE - RISE - HOLD) / RETRACT);
+    return 0;
+  }
+
   function processBumpers(dt) {
     if (!bumpers.length) return;
     bumpSimT += dt;
     for (const bm of bumpers) {
-      const charge = ((bumpSimT + bm.off) % BUMP_CYCLE) / BUMP_CYCLE;
-      if (charge < bm.last) {                         // wrapped → energy hit the top → ZAP
+      const t01 = ((bumpSimT + bm.off) % BUMP_RISE_CYCLE) / BUMP_RISE_CYCLE;
+      const frac = bumperRiseFrac(t01);
+      bm.riseY = frac * bm.height;
+      // Move the kinematic body so the post's WORLD position rises out of / sinks into the
+      // floor. basePos.y is the floor anchor; subtracting (height - riseY) buries the post
+      // by exactly the amount it hasn't risen yet, so at frac=0 the whole visible post is
+      // below the floor line (harmless) and at frac=1 it's fully extended (the original
+      // static height/position, unchanged from before this feature).
+      bm.body.setNextKinematicTranslation({
+        x: bm.basePos.x, y: bm.basePos.y - (bm.height - bm.riseY), z: bm.basePos.z,
+      });
+      // SHOCK ZAP: only while fully risen (frac===1, i.e. inside the HOLD window) does the
+      // post actually discharge — matches the idea that the danger window is the brief
+      // moment it's all the way up, not the whole cycle.
+      const fullyUp = frac >= 0.999;
+      if (fullyUp && !bm.wasFullyUp) {
         for (const [, b] of balls) {
           if (!b.alive) continue;
           const t = b.body.translation();
-          const dx = t.x - bm.pos.x, dz = t.z - bm.pos.z;
+          const dx = t.x - bm.basePos.x, dz = t.z - bm.basePos.z;
           const d2 = dx * dx + dz * dz;
           if (d2 < bm.shockR * bm.shockR) {
             const d = Math.sqrt(d2) || 0.001;
@@ -368,7 +412,8 @@ const ZPHYSICS = (() => {
           }
         }
       }
-      bm.last = charge; bm.charge = charge;
+      bm.wasFullyUp = fullyUp;
+      bm.charge = frac;   // exposed for the renderer (now means "how risen", not "sawtooth charge")
     }
   }
 
@@ -412,7 +457,17 @@ const ZPHYSICS = (() => {
         const hn = curNodes[Math.min(b.hint, curNodes.length - 1)];
         const ddx = t.x - hn.pos.x, ddy = t.y - hn.pos.y, ddz = t.z - hn.pos.z;
         const lim = Math.max(20, hn.halfW * 5);
-        if (ddx*ddx + ddy*ddy + ddz*ddz > lim*lim) {
+        // VERTICAL-ONLY CHECK: the combined-distance check above is calibrated for being
+        // knocked sideways (where halfW*5 is a sensible lateral budget), but it's far too
+        // loose for vertical drift — a ball that's merely fallen behind its hint on a
+        // descending track can rack up |ddy| > 20 while staying perfectly on-lane, never
+        // tripping the combined check, and the narrow nearestNode() window (hint-8..hint+24)
+        // can get stuck re-confirming the same stale hint forever once the ball is physically
+        // past its search range. That silent drift is exactly what eventually trips
+        // checkFalls() and erroneously eliminates a ball that never actually fell off
+        // anything. A tight standalone Y check catches it long before that.
+        const vlim = 10;   // a healthy ball should rarely be >10 units below its hint's Y
+        if (ddx*ddx + ddy*ddy + ddz*ddz > lim*lim || ddy < -vlim) {
           b.hint = nearestNodeWide(t, b.hint, 300, curNodes);
         }
       }

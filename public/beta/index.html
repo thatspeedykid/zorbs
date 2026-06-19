@@ -851,7 +851,7 @@ function buildCourse(seed) {
       );
       burst.position.y = H; grp.add(burst);
       scene.add(grp); trackMeshes.push(grp);
-      _bumperVis.push({ grp, post, cap, arcs, burst, baseY, H, R, last: 0, burstT: 0 });
+      _bumperVis.push({ grp, post, cap, arcs, burst, baseY, H, R, wasFullyUp: false, burstT: 0 });
     }
   }
 
@@ -1732,12 +1732,15 @@ function updateBumpers(){
   let zaps = 0;                                   // cap audible zaps per frame
   for (let k = 0; k < _bumperVis.length; k++){
     const vis = _bumperVis[k], bm = bms[k]; if (!bm) continue;
+    // bm.charge now means "how risen" (0 = fully retracted/hidden, 1 = fully extended) —
+    // matches bm.riseY in physics.js exactly, so the visual telescopes in lockstep with
+    // the real collider instead of just bobbing a little at the top.
     const c = bm.charge || 0;
-    vis.grp.position.y = vis.baseY + c * 0.6;     // bob upward as it charges
+    vis.grp.position.y = vis.baseY - (vis.H - c * vis.H);   // same formula as the physics body
     vis.post.material.emissiveIntensity = 0.5 + c * 2.0;
     vis.cap.material.opacity = 0.5 + c * 0.5;
-    // arcs flicker, stronger when charged
-    const live = c > 0.35 && Math.random() < 0.25 + c * 0.55;
+    // arcs only flicker once it's mostly risen (it's "live" near the top of its travel)
+    const live = c > 0.85 && Math.random() < 0.25 + c * 0.55;
     for (const line of vis.arcs){
       if (live){
         const ang = Math.random() * 6.283, rr = vis.R + 0.14;
@@ -1751,12 +1754,15 @@ function updateBumpers(){
         line.material.opacity = 0.6 + Math.random() * 0.4;
       } else line.material.opacity *= 0.55;
     }
-    // DISCHARGE: charge wrapped (reached the top) → mushroom burst + zap
-    if (c < vis.last){
+    // DISCHARGE: fires once at the moment it reaches FULLY risen (rising edge into c>=0.999),
+    // matching physics.js's bm.wasFullyUp edge exactly — was previously a sawtooth-wrap
+    // detector that no longer makes sense now the cycle is hide→rise→hold→retract.
+    const fullyUp = c >= 0.999;
+    if (fullyUp && !vis.wasFullyUp){
       vis.burstT = 1;
       if (zaps < 3){ const dd = camera.position.distanceTo(vis.grp.position); if (dd < 32){ playZap(1 - dd/32); zaps++; } }
     }
-    vis.last = c;
+    vis.wasFullyUp = fullyUp;
     if (vis.burstT > 0){
       vis.burstT = Math.max(0, vis.burstT - 0.07);
       const e = 1 - vis.burstT;

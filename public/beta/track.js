@@ -628,12 +628,19 @@ const ZTRACK = (() => {
     const spinners = [];
     {
       const srng = mulberry32((seed ^ 0x1a2b3c4d) >>> 0);
+      // SPACING RULE: a spinner must never land right next to a bumper post — back-to-back
+      // they defeat each other's purpose (the spinner just slams the ball straight into the
+      // post, or the post blocks the one lane the spinner left open). Keep a minimum node
+      // gap from every existing bumper on the SAME node array (main vs main, or same branch).
+      const MIN_GAP_FROM_BUMPER = 45;
+      const tooCloseToBumper = (idx, branchId) => obstacles.some(ob =>
+        (ob.branchId || null) === (branchId || null) && Math.abs(ob.idx - idx) < MIN_GAP_FROM_BUMPER);
       // Main path: ~1 spinner per 140 nodes, only on clear open track
       let i = platStart + 90;
       while (i < nodes.length - 80) {
         const nd = nodes[i];
         const bad = !nd || nd.isPlatform || nd.branchId || nd.kind === 'fork' || nd.tunnel ||
-                    nd.boost || nd.meshSkip || /drum/.test(nd.kind || '');
+                    nd.boost || nd.meshSkip || /drum/.test(nd.kind || '') || tooCloseToBumper(i, null);
         if (!bad) {
           const armLen = Math.min(nd.halfW * 0.65, 5.5);   // always leaves one side open
           spinners.push({
@@ -667,7 +674,7 @@ const ZTRACK = (() => {
           let cnt = 0;
           while (m < hi && cnt < 2) {
             const nd = arr[m];
-            if (nd && !nd.meshSkip) {
+            if (nd && !nd.meshSkip && !tooCloseToBumper(m, bid)) {
               const armLen = Math.min(nd.halfW * 0.65, 4.5);
               spinners.push({
                 pos: { x: nd.pos.x, y: nd.pos.y, z: nd.pos.z },
