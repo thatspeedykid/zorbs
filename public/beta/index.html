@@ -9,7 +9,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Zorbs On Stream</title>
+<title>Zorbs On Stream — v0.3</title>
 <style>
   html,body { margin:0; height:100%; background:#02050d; overflow:hidden; font-family:'Courier New',monospace;
     touch-action:manipulation; overscroll-behavior:none; -webkit-text-size-adjust:100%; -webkit-tap-highlight-color:transparent; }
@@ -316,7 +316,7 @@ const statusEl = document.getElementById('nextrace');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = 'BETA-b1';
+const BUILD = 'v0.3';
 console.log('[ZORBS] build', BUILD);
 
 // ---- MOBILE UX: mark touch devices, block pinch/double-tap zoom, wire fullscreen button ----
@@ -1736,7 +1736,13 @@ function updateBumpers(){
     // matches bm.riseY in physics.js exactly, so the visual telescopes in lockstep with
     // the real collider instead of just bobbing a little at the top.
     const c = bm.charge || 0;
-    vis.grp.position.y = vis.baseY - (vis.H - c * vis.H);   // same formula as the physics body
+    // HIDE_DEPTH: how far below the floor the post's TOP sits when fully retracted (c=0).
+    // The old formula put the top exactly flush with baseY at c=0 — still reads as a visible
+    // sliver/lip from most angles (see screenshot: bases peeking through the floor). Linear
+    // interpolate from "fully buried" (grp.y = baseY - H - HIDE_DEPTH) at c=0 to "fully
+    // extended, unchanged from before this feature" (grp.y = baseY) at c=1.
+    const HIDE_DEPTH = 1.4;
+    vis.grp.position.y = (vis.baseY - vis.H - HIDE_DEPTH) + c * (vis.H + HIDE_DEPTH);
     vis.post.material.emissiveIntensity = 0.5 + c * 2.0;
     vis.cap.material.opacity = 0.5 + c * 0.5;
     // arcs only flicker once it's mostly risen (it's "live" near the top of its travel)

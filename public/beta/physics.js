@@ -388,12 +388,14 @@ const ZPHYSICS = (() => {
       const frac = bumperRiseFrac(t01);
       bm.riseY = frac * bm.height;
       // Move the kinematic body so the post's WORLD position rises out of / sinks into the
-      // floor. basePos.y is the floor anchor; subtracting (height - riseY) buries the post
-      // by exactly the amount it hasn't risen yet, so at frac=0 the whole visible post is
-      // below the floor line (harmless) and at frac=1 it's fully extended (the original
-      // static height/position, unchanged from before this feature).
+      // floor. At frac=0 the collider's TOP needs to sit MEANINGFULLY below the floor (not
+      // just flush with it — flush still reads as a visible sliver from most camera angles,
+      // see the screenshot), and at frac=1 it's exactly the original static height/position,
+      // unchanged from before this feature. HIDE_DEPTH must match the renderer's value.
+      const HIDE_DEPTH = 1.4;
+      const topOffset = -HIDE_DEPTH + frac * (bm.height + HIDE_DEPTH);   // 0 -> -HIDE_DEPTH, height -> height
       bm.body.setNextKinematicTranslation({
-        x: bm.basePos.x, y: bm.basePos.y - (bm.height - bm.riseY), z: bm.basePos.z,
+        x: bm.basePos.x, y: bm.basePos.y - bm.height + topOffset, z: bm.basePos.z,
       });
       // SHOCK ZAP: only while fully risen (frac===1, i.e. inside the HOLD window) does the
       // post actually discharge — matches the idea that the danger window is the brief
