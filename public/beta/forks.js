@@ -192,7 +192,12 @@ const ZFORK = (() => {
     for (let k = 0; k <= lenF; k++) {
       const m = mainNodes[splitIdx + k];
       if (m._baseHalfW == null) m._baseHalfW = m.halfW;
-      m.meshSkip = true;
+      // Keep the two MOUTH nodes (k=0, k=lenF) as real mesh — buildMesh needs a valid
+      // 'prev' to connect the spine's last good quad INTO the fork, and a valid node to
+      // connect OUT of it on the far side. Skipping them left a floating gap (no quad)
+      // right where the spine met the fan. Only the strict interior is skipped (lanes
+      // carry their own floor/walls there).
+      if (k > 0 && k < lenF) m.meshSkip = true;
     }
     // Widen the outermost branch nodes at mouths (k=0 and k=lenF) to cover the full spine
     // width, so the branch wall meets the spine wall flush with no gap.

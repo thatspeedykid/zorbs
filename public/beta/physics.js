@@ -103,11 +103,23 @@ const ZPHYSICS = (() => {
       for (const bc of forkData.branchColliders) mk(bc.buffers);
     }
     // OBSTACLES: static bumper pillars (Y-aligned cylinders). Restitution gives a real bounce.
+    // BURIED FOOT: the collider is anchored to the raw centerline node's Y, but the ball
+    // actually rides the smooth analytic floor (catmull-rom interpolated — see smoothFloorY),
+    // which can sit a bit BELOW the raw node on curve/bank transitions. That left a gap under
+    // the post a ball could wedge into (trapped half above, half below the visible floor).
+    // Fix: extend the post deep below the node anchor (a "buried foot") so its bottom is
+    // always well under the real floor regardless of interpolation drift, while the visible
+    // TOP half (above the anchor) stays exactly as before.
+    const POST_BURY = 4.0;   // how far below the anchor the collider/mesh extends
     bumpers = [];
     if (forkData && forkData.obstacles) {
       forkData.obstacles.forEach((ob, k) => {
-        const cd = RAPIER.ColliderDesc.cylinder(ob.height / 2, ob.radius)
-          .setTranslation(ob.pos.x, ob.pos.y + ob.height / 2, ob.pos.z)
+        const totalH = ob.height + POST_BURY;
+        // center the taller cylinder so its TOP stays at ob.pos.y + ob.height (unchanged),
+        // and its bottom now reaches ob.pos.y - POST_BURY (buried well under any floor dip).
+        const centerY = ob.pos.y + ob.height / 2 - POST_BURY / 2;
+        const cd = RAPIER.ColliderDesc.cylinder(totalH / 2, ob.radius)
+          .setTranslation(ob.pos.x, centerY, ob.pos.z)
           .setRestitution(0.45).setFriction(0.2);
         world.createCollider(cd, trackBody);
         bumpers.push({ pos: ob.pos, shockR: ob.radius + 1.8, off: (k * 0.7) % BUMP_CYCLE, last: 0, charge: 0 });
@@ -121,16 +133,46 @@ const ZPHYSICS = (() => {
     if (forkData && forkData.spinners) {
       for (const sp of forkData.spinners) {
         // Arms sweep at ball-center height: ball sits on floor, center = floor + BALL_R.
-        // armHeight in data = 0.85 (just above floor). Hub positioned at floor + BALL_R so
-        // arms hit the marble equator cleanly.
         const ARM_H = BALL_R;   // hub height = ball radius above floor
         const ARM_W = 0.28;
         const armL = sp.armLen;
+        // BASE ORIENTATION: align the spinner's local Y (spin axis) to the track's local
+        // "up" at this node, and local X (arm rest direction) to the track's "right"
+        // (fwd × up) so the spin PLANE matches the floor's tilt/bank instead of staying
+        // world-flat. Without this, on a banked or descending section the arm dips below
+        // or pokes through the floor as it rotates.
+        const up = sp.up || { x: 0, y: 1, z: 0 };
+        const fwd = sp.fwd || { x: 0, y: 0, z: 1 };
+        // right = up × fwd (this handedness, with columns [right|up|fwd2], gives a proper
+        // rotation matrix — determinant +1). fwd2 = right × up re-orthogonalizes fwd against
+        // the (possibly non-perpendicular) up so the frame is exactly orthonormal.
+        let rx = up.y*fwd.z - up.z*fwd.y, ry = up.z*fwd.x - up.x*fwd.z, rz = up.x*fwd.y - up.y*fwd.x;
+        let rl = Math.hypot(rx, ry, rz) || 1; rx /= rl; ry /= rl; rz /= rl;
+        const fx2 = ry*up.z - rz*up.y, fy2 = rz*up.x - rx*up.z, fz2 = rx*up.y - ry*up.x;
+        // Rotation matrix columns: [right | up | fwd2]
+        const m00 = rx, m01 = up.x, m02 = fx2;
+        const m10 = ry, m11 = up.y, m12 = fy2;
+        const m20 = rz, m21 = up.z, m22 = fz2;
+        // Standard matrix->quaternion (Shepperd's method), each branch produces a unit quat.
+        const trace = m00 + m11 + m22;
+        let bqx, bqy, bqz, bqw;
+        if (trace > 0) {
+          const s = Math.sqrt(trace + 1.0) * 2;
+          bqw = 0.25 * s; bqx = (m21 - m12) / s; bqy = (m02 - m20) / s; bqz = (m10 - m01) / s;
+        } else if (m00 > m11 && m00 > m22) {
+          const s = Math.sqrt(1.0 + m00 - m11 - m22) * 2;
+          bqw = (m21 - m12) / s; bqx = 0.25 * s; bqy = (m01 + m10) / s; bqz = (m02 + m20) / s;
+        } else if (m11 > m22) {
+          const s = Math.sqrt(1.0 + m11 - m00 - m22) * 2;
+          bqw = (m02 - m20) / s; bqx = (m01 + m10) / s; bqy = 0.25 * s; bqz = (m12 + m21) / s;
+        } else {
+          const s = Math.sqrt(1.0 + m22 - m00 - m11) * 2;
+          bqw = (m10 - m01) / s; bqx = (m02 + m20) / s; bqy = (m12 + m21) / s; bqz = 0.25 * s;
+        }
         const spBd = RAPIER.RigidBodyDesc.kinematicPositionBased()
-          .setTranslation(sp.pos.x, sp.pos.y + ARM_H, sp.pos.z);
+          .setTranslation(sp.pos.x, sp.pos.y + ARM_H, sp.pos.z)
+          .setRotation({ x: bqx, y: bqy, z: bqz, w: bqw });
         const spBody = world.createRigidBody(spBd);
-        // Two arms: offset ±armL/2 along local-X. ColliderDesc.setTranslation(x,y,z) sets
-        // the local-to-parent offset (not world position); the body's rotation carries them.
         const mkArm = (signX) => {
           const cd = RAPIER.ColliderDesc.cuboid(armL * 0.5, ARM_H * 0.5, ARM_W)
             .setTranslation(signX * armL * 0.5, 0, 0)
@@ -142,6 +184,7 @@ const ZPHYSICS = (() => {
         spinners.push({
           body: spBody,
           pos: { x: sp.pos.x, y: sp.pos.y + ARM_H, z: sp.pos.z },
+          baseQuat: { x: bqx, y: bqy, z: bqz, w: bqw },
           rate: sp.rate,
           dir: sp.dir,
           angle: 0,
@@ -277,17 +320,31 @@ const ZPHYSICS = (() => {
     processBumpers(dt);
   }
 
+  // Quaternion multiply: a * b (Hamilton product, both {x,y,z,w})
+  function quatMul(a, b) {
+    return {
+      x: a.w*b.x + a.x*b.w + a.y*b.z - a.z*b.y,
+      y: a.w*b.y - a.x*b.z + a.y*b.w + a.z*b.x,
+      z: a.w*b.z + a.x*b.y - a.y*b.x + a.z*b.w,
+      w: a.w*b.w - a.x*b.x - a.y*b.y - a.z*b.z,
+    };
+  }
+
   // Advance each spinner's kinematic rotation by dt. Rapier's solver handles the rest:
   // the kinematic body sweeps through the ball's position and pushes it via contact.
+  // The final rotation = baseQuat (aligns spin plane to track tilt/bank) composed with
+  // a local-Y spin quaternion (the actual rotation) — so the arms sweep IN the track's
+  // local plane instead of a world-flat plane that clips through banked/sloped floors.
   function processSpinners(dt) {
     if (!spinners.length) return;
     for (const sp of spinners) {
       sp.angle += sp.dir * sp.rate * dt;
-      // Quaternion for Y-axis rotation: (0, sin(a/2), 0, cos(a/2))
       const ha = sp.angle * 0.5;
       const s = Math.sin(ha), c = Math.cos(ha);
+      const spinQuat = { x: 0, y: s, z: 0, w: c };   // spin around LOCAL Y (post-base-rotation)
+      const q = sp.baseQuat ? quatMul(sp.baseQuat, spinQuat) : spinQuat;
       sp.body.setNextKinematicTranslation(sp.pos);
-      sp.body.setNextKinematicRotation({ x: 0, y: s, z: 0, w: c });
+      sp.body.setNextKinematicRotation(q);
     }
   }
 

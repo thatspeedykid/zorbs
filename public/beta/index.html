@@ -1631,8 +1631,17 @@ function updateSpinners() {
   const sps = ZPHYSICS.getSpinners();
   for (let k = 0; k < _spinnerVis.length; k++) {
     const vis = _spinnerVis[k], sp = sps[k]; if (!sp) continue;
-    // Match the visual rotation to the physics kinematic angle (Y-axis rotation)
-    vis.grp.rotation.y = sp.angle;
+    // Match the visual rotation to the physics body's full orientation: baseQuat (aligns
+    // the spin plane to the track's local tilt/bank) composed with the live spin angle
+    // around local-Y. Using the same quaternion math as physics.js keeps them pixel-locked.
+    const ha = sp.angle * 0.5, s = Math.sin(ha), c = Math.cos(ha);
+    const spinQ = new THREE.Quaternion(0, s, 0, c);
+    if (sp.baseQuat) {
+      const baseQ = new THREE.Quaternion(sp.baseQuat.x, sp.baseQuat.y, sp.baseQuat.z, sp.baseQuat.w);
+      vis.grp.quaternion.copy(baseQ).multiply(spinQ);
+    } else {
+      vis.grp.quaternion.copy(spinQ);
+    }
   }
 }
 // drive the electric-bumper visuals from the physics charge: post bobs UP as it charges, arcs

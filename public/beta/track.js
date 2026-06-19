@@ -590,6 +590,12 @@ const ZTRACK = (() => {
             armHeight: 0.85,    // arm cross-section half-height (ball radius 0.5 → sits at ~floor+0.85)
             rate: 1.8 + srng() * 2.0,    // 1.8–3.8 rad/s — tuneable live
             dir: srng() < 0.5 ? 1 : -1,  // CW or CCW
+            // Local track orientation at this node — the spin AXIS is the track's local
+            // "up" (which tilts with bank), and the spin PLANE's zero-heading is the track's
+            // forward direction. Without this the arm spins flat in world-space and clips
+            // through a banked/descending floor.
+            up: { x: nd.up.x, y: nd.up.y, z: nd.up.z },
+            fwd: { x: nd.dir.x, y: nd.dir.y, z: nd.dir.z },
             idx: i,
           });
           i += 120 + Math.floor(srng() * 60);   // 120–180 node gap (sparse)
@@ -617,6 +623,8 @@ const ZTRACK = (() => {
                 armHeight: 0.85,
                 rate: 2.0 + prng() * 2.2,
                 dir: prng() < 0.5 ? 1 : -1,
+                up: { x: nd.up.x, y: nd.up.y, z: nd.up.z },
+                fwd: { x: nd.dir.x, y: nd.dir.y, z: nd.dir.z },
                 idx: m,
                 branchId: bid,
               });
