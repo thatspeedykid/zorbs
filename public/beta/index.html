@@ -449,6 +449,9 @@ const fill = new THREE.DirectionalLight(0x00e5ff, 0.5); fill.position.set(0, 10,
 scene.add(new THREE.HemisphereLight(0x9fc8ff, 0x16203a, 0.7));
 
 // STARFIELD: a sphere of additive points behind everything — instant depth + scale.
+let _skyDome = null, _starField = null;   // re-centered on the camera every frame (see
+                                            // updateSkyFollow) so neither ever "ends" no
+                                            // matter how far the race travels from origin
 (function stars(){
   const COUNT = 1400;
   const pos = new Float32Array(COUNT * 3);
@@ -466,6 +469,8 @@ scene.add(new THREE.HemisphereLight(0x9fc8ff, 0x16203a, 0.7));
   const m = new THREE.PointsMaterial({ color:0x99ccff, size:2.2, sizeAttenuation:false,
     transparent:true, opacity:0.85, blending:THREE.AdditiveBlending, depthWrite:false, fog:false });
   const pts = new THREE.Points(g, m); pts.renderOrder = -999; scene.add(pts);
+  _starField = pts;   // re-centered on the camera every frame (see updateSkyFollow) so the
+                       // field never "ends" no matter how far the race travels from origin
 })();
 // Environment map: render the gradient sky to a cube so metal balls reflect it (sci-fi sheen)
 let _envMap = null;
@@ -487,6 +492,14 @@ function buildEnvMap() {
 }
 
 // gradient sky dome (always behind everything)
+// BUGFIX: this dome sits at a fixed radius (900) around WORLD ORIGIN and was never moved.
+// The track travels hundreds to thousands of units from origin over a race (deep descents,
+// long lateral drift), so once the camera went far enough from (0,0,0) it ended up OUTSIDE
+// the dome's own radius — looking at the BackSide material from the wrong side, which is
+// culled/invisible, revealing the empty black void beyond. That's the hard wedge cutoff in
+// the screenshot: inside the dome's radius from origin = see the gradient, outside = nothing.
+// Fix: re-center the dome (and the star field) on the CAMERA every frame in updateSkyFollow()
+// so it always surrounds the viewer regardless of how far the race has traveled.
 (function sky(){
   const g = new THREE.SphereGeometry(900, 24, 16);
   const m = new THREE.ShaderMaterial({
@@ -495,7 +508,15 @@ function buildEnvMap() {
     fragmentShader:`varying vec3 p; void main(){ float h=normalize(p).y*0.5+0.5; vec3 top=vec3(0.02,0.05,0.13); vec3 bot=vec3(0.0,0.10,0.18); gl_FragColor=vec4(mix(bot,top,h),1.0); }`
   });
   const mesh = new THREE.Mesh(g, m); mesh.renderOrder = -1000; scene.add(mesh);
+  _skyDome = mesh;
 })();
+// Keep the sky dome and star field centered on the camera every frame — called from the
+// main render loop. A moving backdrop with no parallax (it's only ever seen from the inside
+// at a fixed radius) reads as infinitely far away, exactly like a real skybox should.
+function updateSkyFollow() {
+  if (_skyDome) _skyDome.position.copy(camera.position);
+  if (_starField) _starField.position.copy(camera.position);
+}
 
 // ---- PLANET OVERWORLD: a giant world suspended far below the track ----
 let _planet = null, _clouds = null;
@@ -1637,6 +1658,7 @@ function loop(now) {
   updateBumpers();
   updateSpinners();
   updateLaunchPins(now);
+  updateSkyFollow();
 
   if (composer && !_LITE) composer.render(); else renderer.render(scene, camera);   // bloom off in lite mode
 }

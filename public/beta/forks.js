@@ -263,26 +263,31 @@ const ZFORK = (() => {
     const holeOffs = [];
     for (let i = 0; i < N; i++) holeOffs.push((i - (N - 1) / 2) * spacing);
 
-    // ================= TRUNK: approach taper -> bowl narrow -> throat =================
-    // Shared geometry every ball rides before committing — a literal funnel. Built as
-    // ordinary nodes mutated onto the MAIN centerline (same trick the old fan used for its
-    // mouth nodes), so there's exactly one floor here, no seam to get wrong.
+    // ================= TRUNK: approach -> WIDE BOWL FLOOR spanning every hole =================
+    // BUGFIX: the bowl previously NARROWED down to a single tight point while the holes were
+    // spread far wider than that point ever reached — there was no floor connecting the
+    // throat to where the outer tubes actually started (a visible 15+ unit gap in space,
+    // disconnected floating strips with no funnel between them). A real sorting funnel needs
+    // to WIDEN to cover the full hole spread, not narrow past it. Shared geometry every ball
+    // rides before committing — built as ordinary nodes mutated onto the MAIN centerline
+    // (same trick the old fan used for its mouth nodes), so there's exactly one floor here,
+    // no seam to get wrong.
     const sstep = (a, b, x) => { if (a === b) return x < a ? 0 : 1; let t = (x - a) / (b - a); t = Math.max(0, Math.min(1, t)); return t*t*(3-2*t); };
+    const bowlFloorHalfW = maxOuter + tubeHWforSpacing * 1.3;   // must reach past the outermost hole
     for (let k = 0; k <= BOWL_NODES; k++) {
       const m = mainNodes[splitIdx + k];
       if (m._baseHalfW == null) m._baseHalfW = m.halfW;
       const t = k / BOWL_NODES;
-      // narrow from full trunk width down to a tight throat — visually reads as a funnel
-      const narrow = sstep(0, 1, t);
-      m.halfW = m._baseHalfW * (1 - narrow * 0.55);     // down to 45% width at the throat
+      // WIDEN from the trunk's normal width out to cover every hole — the funnel mouth
+      // opening up, not narrowing away from where the balls actually need to go.
+      const widen = sstep(0, 1, t);
+      m.halfW = m._baseHalfW + (bowlFloorHalfW - m._baseHalfW) * widen;
       m.kind = 'sorter';
       m.sorterHoles = (k === BOWL_NODES) ? holeOffs.slice() : null;  // only the throat node carries hole data (for the renderer)
-      // COMMIT WIDTH: physics bins a ball's lateral position into N lanes using this value,
-      // not m.halfW. m.halfW is the throat's own (narrow) visual width, but the holes are
-      // spread according to maxOuter — which is the geometry that actually determines which
-      // hole a ball ends up over. Using the narrow halfW here would bin against the wrong
-      // scale (most of the ball's lateral spread happens OUTSIDE the throat's visual width).
-      if (k === BOWL_NODES) m.commitHalfW = Math.max(maxOuter, base * 0.5);
+      // COMMIT WIDTH: physics bins a ball's lateral position into N lanes using this value.
+      // Now that the bowl floor genuinely spans the hole spread, the node's own halfW IS the
+      // right scale to bin against — no separate scale mismatch any more.
+      if (k === BOWL_NODES) m.commitHalfW = bowlFloorHalfW;
     }
 
     // ================= PER-BRANCH: drop-tube (steep + visible) -> body (old fan's lane shape) =================
