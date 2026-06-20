@@ -223,6 +223,233 @@ const ZFORK = (() => {
       branches, branchOrder, laneCount: N, rejoinIdx, ends, end };
   }
 
+  // ================= SORTER FORK (v3) =================
+  // Replaces the flat fan-out mouth with a literal sorting funnel: the trunk narrows into
+  // a bowl, the bowl floor has N holes (one per lane), and whichever hole a ball is over
+  // when it reaches the bottom is the lane it commits to — same lateral-bin commit logic
+  // physics.js already uses, just fed by a bowl instead of a flat fork-mouth node. Each
+  // branch's first stretch is a steep, visibly-falling drop-tube that curves back level
+  // into the SAME wide-spread-and-wander body the old fan used — so everything downstream
+  // (spinners/bumpers/launch-pins/funnels on the branch, mesh/collider building, minimap,
+  // physics commit-binning) is completely unchanged. Only the geometry of the mouth and the
+  // first ~14 nodes of each branch differ from makeDivergentFork.
+  function makeSorterFork(mainNodes, splitIdx, rng, forkId, targetSteps) {
+    const steps = targetSteps || (58 + Math.floor(rng() * 16));
+    const end = Math.min(mainNodes.length - 6, splitIdx + steps);
+    const lenF = end - splitIdx;
+    if (lenF < 60) return null;            // need room for the bowl + tubes + body + funnel-back
+
+    const base = mainNodes[splitIdx].halfW;
+    let spanH = 0;
+    for (let k = splitIdx; k < end; k++) { const a = mainNodes[k].pos, b = mainNodes[k+1].pos; spanH += Math.hypot(b.x-a.x, b.z-a.z); }
+    const STEPH = spanH / lenF || 1.2;
+
+    // ---- lane count: same weighting as the old fan (10% single / 30/32/28% for 2/3/4) ----
+    const LW = base;
+    const tubeHWforSpacing = LW * 0.42;     // matches the actual tube half-width used below
+    const minSpacing = 2.3 * tubeHWforSpacing;  // holes only need tube-width separation, not full lane width
+    const SLOPE = 0.85;
+    const BOWL_NODES = 16;                  // approach-taper + bowl-narrow, shared trunk geometry
+    const TUBE_NODES = 13;                  // steep drop + re-level, PER BRANCH
+    const bowlSpanH = BOWL_NODES * STEPH;
+    const maxOuter = SLOPE * bowlSpanH;     // how far apart the outermost holes sit
+    let roomMax = 4;
+    while (roomMax >= 2 && (2 * maxOuter / (roomMax - 1)) < minSpacing) roomMax--;
+    const wr = rng();
+    const want = wr < 0.10 ? 1 : wr < 0.40 ? 2 : wr < 0.72 ? 3 : 4;
+    let N = Math.min(want, roomMax);
+    if (N < 2) return null;
+    const spacing = N > 1 ? 2 * maxOuter / (N - 1) : 0;
+    const holeOffs = [];
+    for (let i = 0; i < N; i++) holeOffs.push((i - (N - 1) / 2) * spacing);
+
+    // ================= TRUNK: approach taper -> bowl narrow -> throat =================
+    // Shared geometry every ball rides before committing — a literal funnel. Built as
+    // ordinary nodes mutated onto the MAIN centerline (same trick the old fan used for its
+    // mouth nodes), so there's exactly one floor here, no seam to get wrong.
+    const sstep = (a, b, x) => { if (a === b) return x < a ? 0 : 1; let t = (x - a) / (b - a); t = Math.max(0, Math.min(1, t)); return t*t*(3-2*t); };
+    for (let k = 0; k <= BOWL_NODES; k++) {
+      const m = mainNodes[splitIdx + k];
+      if (m._baseHalfW == null) m._baseHalfW = m.halfW;
+      const t = k / BOWL_NODES;
+      // narrow from full trunk width down to a tight throat — visually reads as a funnel
+      const narrow = sstep(0, 1, t);
+      m.halfW = m._baseHalfW * (1 - narrow * 0.55);     // down to 45% width at the throat
+      m.kind = 'sorter';
+      m.sorterHoles = (k === BOWL_NODES) ? holeOffs.slice() : null;  // only the throat node carries hole data (for the renderer)
+      // COMMIT WIDTH: physics bins a ball's lateral position into N lanes using this value,
+      // not m.halfW. m.halfW is the throat's own (narrow) visual width, but the holes are
+      // spread according to maxOuter — which is the geometry that actually determines which
+      // hole a ball ends up over. Using the narrow halfW here would bin against the wrong
+      // scale (most of the ball's lateral spread happens OUTSIDE the throat's visual width).
+      if (k === BOWL_NODES) m.commitHalfW = Math.max(maxOuter, base * 0.5);
+    }
+
+    // ================= PER-BRANCH: drop-tube (steep + visible) -> body (old fan's lane shape) =================
+    const branches = {}, branchOrder = [];
+    const throatNode = mainNodes[splitIdx + BOWL_NODES];
+    const bodyStart = BOWL_NODES + TUBE_NODES;          // where the old fan's wander/funnel body begins
+    const bodyLen = lenF - bodyStart;
+    if (bodyLen < 20) return null;                       // not enough room left for a real body
+
+    // body shape helpers (same math as the old fan, scoped to [bodyStart, lenF])
+    const RAMP = 0.30;
+    const shape = (k) => { const t = (k - bodyStart) / (bodyLen); if (t < RAMP) return sstep(0, RAMP, t); if (t > 1 - RAMP) return 1 - sstep(1 - RAMP, 1, t); return 1; };
+    const eTaper = (t) => { const er = Math.min(1, t / 0.16, (1 - t) / 0.16); const e = Math.max(0, er); return e*e*(3-2*e); };
+    const bodySLOPE = 0.62, bodyFanLenH = RAMP * bodyLen * STEPH, bodyMaxOuter = bodySLOPE * bodyFanLenH;
+    const holdNodes = Math.max(1, (1 - 2 * RAMP) * bodyLen);
+    const wanderAmp = Math.max(0, Math.min(0.05 * holdNodes, (spacing - 2 * LW) * 0.34, bodyMaxOuter * 0.5));
+    const holdWin = (t) => sstep(RAMP * 0.6, RAMP, t) * (1 - sstep(1 - RAMP, 1 - RAMP * 0.6, t));
+    const mkWave = (amp, maxFreq) => {
+      const comps = [], n = 2 + Math.floor(rng() * 3);
+      for (let i = 0; i < n; i++) comps.push({ f: 1 + Math.floor(rng() * maxFreq), p: rng() * 6.2832, a: 0.5 + rng() });
+      const tot = comps.reduce((s, c) => s + c.a, 0) || 1;
+      return (t) => { let s = 0; for (const c of comps) s += c.a * Math.sin(c.f * 6.2832 * t + c.p); return (s / tot) * Math.sin(Math.PI * t) * amp; };
+    };
+    // re-derive each lane's body offset relative to bodyStart (same symmetric layout as holes,
+    // possibly re-spread a bit wider than the tight holes since the body has more room)
+    const bodyMaxSpread = bodyMaxOuter;
+    const bodySpacing = N > 1 ? 2 * bodyMaxSpread / (N - 1) : 0;
+    const bodyOffs = [];
+    for (let i = 0; i < N; i++) bodyOffs.push((i - (N - 1) / 2) * bodySpacing);
+    if (N % 2 === 1) {
+      const cIdx = (N - 1) / 2;
+      const cSign = rng() < 0.5 ? 1 : -1;
+      bodyOffs[cIdx] = cSign * bodySpacing * (0.35 + rng() * 0.10);
+    }
+
+    for (let i = 0; i < N; i++) {
+      const bid = forkId + '_' + i; branchOrder.push(bid);
+      const holeOff = holeOffs[i];
+      const nlist = [];
+
+      // ---- DROP-TUBE: steep near-vertical fall from the throat, curving back to level ----
+      // Heading dives toward straight-down over the first half of the tube, then eases back
+      // up toward the trunk's forward direction over the second half — a visible "fell
+      // through, now recovering" arc, landing right where the body section picks up.
+      let pos = v(throatNode.pos.x + throatNode.right.x * holeOff, throatNode.pos.y, throatNode.pos.z + throatNode.right.z * holeOff);
+      const fwd0 = norm(v(throatNode.dir.x, throatNode.dir.y, throatNode.dir.z));
+      let heading = v(fwd0.x, fwd0.y, fwd0.z);
+      const tubeHW = LW * 0.42;            // tube is noticeably narrower than the body — reads as a chute
+      for (let k = 0; k < TUBE_NODES; k++) {
+        const t = k / TUBE_NODES;
+        // dive steep over the first 55%, recover over the back 45% (smooth, no kink)
+        const diveT = sstep(0, 0.55, t);
+        const recoverT = sstep(0.45, 1, t);
+        const targetDip = -0.92;           // near-vertical at the steepest point
+        const dip = targetDip * diveT * (1 - recoverT) + (-0.30) * recoverT;  // settle to the body's normal descent
+        heading.y += (dip - heading.y) * 0.35;
+        heading = norm(heading);
+        pos = add(pos, scale(heading, STEPH));
+        const right = norm(cross(heading, worldUp));
+        const up = norm(cross(right, heading));
+        // width: starts at the tight tube width, eases to the body's lane width by the end
+        const hw = tubeHW + (LW - tubeHW) * sstep(0.5, 1, t);
+        nlist.push({
+          pos: v(pos.x, pos.y, pos.z), dir: v(heading.x, heading.y, heading.z), right, up,
+          halfW: hw, bank: 0, kind: 'tube', tunnel: false, branchId: bid,
+          // tubes are fully enclosed (walled all the way round, no inner-merge logic needed —
+          // they're far apart right after the bowl) until they widen into the body.
+        });
+      }
+
+      // ---- BODY: same wander/funnel-pinch shape the old fan used, picking up from the tube's end ----
+      const tubeEnd = nlist[nlist.length - 1];
+      const wc = []; const wn = 1 + Math.floor(rng() * 2);
+      for (let j = 0; j < wn; j++) wc.push({ f: 1 + Math.floor(rng() * 2), p: rng() * 6.2832, a: 0.5 + rng() });
+      const wtot = wc.reduce((s, c) => s + c.a, 0) || 1;
+      const wander = (t) => { let s = 0; for (const c of wc) s += c.a * Math.sin(c.f * 6.2832 * t + c.p); return (s / wtot) * wanderAmp; };
+      const slopeWave = mkWave(2.0, 2);
+      const ffeats = []; const fcount = Math.floor(rng() * 3);
+      for (let j = 0; j < fcount; j++) {
+        const narrower = rng() < 0.4;
+        ffeats.push({ at: 0.28 + 0.44 * rng(), w: narrower ? 0.07 + rng()*0.05 : 0.045 + rng()*0.03, minW: 0.44 + rng()*0.16 });
+      }
+      const raw = [];
+      // DEPTH CARRY: the tube already dove well below the trunk centerline (that's the
+      // whole point — a dramatic visible drop). The body must pick up from EXACTLY that
+      // depth, not snap back to the trunk's height, or there's a 1-2 unit upward teleport
+      // at the tube/body seam. extraDepth is how far below the trunk the tube landed; it
+      // decays smoothly to 0 over the first RAMP*1.4 fraction of the body (a bit slower
+      // than the lateral ease-in, so the vertical recovery reads as smooth, not abrupt),
+      // by which point the lane is back on the trunk's natural ongoing descent and free to
+      // ride the small Y-wiggle like every other section.
+      const tubeM0 = mainNodes[splitIdx + bodyStart];
+      const extraDepth = tubeEnd.pos.y - tubeM0.pos.y;   // negative: how far below trunk the tube ended
+      for (let k = bodyStart; k <= lenF; k++) {
+        const m = mainNodes[splitIdx + k];
+        const t = (k - bodyStart) / bodyLen, eT = eTaper(t);
+        // body offset is RELATIVE TO THE TUBE'S LANDING SPOT, not the trunk centerline —
+        // it eases from the tube's exit position into the body's normal wide-spread shape
+        // over the first RAMP fraction, exactly like the old fan eased out of the mouth.
+        const bodyTarget = bodyOffs[i] * shape(k) + wander(t) * holdWin(t) * eT;
+        const easeFromTube = 1 - sstep(0, RAMP * 0.7, t);
+        const tubeLat = (tubeEnd.pos.x - m.pos.x) * m.right.x + (tubeEnd.pos.z - m.pos.z) * m.right.z;
+        const L = bodyTarget * (1 - easeFromTube) + tubeLat * easeFromTube;
+        const Y = slopeWave(t) * eT;
+        const depthCarry = extraDepth * (1 - sstep(0, RAMP * 1.4, t));   // smoothly recover to 0
+        let wmul = 1;
+        for (const ff of ffeats) { const z = (t - ff.at) / ff.w; wmul = Math.min(wmul, 1 - (1 - ff.minW) * Math.exp(-z * z)); }
+        // Y BASE: the main centerline's OWN steadily-descending Y at this index (m.pos.y),
+        // plus the depth carried over from the tube (recovering to 0), plus the small
+        // wiggle on top — matches the original fan's invariant (steady descent dominates
+        // the wiggle) while still landing exactly where the tube left off, no seam.
+        raw.push({ x: m.pos.x + m.right.x * L, y: m.pos.y + depthCarry + Y, z: m.pos.z + m.right.z * L, w: LW * wmul });
+      }
+      for (let k = 0; k < raw.length; k++) {
+        const c = raw[k], nx = raw[Math.min(raw.length - 1, k + 1)], pv = raw[Math.max(0, k - 1)];
+        let dir = norm(v(nx.x - pv.x, nx.y - pv.y, nx.z - pv.z));
+        if (Math.hypot(nx.x - pv.x, nx.z - pv.z) < 1e-4) dir = norm(v(tubeEnd.dir.x, tubeEnd.dir.y, tubeEnd.dir.z));
+        const right = norm(cross(dir, worldUp)), up = norm(cross(right, dir));
+        nlist.push({ pos: v(c.x, c.y, c.z), dir, right, up, halfW: c.w, bank: 0, kind: 'route', tunnel: false, branchId: bid });
+      }
+
+      // banking through the body (same as the old fan)
+      const bodyOffsetInList = TUBE_NODES;
+      const BANK_GAIN = 5.0, BANK_MAX = 0.34;
+      for (let k = bodyOffsetInList + 1; k < nlist.length - 1; k++) {
+        const h0 = Math.atan2(nlist[k-1].dir.x, nlist[k-1].dir.z), h1 = Math.atan2(nlist[k+1].dir.x, nlist[k+1].dir.z);
+        let dh = h1 - h0; while (dh > Math.PI) dh -= 6.2832; while (dh < -Math.PI) dh += 6.2832;
+        nlist[k].bank = Math.max(-BANK_MAX, Math.min(BANK_MAX, dh * BANK_GAIN)) * Math.sin(Math.PI * (k - bodyOffsetInList) / (nlist.length - bodyOffsetInList));
+      }
+
+      // wall gaps between lanes in the BODY region only (tubes are far apart and self-walled)
+      branches[bid] = nlist;
+    }
+
+    // body-region wall-merge logic, same SAFEGAP rule as the old fan, applied only to the
+    // body nodes (index >= TUBE_NODES in each branch's list)
+    const SAFEGAP = 0.8;
+    for (let i = 0; i < N; i++) {
+      const bid = branchOrder[i], nlist = branches[bid];
+      for (let k = TUBE_NODES; k < nlist.length; k++) {
+        const bk = k - TUBE_NODES;
+        if (i > 0) {
+          const left = branches[branchOrder[i-1]][k];
+          const gapL = Math.hypot(nlist[k].pos.x - left.pos.x, nlist[k].pos.z - left.pos.z) - nlist[k].halfW - left.halfW;
+          if (gapL < SAFEGAP) nlist[k].noWallL = true;
+        }
+        if (i < N - 1) {
+          const right = branches[branchOrder[i+1]][k];
+          const gapR = Math.hypot(right.pos.x - nlist[k].pos.x, right.pos.z - nlist[k].pos.z) - nlist[k].halfW - right.halfW;
+          if (gapR < SAFEGAP) nlist[k].noWallR = true;
+        }
+      }
+    }
+
+    // mark the trunk fully meshSkip from the throat onward (branches carry their own floor
+    // from here — there is no shared floor past the bowl, only N independent tubes)
+    for (let k = BOWL_NODES + 1; k <= lenF; k++) {
+      const m = mainNodes[splitIdx + k];
+      m.meshSkip = true;
+    }
+
+    const rejoinIdx = {}, ends = [];
+    for (const bid of branchOrder) { rejoinIdx[bid] = end; ends.push(branches[bid][branches[bid].length - 1]); }
+    return { id: forkId, splitIdx, flavor: 'divergent', rejoin: true, lanesOnly: false,
+      branches, branchOrder, laneCount: N, rejoinIdx, ends, end, isSorter: true, throatIdx: splitIdx + BOWL_NODES };
+  }
+
   // Create one fork rooted at mainNodes[splitIdx]. Returns the fork descriptor.
   // rng = seeded function from track.js so forks are deterministic.
   //
@@ -324,7 +551,7 @@ const ZFORK = (() => {
         const span = zEnd - at - 6;
         const targetSteps = span > 34 ? span : undefined;   // span the entire zone
         const fork = USE_DIVERGENT
-          ? makeDivergentFork(mainNodes, at, rng, 'fork'+n, targetSteps)   // may be null = NO split (1 lane)
+          ? makeSorterFork(mainNodes, at, rng, 'fork'+n, targetSteps)   // may be null = NO split (1 lane)
           : makeFork(mainNodes, at, rng, 'fork'+n, true);
         if (fork) {
           n++;
@@ -338,7 +565,7 @@ const ZFORK = (() => {
     return { forks, forkAtIdx };
   }
 
-  return { buildForks, makeFork, makeDivergentFork, buildBranch, setDivergent: (b) => { USE_DIVERGENT = !!b; } };
+  return { buildForks, makeFork, makeDivergentFork, makeSorterFork, buildBranch, setDivergent: (b) => { USE_DIVERGENT = !!b; } };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = { ZFORK };

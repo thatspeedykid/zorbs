@@ -426,16 +426,26 @@ const ZPHYSICS = (() => {
       const t = b.body.translation();
 
       // FORK COMMIT: if on the main path and we've reached a fork's split point, pick a
-      // lane based on the ball's lateral position across the trunk, then follow ONLY that lane.
+      // lane based on the ball's lateral position, then follow ONLY that lane.
+      // SORTER FORKS commit at the THROAT (f.throatIdx), not splitIdx — that's where the
+      // bowl has actually narrowed down to the holes, and the holes are spread according
+      // to the bowl's own geometry (can be wider than the trunk's width back at splitIdx).
+      // Binning at splitIdx against the wrong width would pick a hole that doesn't match
+      // where the ball visually ends up relative to the holes once it reaches the bottom.
+      // Legacy fan forks (no throatIdx) keep committing at splitIdx exactly as before.
       if (!b.branch && forks) {
         for (const f of forks) {
-          if (b.hint >= f.splitIdx - 1 && b.hint <= f.splitIdx + 1) {
-            const sn = nodes[f.splitIdx];
+          const commitIdx = (f.throatIdx != null) ? f.throatIdx : f.splitIdx;
+          if (b.hint >= commitIdx - 1 && b.hint <= commitIdx + 1) {
+            const sn = nodes[commitIdx];
             const latv = (t.x - sn.pos.x)*sn.right.x + (t.z - sn.pos.z)*sn.right.z;
             const order = f.branchOrder;
             if (order && order.length) {
-              // bin lateral position across the trunk width into one of N fan lanes (left→right)
-              const hw = sn.halfW || 7;
+              // bin lateral position into one of N fan lanes (left→right). commitHalfW (set
+              // on sorter-fork throat nodes) reflects the actual hole-spread radius, which can
+              // be wider than the throat's own narrow visual halfW — fall back to halfW for
+              // legacy fan forks where the two are the same thing.
+              const hw = sn.commitHalfW || sn.halfW || 7;
               let frac = (latv / hw + 1) / 2;            // 0 (far left) .. 1 (far right)
               frac = Math.max(0, Math.min(0.99999, frac));
               b.branch = order[Math.floor(frac * order.length)];
@@ -512,6 +522,26 @@ const ZPHYSICS = (() => {
         b._churn += dt * (1.5 + b.speedMul);            // each ball wanders at its own rate
         targetLane = Math.sin(b._churn) * n.halfW * 0.55; // sweep across the bowl (kept off the very edge)
         lanePull = LANE_PULL * 0.5;                       // looser so they drift, not snap
+      } else if (n.kind === 'sorter') {
+        // SORTER BOWL APPROACH: the trunk is narrowing down toward the throat/holes. Pull
+        // gently toward center (not too hard — the ball's natural lateral position here is
+        // exactly what decides WHICH hole it falls through, so a heavy-handed snap-to-center
+        // would homogenize everyone into the same hole instead of preserving the spread that
+        // makes the sort meaningful). Just strong enough to stop unbounded drift before the
+        // narrowing floor edge can catch someone who was riding the original wide trunk edge.
+        targetLane = b.lane;
+        lanePull = LANE_PULL * 1.3;
+      } else if (n.kind === 'tube') {
+        // SORTER DROP-TUBE: a ball just committed to this lane by falling through a hole —
+        // it can be carrying meaningful uncontrolled lateral momentum from that fall, and
+        // the tube itself is intentionally narrow (visually reads as a chute). Pull hard
+        // toward dead-center (not the ball's personal lane offset — there's no room for
+        // individual spread in a tube) so it recenters fast instead of drifting toward the
+        // tube's tight walls. Confirmed in simulation: without this, tube nodes fell through
+        // to the default (weakest) lane pull and a ball could drift ~9+ units off-center
+        // before the tube widened enough to forgive it, going airborne/off-edge the whole way.
+        targetLane = 0;
+        lanePull = LANE_PULL * 2.5;
       } else if (n.kind === 'route') {
         // DIVERGENT ROUTES: keep the ball in the inner band (clear of the gap edge) but
         // let it keep some lateral spread so balls don't clump and pile up at the exit.
