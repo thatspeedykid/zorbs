@@ -550,6 +550,199 @@ const ZFORK = (() => {
       coneFloorMesh, holeFloorMesh };
   }
 
+  // ================= GRAVITY WELL FORK (v4) =================
+  // The actual "coin funnel" toy mechanic: a ball arrives moving forward, enters a circular
+  // well, and SPIRALS — orbiting the center multiple times while both its radius and height
+  // shrink — before dropping through whichever of N holes its final angle lands on. This is
+  // a fundamentally different mechanic from makeSorterFork (which bins a ball's lateral
+  // position once at a flat/conical mouth): here the ball's actual path bends into a curve
+  // and circles, which is the part a flat node-strip can never represent — so the orbit
+  // itself is handled entirely in physics.js as a SCRIPTED motion (startWellOrbit /
+  // processWellOrbit), not by walking a node list. This function only needs to: (1) place
+  // the well's center/geometry, (2) mark where physics should intercept the ball
+  // (entryIdx), and (3) build the post-well branches — which reuse the exact same
+  // tube-then-body shape makeSorterFork uses, just starting from the well's exit ring
+  // instead of from flat hole offsets.
+  function makeWellFork(mainNodes, splitIdx, rng, forkId, targetSteps) {
+    const steps = targetSteps || (58 + Math.floor(rng() * 16));
+    const end = Math.min(mainNodes.length - 6, splitIdx + steps);
+    const lenF = end - splitIdx;
+    if (lenF < 50) return null;            // need room for the approach + well + branches
+
+    const base = mainNodes[splitIdx].halfW;
+    let spanH = 0;
+    for (let k = splitIdx; k < end; k++) { const a = mainNodes[k].pos, b = mainNodes[k+1].pos; spanH += Math.hypot(b.x-a.x, b.z-a.z); }
+    const STEPH = spanH / lenF || 1.2;
+    const LW = base;
+
+    const wr = rng();
+    const want = wr < 0.10 ? 1 : wr < 0.40 ? 2 : wr < 0.72 ? 3 : 4;
+    let N = want;
+    if (N < 2) return null;   // a 1-lane "well" wouldn't read as a sort at all — skip, same as the sorter
+
+    // ---- APPROACH: a short straight run leading into the well's rim, so the ball arrives
+    // at a predictable point moving in a predictable direction (tangent to the rim). ----
+    const APPROACH_NODES = 10;
+    for (let k = 0; k <= APPROACH_NODES; k++) {
+      const m = mainNodes[splitIdx + k];
+      m.kind = 'sorter';   // reuse the same lane-pull treatment as the sorter's bowl approach
+    }
+    const entryNode = mainNodes[splitIdx + APPROACH_NODES];
+    const entryIdx = splitIdx + APPROACH_NODES;
+
+    // ---- WELL GEOMETRY: center sits ahead of the entry point along its current heading,
+    // offset so the entry node sits exactly on the rim (rOuter). ----
+    const rOuter = LW * 2.6;             // wide enough to feel like a real basin, not a pinch
+    const rInner = Math.max(1.6, LW * 0.22);   // tight throat where the holes live
+    const fwd = norm(v(entryNode.dir.x, entryNode.dir.y, entryNode.dir.z));
+    const cx = entryNode.pos.x + fwd.x * rOuter;
+    const cz = entryNode.pos.z + fwd.z * rOuter;
+    const yTop = entryNode.pos.y;
+    const DROP = (rOuter - rInner) * 1.3 + LW * 1.5;   // total descent through the well — generous, reads as a real drop
+    const yBottom = yTop - DROP;
+    const revolutions = 2.4 + rng() * 1.3;     // 2.4–3.7 full loops, like a real coin funnel
+    const duration = 2.6 + rng() * 0.9;        // seconds the spiral lasts — tuned live if needed
+    // ORBIT DIRECTION: seeded once per well (every ball that enters spins the same way —
+    // see physics.js startWellOrbit for why this moved from a per-ball computation).
+    const dir = rng() < 0.5 ? 1 : -1;
+
+    // ---- WELL CONE MESH: an actual cone of revolution — a full 360° sweep at each height
+    // ring, narrowing from rOuter down to rInner — unlike the earlier (broken) sorter
+    // attempt, which only offset a flat strip sideways and could never look like a real
+    // funnel from any angle. This is true polar geometry: every ring is a full circle. ----
+    const CONE_RINGS = 14, CONE_SEGS = 28;
+    const coneMeshPos = [], coneMeshIdx = [];
+    let coneBase = 0;
+    const pushTri = (a, b, c) => {
+      coneMeshPos.push(a.x,a.y,a.z, b.x,b.y,b.z, c.x,c.y,c.z);
+      coneMeshIdx.push(coneBase, coneBase+1, coneBase+2);
+      coneBase += 3;
+    };
+    // ringPoint(ringT, ang) -> a point on the cone's surface. ringT 0=rim (rOuter,yTop),
+    // ringT 1=throat (rInner,yBottom). A gentle spiral-groove offset is added to the radius
+    // so the surface itself visually hints at the spiral path balls actually take.
+    const ringPoint = (ringT, ang) => {
+      const ease = ringT * ringT * (3 - 2 * ringT);
+      const r = rOuter + (rInner - rOuter) * ease;
+      const y = yTop + (yBottom - yTop) * ease;
+      const groove = Math.sin(ang * 5 + ringT * revolutions * 6.2832) * (rOuter - rInner) * 0.02;
+      return v(cx + Math.cos(ang) * (r + groove), y, cz + Math.sin(ang) * (r + groove));
+    };
+    for (let ri = 0; ri < CONE_RINGS; ri++) {
+      const t0 = ri / CONE_RINGS, t1 = (ri + 1) / CONE_RINGS;
+      for (let s = 0; s < CONE_SEGS; s++) {
+        const a0 = (s / CONE_SEGS) * 6.2832, a1 = ((s + 1) / CONE_SEGS) * 6.2832;
+        const p00 = ringPoint(t0, a0), p01 = ringPoint(t0, a1);
+        const p10 = ringPoint(t1, a0), p11 = ringPoint(t1, a1);
+        pushTri(p00, p10, p11);
+        pushTri(p00, p11, p01);
+      }
+    }
+    const wellConeMesh = { positions: new Float32Array(coneMeshPos), indices: new Uint32Array(coneMeshIdx) };
+    // small flat throat disc at the very bottom, with N holes cut in (same slatted-gap
+    // technique as the sorter's throat disc, just operating on a circular ring instead of
+    // a straight strip — built from short radial wedges between consecutive holes).
+    const holeMeshPos = [], holeMeshIdx = [];
+    let holeBase = 0;
+    const pushQuadLocal = (a, b, c, d) => {
+      holeMeshPos.push(a.x,a.y,a.z, b.x,b.y,b.z, c.x,c.y,c.z, d.x,d.y,d.z);
+      holeMeshIdx.push(holeBase, holeBase+1, holeBase+2, holeBase, holeBase+2, holeBase+3);
+      holeBase += 4;
+    };
+    const holeAngWidth = Math.min(0.9, (2 * Math.PI / N) * 0.35);   // angular width of each hole's gap
+    const discOuterR = rInner * 1.4, discInnerR = rInner * 0.35;
+    for (let i = 0; i < N; i++) {
+      const a0 = (i / N) * 6.2832 + holeAngWidth, a1 = ((i + 1) / N) * 6.2832 - holeAngWidth;
+      if (a1 <= a0) continue;   // holes wide enough to have eaten this whole wedge
+      const WEDGE_SEGS = 4;
+      for (let s = 0; s < WEDGE_SEGS; s++) {
+        const wa0 = a0 + (a1 - a0) * (s / WEDGE_SEGS), wa1 = a0 + (a1 - a0) * ((s + 1) / WEDGE_SEGS);
+        const pOuter0 = v(cx + Math.cos(wa0) * discOuterR, yBottom, cz + Math.sin(wa0) * discOuterR);
+        const pOuter1 = v(cx + Math.cos(wa1) * discOuterR, yBottom, cz + Math.sin(wa1) * discOuterR);
+        const pInner0 = v(cx + Math.cos(wa0) * discInnerR, yBottom, cz + Math.sin(wa0) * discInnerR);
+        const pInner1 = v(cx + Math.cos(wa1) * discInnerR, yBottom, cz + Math.sin(wa1) * discInnerR);
+        pushQuadLocal(pInner0, pOuter0, pOuter1, pInner1);
+      }
+    }
+    const wellHoleFloorMesh = { positions: new Float32Array(holeMeshPos), indices: new Uint32Array(holeMeshIdx) };
+
+    // ---- N holes arranged in a ring at rInner, equal angular slices (matches the binning
+    // physics.js does on the ball's final orbit angle). Branches start at each hole. ----
+    const branches = {}, branchOrder = [];
+    const BRANCH_LEN = Math.max(40, lenF - APPROACH_NODES - 6);
+    for (let i = 0; i < N; i++) {
+      const bid = forkId + '_' + i; branchOrder.push(bid);
+      const holeAng = (i / N) * 6.2832;
+      const hx = cx + Math.cos(holeAng) * rInner, hz = cz + Math.sin(holeAng) * rInner;
+      // outward-facing tangent direction at this hole — branches lead AWAY from the well's
+      // center, radially outward, which reads naturally as "exiting" the funnel.
+      const outDir = norm(v(Math.cos(holeAng), -0.55, Math.sin(holeAng)));
+      const nlist = [];
+      let pos = v(hx, yBottom, hz);
+      let heading = v(outDir.x, outDir.y, outDir.z);
+      const TUBE_NODES = 11;
+      // TUBE WIDTH FIX: confirmed in simulation that two balls landing in the same branch
+      // (still possible even with per-ball revolution jitter spreading entries — it's random
+      // chance, not guaranteed separation) get forced into violent contact in a tube sized
+      // for exactly one ball (radius 0.5, collider ring radius 0.75), and the resulting
+      // separation impulse flings one of them off the edge. A tube needs room for at least
+      // two ball-colliders side by side with margin: 2 * 0.75 * ~2 = ~3 minimum. The hole
+      // at the very top (where it visually reads as "one ball, one hole") stays tight —
+      // only the tube's WIDTH widens quickly just below the hole, which still looks like a
+      // single-ball drop from above while giving real room once two balls are both inside.
+      const tubeHW = Math.max(3.0, LW * 0.18);
+      for (let k = 0; k < TUBE_NODES; k++) {
+        const t = k / TUBE_NODES;
+        const recoverT = sstepW(0.35, 1, t);
+        heading.y += ((-0.30) - heading.y) * 0.3 * recoverT + ((outDir.y) - heading.y) * 0.3 * (1 - recoverT);
+        heading = norm(heading);
+        pos = add(pos, scale(heading, STEPH));
+        const right = norm(cross(heading, worldUp));
+        const up = norm(cross(right, heading));
+        const hw = tubeHW + (LW - tubeHW) * sstepW(0.4, 1, t);
+        nlist.push({ pos: v(pos.x, pos.y, pos.z), dir: v(heading.x, heading.y, heading.z), right, up,
+          halfW: hw, bank: 0, kind: 'tube', tunnel: false, branchId: bid });
+      }
+      // BODY: simple gentle descending continuation (same per-node style as everywhere else
+      // on the track) for the remainder of this fork's length, so it merges back into the
+      // normal main-path generation afterward.
+      const tubeEnd = nlist[nlist.length - 1];
+      let bpos = v(tubeEnd.pos.x, tubeEnd.pos.y, tubeEnd.pos.z);
+      let bheading = v(tubeEnd.dir.x, tubeEnd.dir.y, tubeEnd.dir.z);
+      for (let k = 0; k < BRANCH_LEN; k++) {
+        bheading.y += (-0.30 - bheading.y) * 0.08;
+        bheading = norm(bheading);
+        bpos = add(bpos, scale(bheading, STEPH));
+        const right = norm(cross(bheading, worldUp));
+        const up = norm(cross(right, bheading));
+        nlist.push({ pos: v(bpos.x, bpos.y, bpos.z), dir: v(bheading.x, bheading.y, bheading.z), right, up,
+          halfW: LW, bank: 0, kind: 'route', tunnel: false, branchId: bid });
+      }
+      branches[bid] = nlist;
+    }
+
+    // mark the approach-to-rim span meshSkip past the entry point — there is no main-path
+    // floor inside the well itself; the well's own visual mesh (built separately, see
+    // buildWellMesh) is the only thing drawn there.
+    for (let k = APPROACH_NODES + 1; k <= lenF; k++) {
+      const m = mainNodes[splitIdx + k];
+      if (m) m.meshSkip = true;
+    }
+
+    const ends = [];
+    for (const bid of branchOrder) ends.push(branches[bid][branches[bid].length - 1]);
+    return {
+      id: forkId, splitIdx, flavor: 'divergent', rejoin: false, lanesOnly: false, isWell: true,
+      branches, branchOrder, laneCount: N, ends, end,
+      entryIdx, cx, cz, rOuter, rInner, yTop, yBottom, duration, revolutions, dir,
+      wellConeMesh, wellHoleFloorMesh,
+    };
+  }
+  // local smoothstep helper for makeWellFork (same shape as 'sstep' used elsewhere, kept
+  // separate so makeWellFork has no ordering dependency on where it's defined relative to
+  // makeSorterFork's local sstep)
+  function sstepW(a, b, x) { if (a === b) return x < a ? 0 : 1; let t = (x - a) / (b - a); t = Math.max(0, Math.min(1, t)); return t*t*(3-2*t); }
+
   // Create one fork rooted at mainNodes[splitIdx]. Returns the fork descriptor.
   // rng = seeded function from track.js so forks are deterministic.
   //
@@ -650,9 +843,15 @@ const ZFORK = (() => {
         const at = i + 16;
         const span = zEnd - at - 6;
         const targetSteps = span > 34 ? span : undefined;   // span the entire zone
-        const fork = USE_DIVERGENT
-          ? makeSorterFork(mainNodes, at, rng, 'fork'+n, targetSteps)   // may be null = NO split (1 lane)
-          : makeFork(mainNodes, at, rng, 'fork'+n, true);
+        // MIX: roughly a third of splits are the gravity well (the actual coin-funnel
+        // spiral), the rest stay the simpler flat-mouth sorter — variety race to race,
+        // per direction, rather than every split being the (more elaborate) well.
+        const useWell = USE_DIVERGENT && rng() < 0.35;
+        const fork = useWell
+          ? makeWellFork(mainNodes, at, rng, 'fork'+n, targetSteps)
+          : USE_DIVERGENT
+            ? makeSorterFork(mainNodes, at, rng, 'fork'+n, targetSteps)   // may be null = NO split (1 lane)
+            : makeFork(mainNodes, at, rng, 'fork'+n, true);
         if (fork) {
           n++;
           forks.push(fork);
@@ -665,7 +864,7 @@ const ZFORK = (() => {
     return { forks, forkAtIdx };
   }
 
-  return { buildForks, makeFork, makeDivergentFork, makeSorterFork, buildBranch, setDivergent: (b) => { USE_DIVERGENT = !!b; } };
+  return { buildForks, makeFork, makeDivergentFork, makeSorterFork, makeWellFork, buildBranch, setDivergent: (b) => { USE_DIVERGENT = !!b; } };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = { ZFORK };

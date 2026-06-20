@@ -287,13 +287,14 @@ const ZPHYSICS = (() => {
     const body = world.createRigidBody(bd);
     const cd = RAPIER.ColliderDesc.ball(BALL_R * 1.5)   // collide at RING radius, not core
       .setRestitution(0.0).setFriction(0.5).setDensity(1.2);
-    world.createCollider(cd, body);
+    const collider = world.createCollider(cd, body);
 
     // deterministic-ish personality from the id hash
     let h = 0; for (let k = 0; k < id.length; k++) h = (h * 31 + id.charCodeAt(k)) | 0;
     const rnd = (Math.abs(h % 1000) / 1000);
     balls.set(id, {
       body,
+      collider,
       hint: 0,
       speedMul: 0.9 + rnd * 0.25,         // 0.90–1.15 target speed
       lane: (rnd - 0.5) * 1.4,            // preferred lateral offset, spreads the pack
@@ -419,11 +420,126 @@ const ZPHYSICS = (() => {
     }
   }
 
+  // ================= GRAVITY WELL ORBIT (scripted, not physics-driven) =================
+  // A ball enters tangentially, spirals down a shrinking radius for a fixed duration while
+  // circling multiple times, then exits through whichever of the N holes its final angle
+  // lands on. Position is set directly each frame (setTranslation/setLinvel) rather than
+  // letting Rapier's solver handle it — chosen deliberately for reliability: a ball can
+  // never fly out of the well, get stuck on its wall, or behave unpredictably, at the cost
+  // of it not being "real" physics (no wobble/bounce off the cone surface).
+  function startWellOrbit(b, well, t) {
+    // Convert the ball's current world position into (radius, angle) around the well's
+    // vertical axis (centerX, centerZ at well.cx/cz), so the spiral starts exactly where
+    // the ball actually is — no snapping/teleporting into position.
+    const dx = t.x - well.cx, dz = t.z - well.cz;
+    const r0 = Math.max(well.rInner * 1.05, Math.hypot(dx, dz));   // never start inside the throat
+    const ang0 = Math.atan2(dz, dx);
+    // ORBIT DIRECTION: fixed PER WELL (not per ball) — every ball in the same well spins
+    // the same way, set once when the well is built (well.dir) and reused here. Originally
+    // this was computed per-ball from each ball's own incoming velocity, which sounds more
+    // "physical" but in practice produced near-identical results for every ball anyway
+    // (balls from a normal spawn grid arrive with very similar headings), so it added no
+    // real variety while making the well's spin direction inconsistent ball-to-ball, which
+    // would have looked wrong visually (different balls spinning opposite ways in the same
+    // funnel). well.dir is computed once in forks.js and seeded with the track.
+    const dir = well.dir;
+    // PER-BALL SPREAD: confirmed in simulation that balls entering close together (the
+    // normal spawn-grid case) arrive at nearly identical angles, and with a fully
+    // deterministic scripted spiral, identical entries produce identical exits — every
+    // ball landed in the SAME hole, no real sorting at all, then piled up catastrophically
+    // in that one branch's tube. Each ball gets its own random extra spin on top of the
+    // well's base revolution count, which is what actually spreads otherwise-identical
+    // entries across different final angles (and therefore different holes) — same idea
+    // as how real coins spread out from tiny physical differences, just injected directly
+    // since this orbit is scripted rather than simulated.
+    const revJitter = (Math.random() - 0.5) * 1.4;   // up to ±0.7 of a full extra revolution
+    if (global.__traceWell) console.log('WELL ENTER id='+b._id+' dir='+dir+' ang0='+ang0.toFixed(2)+' revJitter='+revJitter.toFixed(2));
+    // COLLISION OFF DURING THE ORBIT: confirmed in simulation — even with per-ball revolution
+    // jitter spreading balls across different final holes, two balls can still by chance end
+    // up close together (same branch, or just transiently near each other) WHILE one or both
+    // are being forcibly repositioned every frame via setTranslation. That's a teleport into
+    // sudden deep overlap from Rapier's point of view, and the solver's very next step throws
+    // a violent separation impulse at it — which read as "two balls collided and one got
+    // flung off the edge," confirmed by tracing two balls' distance dropping to ~4.5 units
+    // right before one died. The orbit is independent/scripted per ball anyway (no ball is
+    // supposed to interact with another while spiraling), so the honest fix is to just turn
+    // off this ball's collider for the duration — re-enabled the instant it exits.
+    b.collider.setEnabled(false);
+    b.inWell = {
+      well, r0, ang0, dir, revJitter,
+      t: 0,                                   // elapsed seconds in the orbit
+      duration: well.duration,
+      y0: t.y,
+    };
+    b.branch = null;   // not on any branch yet — committed only once the spiral finishes
+  }
+
+  function processWellOrbit(b, dt) {
+    const W = b.inWell;
+    W.t += dt;
+    const u = Math.min(1, W.t / W.duration);          // 0 -> 1 over the orbit's duration
+    const ease = u * u * (3 - 2 * u);                  // smoothstep: gentle start/end, no jolt
+    const well = W.well;
+    // Each ball uses the well's base revolution count PLUS its own jitter (set once at
+    // entry, see startWellOrbit) — this is what spreads otherwise-identical entry angles
+    // across different final angles/holes instead of every ball landing in the same one.
+    const totalRev = well.revolutions + W.revJitter;
+    const radius = W.r0 + (well.rInner - W.r0) * ease;
+    const y = W.y0 + (well.yBottom - W.y0) * ease;
+    const ang = W.ang0 + W.dir * totalRev * 6.2832 * ease;
+    const x = well.cx + Math.cos(ang) * radius;
+    const z = well.cz + Math.sin(ang) * radius;
+    // Velocity is set to the spiral's own instantaneous tangent+radial direction (numerical
+    // derivative via a tiny forward-step) so that if the orbit ends or is interrupted, the
+    // ball's linvel already points the right way instead of whatever it had on entry.
+    const u2 = Math.min(1, (W.t + dt) / W.duration);
+    const ease2 = u2 * u2 * (3 - 2 * u2);
+    const radius2 = W.r0 + (well.rInner - W.r0) * ease2;
+    const y2 = W.y0 + (well.yBottom - W.y0) * ease2;
+    const ang2 = W.ang0 + W.dir * totalRev * 6.2832 * ease2;
+    const x2 = well.cx + Math.cos(ang2) * radius2, z2 = well.cz + Math.sin(ang2) * radius2;
+    b.body.setTranslation({ x, y, z }, true);
+    b.body.setLinvel({ x: (x2 - x) / dt, y: (y2 - y) / dt, z: (z2 - z) / dt }, true);
+
+    if (u >= 1) {
+      // SPIRAL DONE: bin the final angle into one of N holes (equal angular slices around
+      // the circle), then hand off to that branch's tube exactly like the sorter's commit —
+      // same downstream code (node-following, lane-pull, spinners/bumpers/launch-pins on
+      // the branch) with zero changes needed there.
+      let frac = ang / 6.2832; frac -= Math.floor(frac); if (frac < 0) frac += 1;  // 0..1 around the circle
+      const idx = Math.min(well.branchOrder.length - 1, Math.floor(frac * well.branchOrder.length));
+      b.branch = well.branchOrder[idx];
+      b.branchFork = well;
+      b.hint = 0;
+      b.collider.setEnabled(true);   // back to normal collision now that it's committed
+      b.inWell = null;
+    }
+  }
+
   function fixedStep(dt) {
     for (const [, b] of balls) {
       if (!b.alive) continue;
       b.body.resetForces(true);   // clear last step's drive so forces don't compound
       const t = b.body.translation();
+
+      // GRAVITY WELL: a scripted spiral, not a node-follow. When a ball (not already
+      // spiraling) reaches a well fork's entry index, it's handed off entirely to
+      // processWellOrbit() — position/rotation driven directly each frame in a shrinking
+      // spiral, completely bypassing the normal node-following/lane-pull/drive logic below
+      // for as long as the orbit lasts. This is the SCRIPTED approach (not real physics on
+      // a sloped collider) — guaranteed predictable, no risk of a ball flying out of the
+      // well or getting stuck on it.
+      if (b.inWell) {
+        processWellOrbit(b, dt);
+        continue;   // skip the rest of this ball's normal step entirely while spiraling
+      }
+      if (!b.branch && forks) {
+        const well = forks.find(f => f.isWell && b.hint >= f.entryIdx - 3 && b.hint <= f.entryIdx + 3);
+        if (well) {
+          startWellOrbit(b, well, t);
+          continue;
+        }
+      }
 
       // FORK COMMIT: if on the main path and we've reached a fork's split point, pick a
       // lane based on the ball's lateral position, then follow ONLY that lane.
@@ -435,6 +551,13 @@ const ZPHYSICS = (() => {
       // Legacy fan forks (no throatIdx) keep committing at splitIdx exactly as before.
       if (!b.branch && forks) {
         for (const f of forks) {
+          if (f.isWell) continue;   // wells are committed exclusively via startWellOrbit
+                                      // above (entryIdx, not splitIdx/throatIdx) — without
+                                      // this exclusion this loop's fallback-to-splitIdx commit
+                                      // raced the well's own entry check and usually won
+                                      // (splitIdx sits BEFORE entryIdx), skipping the orbit
+                                      // entirely and committing the ball to a random lane
+                                      // the instant it crossed splitIdx.
           const commitIdx = (f.throatIdx != null) ? f.throatIdx : f.splitIdx;
           if (b.hint >= commitIdx - 1 && b.hint <= commitIdx + 1) {
             const sn = nodes[commitIdx];
@@ -730,6 +853,12 @@ const ZPHYSICS = (() => {
     const fallen = [];
     for (const [id, b] of balls) {
       if (!b.alive) continue;
+      if (b.inWell) continue;   // mid-orbit: Y is scripted and legitimately drops fast
+                                  // (yTop -> yBottom over the spiral) — comparing that
+                                  // against b.hint's STALE pre-well node reference (the
+                                  // ball isn't following any node list while orbiting)
+                                  // produced false "fell off the track" eliminations
+                                  // mid-spiral, on a completely successful, intentional drop.
       const t = b.body.translation();
       const N = ballNodes(b);
       const n = N[Math.min(b.hint, N.length-1)];
