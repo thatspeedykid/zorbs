@@ -246,43 +246,111 @@ const ZFORK = (() => {
 
     // ---- lane count: same weighting as the old fan (10% single / 30/32/28% for 2/3/4) ----
     const LW = base;
-    const tubeHWforSpacing = LW * 0.42;     // matches the actual tube half-width used below
-    const minSpacing = 2.3 * tubeHWforSpacing;  // holes only need tube-width separation, not full lane width
-    const SLOPE = 0.85;
-    const BOWL_NODES = 16;                  // approach-taper + bowl-narrow, shared trunk geometry
+    // HOLE WIDTH FIX: the cone wasn't actually narrowing (confirmed: halfW only shrank from
+    // 7.52 to 7.26 across the whole bowl — basically a flat road). Root cause: hole spacing
+    // was based on 0.42*LW (a big fraction of the FULL lane width), so packing even 2 holes
+    // side by side already needed almost the trunk's entire width, leaving the throat nowhere
+    // to actually narrow TO. A hole only needs to be wide enough for a ball plus a little
+    // margin — not a full lane — so size it off the ball radius instead. The tube itself can
+    // still widen back out to a full lane once it's clear of its neighbors (see TUBE_NODES
+    // below); only the tight point right at the hole needs to be ball-sized.
+    const holeHalfWBase = Math.max(1.3, LW * 0.10);   // small and ball-scaled (ball radius 0.5,
+                                                        // so 1.3 is still ~2.6x ball diameter), with a sane floor
+    const BOWL_NODES = 16;                  // approach-taper + cone-narrow, shared trunk geometry
     const TUBE_NODES = 13;                  // steep drop + re-level, PER BRANCH
-    const bowlSpanH = BOWL_NODES * STEPH;
-    const maxOuter = SLOPE * bowlSpanH;     // how far apart the outermost holes sit
+    // roomMax: how many holes can physically fit packed together at the throat. Each needs
+    // roughly 2*holeHalfWBase of its own lateral room, so this is a real physical limit now
+    // (not the near-no-op it was when sized off the full lane width).
     let roomMax = 4;
-    while (roomMax >= 2 && (2 * maxOuter / (roomMax - 1)) < minSpacing) roomMax--;
+    while (roomMax >= 2 && (holeHalfWBase * (roomMax * 1.1)) > base * 1.7) roomMax--;
     const wr = rng();
     const want = wr < 0.10 ? 1 : wr < 0.40 ? 2 : wr < 0.72 ? 3 : 4;
     let N = Math.min(want, roomMax);
     if (N < 2) return null;
-    const spacing = N > 1 ? 2 * maxOuter / (N - 1) : 0;
-    const holeOffs = [];
-    for (let i = 0; i < N; i++) holeOffs.push((i - (N - 1) / 2) * spacing);
 
-    // ================= TRUNK: approach -> WIDE BOWL FLOOR spanning every hole =================
-    // BUGFIX: the bowl previously NARROWED down to a single tight point while the holes were
-    // spread far wider than that point ever reached — there was no floor connecting the
-    // throat to where the outer tubes actually started (a visible 15+ unit gap in space,
-    // disconnected floating strips with no funnel between them). A real sorting funnel needs
-    // to WIDEN to cover the full hole spread, not narrow past it. Shared geometry every ball
-    // rides before committing — built as ordinary nodes mutated onto the MAIN centerline
-    // (same trick the old fan used for its mouth nodes), so there's exactly one floor here,
-    // no seam to get wrong.
+    // ================= TRUNK: a REAL CONE FUNNEL, not a widened flat road =================
+    // Two earlier attempts both missed the actual shape of a funnel: first a bowl that
+    // NARROWED past where the holes were (a gap in space), then a bowl that WIDENED into a
+    // flat platform with notches cut in it (no sense of falling at all — see screenshot,
+    // looked like ramps dangling under a deck). A real funnel does the opposite of both:
+    // it starts at the trunk's normal width and CONTINUOUSLY NARROWS, with the walls
+    // sloping inward, down to a tight throat — like the kitchen funnel it's modeled on.
+    // The holes sit packed close together right at that narrow throat (not spread wide),
+    // so a ball naturally slides/spirals toward the center as the cone narrows underneath
+    // it, and whichever tight hole it ends up over decides its branch.
     const sstep = (a, b, x) => { if (a === b) return x < a ? 0 : 1; let t = (x - a) / (b - a); t = Math.max(0, Math.min(1, t)); return t*t*(3-2*t); };
-    const bowlFloorHalfW = maxOuter + tubeHWforSpacing * 1.3;   // must reach past the outermost hole
-    // HOLE_NODES: the bowl widening from before just made one big SOLID floor slab — with no
-    // visible openings, it read as a platform with ramps dangling underneath it, not a funnel
-    // you fall through (confirmed by screenshot: square notches, no sense of "this is a hole").
-    // Over the final HOLE_NODES of the bowl, the floor actually OPENS UP into N+1 separate
-    // slats with real gaps between them at each hole position, so there's daylight (well,
-    // void) visible right where each tube begins. Built below as a dedicated mesh piece;
-    // these nodes are marked meshSkip so the generic single-strip builder doesn't ALSO draw
-    // a solid floor over the same span.
-    const HOLE_NODES = 6;
+    const throatHalfW = Math.max(base * 0.16, holeHalfWBase * (N * 1.1));  // just wide enough to fit all N holes snugly side by side — now genuinely narrow
+    // CONE_DROP: how much EXTRA the floor plunges (beyond the track's normal per-node
+    // descent) as it narrows — this is what makes it read as falling INTO a funnel rather
+    // than just driving down a narrowing road. Scales with the cone's own width so small
+    // and large funnels both feel proportional.
+    const CONE_DROP = (base - throatHalfW) * 1.4;
+    for (let k = 0; k <= BOWL_NODES; k++) {
+      const m = mainNodes[splitIdx + k];
+      if (m._baseHalfW == null) m._baseHalfW = m.halfW;
+      const t = k / BOWL_NODES;
+      const narrow = sstep(0, 1, t);
+      // CONTINUOUS NARROW from the trunk's own width down to the tight throat — never wider
+      // than the trunk at any point, unlike the previous (wrong) widening version.
+      m.halfW = m._baseHalfW + (throatHalfW - m._baseHalfW) * narrow;
+      // extra plunge on top of the node's existing position, eased in so it starts gently
+      // and steepens toward the throat (a real cone's walls get steeper near the spout)
+      m.pos.y -= CONE_DROP * (narrow * narrow);
+      m.kind = 'sorter';
+      m.sorterHoles = null;
+    }
+    const throatNode0 = mainNodes[splitIdx + BOWL_NODES];
+    // Holes packed in a tight row spanning just inside the throat's own (already narrow)
+    // width — this is the actual fix for "no funnel, ramps in the wrong place": previously
+    // holeOffs were computed from totally separate geometry (maxOuter, based on a desired
+    // spread) with no relationship to where the cone actually narrows to. Now they're a
+    // direct fraction of throatHalfW, guaranteed to fit, guaranteed close together.
+    const holeSpan = throatHalfW * 0.78;
+    const holeOffs = [];
+    for (let i = 0; i < N; i++) holeOffs.push(N > 1 ? (i - (N - 1) / 2) * (2 * holeSpan / (N - 1)) : 0);
+    throatNode0.sorterHoles = holeOffs.slice();
+    throatNode0.commitHalfW = throatHalfW;
+
+    // ---- CONE SURFACE MESH: a true radial cone (not a flat strip), built independently of
+    // the regular per-node left/right floor strip. Each ring around the cone is drawn at
+    // the node's actual (narrowing) halfW, but swept through several angular SEGMENTS
+    // rather than just two edge points — that's what makes it read as a curved funnel
+    // surface instead of a flat road that happens to get narrower. The regular straight-
+    // strip floor for these nodes is skipped (meshSkip) so this is the only floor drawn. ----
+    const CONE_SEGMENTS = 10;        // angular resolution of the funnel wall
+    const coneMeshPos = [], coneMeshIdx = [];
+    let coneBase = 0;
+    const pushTri = (a, b, c) => {
+      coneMeshPos.push(a.x,a.y,a.z, b.x,b.y,b.z, c.x,c.y,c.z);
+      coneMeshIdx.push(coneBase, coneBase+1, coneBase+2);
+      coneBase += 3;
+    };
+    // ring(k, ang) -> a point on the cone's surface at node k, swept angle 'ang' across the
+    // node's local right/up plane (ang=-1 is the far-left floor edge, +1 far-right, with a
+    // cosine sweep so the cross-section bulges down into a rounded basin between them,
+    // rather than a flat V — closer to the photo's smooth conical bowl).
+    const ringPoint = (k, ang) => {
+      const m = mainNodes[splitIdx + k];
+      const lateral = ang * m.halfW;
+      const dip = (1 - Math.cos(ang * Math.PI * 0.5)) * m.halfW * 0.35;   // rounds the cross-section into a basin
+      return v(m.pos.x + m.right.x * lateral, m.pos.y - dip, m.pos.z + m.right.z * lateral);
+    };
+    for (let k = 0; k < BOWL_NODES; k++) {
+      for (let s = 0; s < CONE_SEGMENTS; s++) {
+        const a0 = -1 + (2 * s) / CONE_SEGMENTS, a1 = -1 + (2 * (s + 1)) / CONE_SEGMENTS;
+        const p00 = ringPoint(k, a0), p01 = ringPoint(k, a1);
+        const p10 = ringPoint(k + 1, a0), p11 = ringPoint(k + 1, a1);
+        pushTri(p00, p10, p11);
+        pushTri(p00, p11, p01);
+      }
+      mainNodes[splitIdx + k].meshSkip = true;   // the cone mesh is the only floor here
+    }
+    const coneFloorMesh = { positions: new Float32Array(coneMeshPos), indices: new Uint32Array(coneMeshIdx) };
+
+    // ---- THROAT DISC: the small flat ring at the very bottom of the cone, with the N
+    // holes cut into it as real gaps — same slatted-strip technique as before, just now
+    // operating on a TIGHT throat instead of a wide platform, which is the actual fix. ----
+    const HOLE_NODES = Math.min(6, BOWL_NODES - 1);
     const holeMeshPos = [], holeMeshIdx = [];
     let holeBase = 0;
     const pushQuadLocal = (a, b, c, d) => {
@@ -290,44 +358,21 @@ const ZFORK = (() => {
       holeMeshIdx.push(holeBase, holeBase+1, holeBase+2, holeBase, holeBase+2, holeBase+3);
       holeBase += 4;
     };
-    for (let k = 0; k <= BOWL_NODES; k++) {
-      const m = mainNodes[splitIdx + k];
-      if (m._baseHalfW == null) m._baseHalfW = m.halfW;
-      const t = k / BOWL_NODES;
-      // WIDEN from the trunk's normal width out to cover every hole — the funnel mouth
-      // opening up, not narrowing away from where the balls actually need to go.
-      const widen = sstep(0, 1, t);
-      m.halfW = m._baseHalfW + (bowlFloorHalfW - m._baseHalfW) * widen;
-      m.kind = 'sorter';
-      m.sorterHoles = (k === BOWL_NODES) ? holeOffs.slice() : null;  // only the throat node carries hole data (for the renderer)
-      // COMMIT WIDTH: physics bins a ball's lateral position into N lanes using this value.
-      // Now that the bowl floor genuinely spans the hole spread, the node's own halfW IS the
-      // right scale to bin against — no separate scale mismatch any more.
-      if (k === BOWL_NODES) m.commitHalfW = bowlFloorHalfW;
-      if (k > BOWL_NODES - HOLE_NODES) m.meshSkip = true;   // slatted mesh takes over from here
-    }
-    // ---- build the slatted floor: N+1 strips (gaps between/outside the holes), each strip
-    // growing its own hole-sized gap from 0 width (still solid, blends with the regular floor
-    // behind it) to full width (true gap) over HOLE_NODES, so it reads as the floor opening up
-    // rather than a hard cut. ----
-    const holeHalfW = tubeHWforSpacing * 1.05;   // each gap is slightly wider than its tube
+    const holeHalfW = holeHalfWBase * 0.92;   // slightly inside the tube's own width so the tube wall is just visible at the rim, not floating past the gap edge
     for (let k = BOWL_NODES - HOLE_NODES; k < BOWL_NODES; k++) {
       const m0 = mainNodes[splitIdx + k], m1 = mainNodes[splitIdx + k + 1];
       const tOpen0 = Math.max(0, (k - (BOWL_NODES - HOLE_NODES)) / HOLE_NODES);
       const tOpen1 = Math.max(0, (k + 1 - (BOWL_NODES - HOLE_NODES)) / HOLE_NODES);
       const open0 = sstep(0, 1, tOpen0), open1 = sstep(0, 1, tOpen1);
-      // strip boundaries: sorted hole edges (left, right) for both ends of this segment
       const edges0 = [-m0.halfW], edges1 = [-m1.halfW];
       for (const off of holeOffs) {
         edges0.push(off - holeHalfW * open0, off + holeHalfW * open0);
         edges1.push(off - holeHalfW * open1, off + holeHalfW * open1);
       }
       edges0.push(m0.halfW); edges1.push(m1.halfW);
-      // edges come in pairs after the first/last: [outerL, h0L,h0R, h1L,h1R, ..., outerR]
-      // strips are the spans BETWEEN consecutive pairs (skipping the hole gaps themselves)
       for (let i = 0; i < edges0.length - 1; i += 2) {
         const aL = edges0[i], aR = edges0[i+1], bL = edges1[i], bR = edges1[i+1];
-        if (aR - aL < 0.02 && bR - bL < 0.02) continue;   // fully closed gap, nothing to draw
+        if (aR - aL < 0.02 && bR - bL < 0.02) continue;
         const p = (m, off) => v(m.pos.x + m.right.x * off, m.pos.y, m.pos.z + m.right.z * off);
         pushQuadLocal(p(m0, aL), p(m0, aR), p(m1, bR), p(m1, bL));
       }
@@ -336,7 +381,7 @@ const ZFORK = (() => {
 
     // ================= PER-BRANCH: drop-tube (steep + visible) -> body (old fan's lane shape) =================
     const branches = {}, branchOrder = [];
-    const throatNode = mainNodes[splitIdx + BOWL_NODES];
+    const throatNode = throatNode0;
     const bodyStart = BOWL_NODES + TUBE_NODES;          // where the old fan's wander/funnel body begins
     const bodyLen = lenF - bodyStart;
     if (bodyLen < 20) return null;                       // not enough room left for a real body
@@ -347,7 +392,11 @@ const ZFORK = (() => {
     const eTaper = (t) => { const er = Math.min(1, t / 0.16, (1 - t) / 0.16); const e = Math.max(0, er); return e*e*(3-2*e); };
     const bodySLOPE = 0.62, bodyFanLenH = RAMP * bodyLen * STEPH, bodyMaxOuter = bodySLOPE * bodyFanLenH;
     const holdNodes = Math.max(1, (1 - 2 * RAMP) * bodyLen);
-    const wanderAmp = Math.max(0, Math.min(0.05 * holdNodes, (spacing - 2 * LW) * 0.34, bodyMaxOuter * 0.5));
+    // bodySpacing computed just below — wanderAmp needs it for the "neighbours can't touch"
+    // bound, so it's derived first from the body's own lane layout instead of the funnel's
+    // old (now-removed) wide hole spacing.
+    const bodySpacingForWander = N > 1 ? 2 * bodyMaxOuter / (N - 1) : bodyMaxOuter;
+    const wanderAmp = Math.max(0, Math.min(0.05 * holdNodes, (bodySpacingForWander - 2 * LW) * 0.34, bodyMaxOuter * 0.5));
     const holdWin = (t) => sstep(RAMP * 0.6, RAMP, t) * (1 - sstep(1 - RAMP, 1 - RAMP * 0.6, t));
     const mkWave = (amp, maxFreq) => {
       const comps = [], n = 2 + Math.floor(rng() * 3);
@@ -379,7 +428,8 @@ const ZFORK = (() => {
       let pos = v(throatNode.pos.x + throatNode.right.x * holeOff, throatNode.pos.y, throatNode.pos.z + throatNode.right.z * holeOff);
       const fwd0 = norm(v(throatNode.dir.x, throatNode.dir.y, throatNode.dir.z));
       let heading = v(fwd0.x, fwd0.y, fwd0.z);
-      const tubeHW = LW * 0.42;            // tube is noticeably narrower than the body — reads as a chute
+      const tubeHW = holeHalfWBase;        // matches the hole it actually fell through — was LW*0.42
+                                            // (way wider than the hole), now sized exactly to it
       for (let k = 0; k < TUBE_NODES; k++) {
         const t = k / TUBE_NODES;
         // dive steep over the first 55%, recover over the back 45% (smooth, no kink)
@@ -497,7 +547,7 @@ const ZFORK = (() => {
     for (const bid of branchOrder) { rejoinIdx[bid] = end; ends.push(branches[bid][branches[bid].length - 1]); }
     return { id: forkId, splitIdx, flavor: 'divergent', rejoin: true, lanesOnly: false,
       branches, branchOrder, laneCount: N, rejoinIdx, ends, end, isSorter: true, throatIdx: splitIdx + BOWL_NODES,
-      holeFloorMesh };
+      coneFloorMesh, holeFloorMesh };
   }
 
   // Create one fork rooted at mainNodes[splitIdx]. Returns the fork descriptor.

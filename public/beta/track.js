@@ -617,6 +617,14 @@ const ZTRACK = (() => {
         for (const bid in f.branches) {
           branchMeshes.push({ branchId: bid, mesh: buildMesh(f.branches[bid]) });
         }
+        // SORTER CONE SURFACE: the radial cone mesh (built in forks.js) that gives the
+        // funnel its actual curved, narrowing shape — this is what makes it LOOK like a
+        // funnel instead of a road that happens to get narrower. Floor-only, visual.
+        if (f.isSorter && f.coneFloorMesh) {
+          const empty = { positions: new Float32Array(0), indices: new Uint32Array(0) };
+          branchMeshes.push({ branchId: f.id + '_cone',
+            mesh: { floor: f.coneFloorMesh, walls: empty, roof: empty } });
+        }
         // SORTER HOLE-FLOOR: the slatted strips with real gaps where each tube begins
         // (built in forks.js) — visual only, walls/roof are empty since this piece is purely
         // the floor cosmetics that make the funnel actually look like it has holes in it.
