@@ -274,6 +274,22 @@ const ZFORK = (() => {
     // no seam to get wrong.
     const sstep = (a, b, x) => { if (a === b) return x < a ? 0 : 1; let t = (x - a) / (b - a); t = Math.max(0, Math.min(1, t)); return t*t*(3-2*t); };
     const bowlFloorHalfW = maxOuter + tubeHWforSpacing * 1.3;   // must reach past the outermost hole
+    // HOLE_NODES: the bowl widening from before just made one big SOLID floor slab — with no
+    // visible openings, it read as a platform with ramps dangling underneath it, not a funnel
+    // you fall through (confirmed by screenshot: square notches, no sense of "this is a hole").
+    // Over the final HOLE_NODES of the bowl, the floor actually OPENS UP into N+1 separate
+    // slats with real gaps between them at each hole position, so there's daylight (well,
+    // void) visible right where each tube begins. Built below as a dedicated mesh piece;
+    // these nodes are marked meshSkip so the generic single-strip builder doesn't ALSO draw
+    // a solid floor over the same span.
+    const HOLE_NODES = 6;
+    const holeMeshPos = [], holeMeshIdx = [];
+    let holeBase = 0;
+    const pushQuadLocal = (a, b, c, d) => {
+      holeMeshPos.push(a.x,a.y,a.z, b.x,b.y,b.z, c.x,c.y,c.z, d.x,d.y,d.z);
+      holeMeshIdx.push(holeBase, holeBase+1, holeBase+2, holeBase, holeBase+2, holeBase+3);
+      holeBase += 4;
+    };
     for (let k = 0; k <= BOWL_NODES; k++) {
       const m = mainNodes[splitIdx + k];
       if (m._baseHalfW == null) m._baseHalfW = m.halfW;
@@ -288,7 +304,35 @@ const ZFORK = (() => {
       // Now that the bowl floor genuinely spans the hole spread, the node's own halfW IS the
       // right scale to bin against — no separate scale mismatch any more.
       if (k === BOWL_NODES) m.commitHalfW = bowlFloorHalfW;
+      if (k > BOWL_NODES - HOLE_NODES) m.meshSkip = true;   // slatted mesh takes over from here
     }
+    // ---- build the slatted floor: N+1 strips (gaps between/outside the holes), each strip
+    // growing its own hole-sized gap from 0 width (still solid, blends with the regular floor
+    // behind it) to full width (true gap) over HOLE_NODES, so it reads as the floor opening up
+    // rather than a hard cut. ----
+    const holeHalfW = tubeHWforSpacing * 1.05;   // each gap is slightly wider than its tube
+    for (let k = BOWL_NODES - HOLE_NODES; k < BOWL_NODES; k++) {
+      const m0 = mainNodes[splitIdx + k], m1 = mainNodes[splitIdx + k + 1];
+      const tOpen0 = Math.max(0, (k - (BOWL_NODES - HOLE_NODES)) / HOLE_NODES);
+      const tOpen1 = Math.max(0, (k + 1 - (BOWL_NODES - HOLE_NODES)) / HOLE_NODES);
+      const open0 = sstep(0, 1, tOpen0), open1 = sstep(0, 1, tOpen1);
+      // strip boundaries: sorted hole edges (left, right) for both ends of this segment
+      const edges0 = [-m0.halfW], edges1 = [-m1.halfW];
+      for (const off of holeOffs) {
+        edges0.push(off - holeHalfW * open0, off + holeHalfW * open0);
+        edges1.push(off - holeHalfW * open1, off + holeHalfW * open1);
+      }
+      edges0.push(m0.halfW); edges1.push(m1.halfW);
+      // edges come in pairs after the first/last: [outerL, h0L,h0R, h1L,h1R, ..., outerR]
+      // strips are the spans BETWEEN consecutive pairs (skipping the hole gaps themselves)
+      for (let i = 0; i < edges0.length - 1; i += 2) {
+        const aL = edges0[i], aR = edges0[i+1], bL = edges1[i], bR = edges1[i+1];
+        if (aR - aL < 0.02 && bR - bL < 0.02) continue;   // fully closed gap, nothing to draw
+        const p = (m, off) => v(m.pos.x + m.right.x * off, m.pos.y, m.pos.z + m.right.z * off);
+        pushQuadLocal(p(m0, aL), p(m0, aR), p(m1, bR), p(m1, bL));
+      }
+    }
+    const holeFloorMesh = { positions: new Float32Array(holeMeshPos), indices: new Uint32Array(holeMeshIdx) };
 
     // ================= PER-BRANCH: drop-tube (steep + visible) -> body (old fan's lane shape) =================
     const branches = {}, branchOrder = [];
@@ -452,7 +496,8 @@ const ZFORK = (() => {
     const rejoinIdx = {}, ends = [];
     for (const bid of branchOrder) { rejoinIdx[bid] = end; ends.push(branches[bid][branches[bid].length - 1]); }
     return { id: forkId, splitIdx, flavor: 'divergent', rejoin: true, lanesOnly: false,
-      branches, branchOrder, laneCount: N, rejoinIdx, ends, end, isSorter: true, throatIdx: splitIdx + BOWL_NODES };
+      branches, branchOrder, laneCount: N, rejoinIdx, ends, end, isSorter: true, throatIdx: splitIdx + BOWL_NODES,
+      holeFloorMesh };
   }
 
   // Create one fork rooted at mainNodes[splitIdx]. Returns the fork descriptor.

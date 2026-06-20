@@ -617,10 +617,21 @@ const ZTRACK = (() => {
         for (const bid in f.branches) {
           branchMeshes.push({ branchId: bid, mesh: buildMesh(f.branches[bid]) });
         }
+        // SORTER HOLE-FLOOR: the slatted strips with real gaps where each tube begins
+        // (built in forks.js) — visual only, walls/roof are empty since this piece is purely
+        // the floor cosmetics that make the funnel actually look like it has holes in it.
+        if (f.isSorter && f.holeFloorMesh) {
+          const empty = { positions: new Float32Array(0), indices: new Uint32Array(0) };
+          branchMeshes.push({ branchId: f.id + '_holes',
+            mesh: { floor: f.holeFloorMesh, walls: empty, roof: empty } });
+        }
       }
     }
 
     // Collider: main walls/roof + every branch's walls/roof (floors stay analytic).
+    // Branches with NO wall/roof geometry (e.g. the sorter's '_holes' entry, which is
+    // floor-only visual cosmetics) are skipped entirely — an empty trimesh buffer crashes
+    // Rapier's collider constructor.
     const collider = buildColliderBuffers(nodes);
     const branchColliders = branchMeshes.map(bm => ({
       branchId: bm.branchId,
@@ -634,7 +645,7 @@ const ZTRACK = (() => {
         }
         return { positions:new Float32Array(positions), indices:new Uint32Array(indices) };
       })()
-    }));
+    })).filter(bc => bc.buffers.indices.length > 0);
 
     // SPINNERS: rotating arm obstacles. Each spinner is a Y-axis kinematic body whose two arms
     // sweep across the track, knocking marbles sideways. Placed CENTER (no lateral offset) so
