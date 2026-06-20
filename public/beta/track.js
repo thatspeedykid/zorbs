@@ -543,8 +543,22 @@ const ZTRACK = (() => {
     {
       const lrng = mulberry32((seed ^ 0x2f8a3c91) >>> 0);
       const GAP_MIN = 130, GAP_VAR = 90, PAD_LEN = 6;   // short pad, wide gaps (rare event)
+      // RUNWAY CHECK: a launch sends the ball airborne for up to ~1s while the track keeps
+      // descending underneath it — confirmed in simulation that a pin placed right before a
+      // funnel/narrower pinch could land the ball outside the now-narrowed corridor, or just
+      // never re-catch the floor before checkFalls() fires (a "successful" launch that
+      // accidentally reads as falling off). Require the next RUNWAY nodes after the pad to
+      // stay reasonably wide (no funnel/narrower) so there's always room to land safely.
+      const RUNWAY = 60;
+      const clearRunway = (arr, start) => {
+        for (let k = 0; k < RUNWAY; k++) {
+          const n2 = arr[start + k];
+          if (!n2 || n2.kind === 'funnel' || n2.kind === 'narrower' || n2.tunnel) return false;
+        }
+        return true;
+      };
       let i = platStart + 110;
-      while (i < nodes.length - 70) {
+      while (i < nodes.length - 70 - 60) {
         const nd = nodes[i];
         const bad = !nd || nd.isPlatform || nd.branchId || nd.kind === 'fork' || nd.tunnel ||
                     nd.boost || nd.meshSkip || /drum/.test(nd.kind || '');
@@ -554,6 +568,7 @@ const ZTRACK = (() => {
             const n2 = nodes[i + k];
             if (!n2 || n2.isPlatform || n2.branchId || n2.kind === 'fork' || n2.tunnel || n2.boost || n2.meshSkip) { ok = false; break; }
           }
+          if (ok && !clearRunway(nodes, i + PAD_LEN)) ok = false;
           if (ok) {
             // power/fwdBoost are the "feel" knobs — tuned live, not blind-guessed here.
             const power = 7.5 + lrng() * 3.0;        // upward impulse strength
@@ -576,6 +591,7 @@ const ZTRACK = (() => {
           let m = lo + Math.floor(prng() * (hi - lo - PAD_LEN));
           let ok = true;
           for (let k = 0; k < PAD_LEN; k++) { const n2 = arr[m + k]; if (!n2 || n2.meshSkip || n2.boost) { ok = false; break; } }
+          if (ok && !clearRunway(arr, m + PAD_LEN)) ok = false;
           if (ok) {
             const power = 7.0 + prng() * 3.0;
             const fwdBoost = 0.5 + prng() * 0.4;

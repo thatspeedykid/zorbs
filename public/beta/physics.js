@@ -517,6 +517,18 @@ const ZPHYSICS = (() => {
         // let it keep some lateral spread so balls don't clump and pile up at the exit.
         targetLane = Math.max(-n.halfW*0.5, Math.min(n.halfW*0.5, b.lane * 0.6));
         lanePull = LANE_PULL * 2.0;
+      } else if (n.kind === 'funnel' || n.kind === 'narrower') {
+        // FUNNEL/NARROWER PINCH: the corridor can shrink well below a ball's normal lane
+        // offset (b.lane up to ±0.7, plus whatever lateral velocity it's carrying from pack
+        // jostling). A handful of balls were getting caught right at the narrowest point of
+        // a pinch and falling off the edge (confirmed in simulation: curLat ~2-3 against a
+        // halfW that had shrunk to ~3.7) — the default lane pull just wasn't reacting fast
+        // enough relative to how quickly the corridor closes in. Pull harder AND tighten the
+        // target band proportionally to how narrow the corridor currently is, so the ball is
+        // already centering well before the pinch reaches its minimum.
+        const squeeze = Math.max(0.35, Math.min(1, n.halfW / 7.0));   // 1 = full width, lower = tighter pinch
+        targetLane = Math.max(-n.halfW*0.6, Math.min(n.halfW*0.6, b.lane * squeeze));
+        lanePull = LANE_PULL * 1.8;
       }
       const latErr = (targetLane - curLat);             // toward preferred/churn lane
       // DAMPING: the lane-seek was pure-proportional (force ∝ position error only), which
@@ -565,10 +577,12 @@ const ZPHYSICS = (() => {
         }, true);
         b._launchCD = 1.2;     // seconds before this ball can trigger another launch-pin
         b._launchT = 0.5;      // seconds of grace where floor-snap is suppressed (let it arc)
+        b._launchRecoverT = 2.5;  // generous window AFTER the arc to actively re-catch the floor
         b._justLaunched = true;   // one-shot edge for the renderer to trigger a flash
       }
       if (b._launchCD > 0) b._launchCD -= dt;
       if (b._launchT > 0) b._launchT -= dt;
+      if (b._launchRecoverT > 0) b._launchRecoverT -= dt;
 
       // total drive: forward + gentle lane-seek + boost. Applied as a force each
       // fixed step (consistent), and kept modest so ball-ball contacts still win.
@@ -604,8 +618,18 @@ const ZPHYSICS = (() => {
       // upward impulse from a launch-pin actually arcs instead of being clamped back to
       // the floor on the very next physics step (the bug this exists to avoid).
       const inLaunchGrace = b._launchT > 0;
-      if (!inLaunchGrace && onSurface && gap > -0.35) {        // touching or pressed into floor
+      // POST-LAUNCH RE-CATCH: confirmed in simulation that a launch on a long, gently
+      // descending section can leave the ball airborne well past the no-snap grace window
+      // (the floor keeps dropping underneath it for longer than the ballistic arc takes to
+      // come back down), and the standard tight gap>-0.35 threshold then never lets it
+      // re-catch the floor before checkFalls() eliminates a ball that was never actually off
+      // the track. _launchRecoverT gives a short, separate window AFTER a launch where the
+      // re-catch tolerance is much looser (it can snap back to the floor from further away),
+      // recovering from a long arc instead of leaving it purely to gravity vs. a fixed band.
+      const recoverGap = (b._launchRecoverT > 0) ? -4.0 : -0.35;
+      if (!inLaunchGrace && onSurface && gap > recoverGap) {        // touching or pressed into floor
         b._grounded = true;
+        b._launchRecoverT = 0;   // re-caught — recovery window spent
         // place on the surface
         b.body.setTranslation({ x: tpos.x, y: floorY, z: tpos.z }, true);
         // SLOPE-FOLLOWING vertical velocity: look at where the floor is one step ahead
