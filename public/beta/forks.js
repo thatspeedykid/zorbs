@@ -601,32 +601,39 @@ const ZFORK = (() => {
 
     // ---- APPROACH: a short straight run leading into the well's rim, so the ball arrives
     // at a predictable point moving in a predictable direction (tangent to the rim).
-    // WIDEN TO MEET THE RIM: the well's rim (rOuter) is deliberately much wider than the
-    // normal trunk width (LW*2.6, "wide enough to feel like a real basin") — without easing
-    // the approach track out to match, there's an abrupt width jump right at the entry point
-    // (same class of bug as the sorter's cross-section dip: a seam where two pieces of
-    // geometry don't actually meet). Widen smoothly over the approach so the track's edge
-    // and the rim's edge are flush at entryIdx. ----
+    // BUGFIX: a previous attempt at fixing a seam here WIDENED this approach track as a flat
+    // strip out to the rim's full width (LW*2.6) over these 10 nodes — which is itself a
+    // giant flat trapezoid floating in space (exactly the screenshot: a flat triangular wedge
+    // disconnected from everything around it, not a funnel at all). The approach now stays
+    // at its NORMAL width the whole way — the cone mesh itself (built below) is what widens
+    // from the approach's actual width out to the basin shape, as part of its own curved
+    // surface, not as a separate flat pre-widening section bolted on before it. ----
     const APPROACH_NODES = 10;
-    const rOuterPreview = LW * 2.6;   // computed early so the approach can widen toward it
-    const sstepApproach = (x) => { const t = Math.max(0, Math.min(1, x)); return t*t*(3-2*t); };
     for (let k = 0; k <= APPROACH_NODES; k++) {
-      const m = mainNodes[splitIdx + k];
-      if (m._baseHalfW == null) m._baseHalfW = m.halfW;
-      const widen = sstepApproach(k / APPROACH_NODES);
-      m.halfW = m._baseHalfW + (rOuterPreview - m._baseHalfW) * widen;
-      m.kind = 'sorter';   // reuse the same lane-pull treatment as the sorter's bowl approach
+      mainNodes[splitIdx + k].kind = 'sorter';   // reuse the same lane-pull treatment as the sorter's bowl approach
     }
     const entryNode = mainNodes[splitIdx + APPROACH_NODES];
     const entryIdx = splitIdx + APPROACH_NODES;
 
-    // ---- WELL GEOMETRY: center sits ahead of the entry point along its current heading,
-    // offset so the entry node sits exactly on the rim (rOuter). ----
-    const rOuter = rOuterPreview;             // wide enough to feel like a real basin, not a pinch
+    // ---- WELL GEOMETRY: center sits ahead of the entry point along its current heading.
+    // CENTER PLACEMENT FIX: must be placed at a distance matching the RING RADIUS the cone
+    // mesh actually uses at ringT=0 (entryNode.halfW, eased up to rOuter over RIM_EASE — see
+    // ringPoint below), not rOuter itself. Placing it rOuter away while the first ring's
+    // radius is only entryNode.halfW left the entry point sitting INSIDE where the mesh's
+    // rim was actually drawn — a gap between the approach track and the cone, even after
+    // the rim-easing fix above. With the center at entryNode.halfW away, ringT=0 lands
+    // exactly on the entry point by construction. ----
+    const rOuter = Math.max(entryNode.halfW * 1.6, LW * 1.6);
     const rInner = Math.max(1.6, LW * 0.22);   // tight throat where the holes live
-    const fwd = norm(v(entryNode.dir.x, entryNode.dir.y, entryNode.dir.z));
-    const cx = entryNode.pos.x + fwd.x * rOuter;
-    const cz = entryNode.pos.z + fwd.z * rOuter;
+    // HORIZONTAL-ONLY DIRECTION: ring radius (used in ringPoint below) is a pure XZ-plane
+    // distance from (cx,cz), but the track's forward vector has a downward Y component
+    // (it's always descending) — using the full 3D fwd*halfW offset placed the center
+    // slightly too close, since the 3D vector's horizontal projection is shorter than its
+    // full length. Flattening fwd to the XZ plane before normalizing fixes the entry point
+    // landing EXACTLY on the ringT=0 radius (confirmed: was off by ~5%, now exact).
+    const fwdFlat = norm(v(entryNode.dir.x, 0, entryNode.dir.z));
+    const cx = entryNode.pos.x + fwdFlat.x * entryNode.halfW;
+    const cz = entryNode.pos.z + fwdFlat.z * entryNode.halfW;
     const yTop = entryNode.pos.y;
     const DROP = (rOuter - rInner) * 1.3 + LW * 1.5;   // total descent through the well — generous, reads as a real drop
     const yBottom = yTop - DROP;
@@ -651,9 +658,20 @@ const ZFORK = (() => {
     // ringPoint(ringT, ang) -> a point on the cone's surface. ringT 0=rim (rOuter,yTop),
     // ringT 1=throat (rInner,yBottom). A gentle spiral-groove offset is added to the radius
     // so the surface itself visually hints at the spiral path balls actually take.
+    // RIM EASE: the cone doesn't jump straight to rOuter at ringT=0 — it starts at the
+    // approach track's OWN actual width (entryNode.halfW) and widens out to rOuter over the
+    // first RIM_EASE fraction of the cone's height, so the mesh is flush with the approach
+    // floor right where they meet instead of an instant jump in radius (the remaining seam
+    // after removing the flat pre-widening trapezoid — that fixed the giant flat wedge, but
+    // the cone itself still started exactly at rOuter with no easing from where the track
+    // actually was).
+    const RIM_EASE = 0.18;
     const ringPoint = (ringT, ang) => {
       const ease = ringT * ringT * (3 - 2 * ringT);
-      const r = rOuter + (rInner - rOuter) * ease;
+      const rimEaseT = Math.min(1, ringT / RIM_EASE);
+      const rimEase = rimEaseT * rimEaseT * (3 - 2 * rimEaseT);
+      const rStart = entryNode.halfW + (rOuter - entryNode.halfW) * rimEase;
+      const r = rStart + (rInner - rStart) * ease;
       const y = yTop + (yBottom - yTop) * ease;
       const groove = Math.sin(ang * 5 + ringT * revolutions * 6.2832) * (rOuter - rInner) * 0.02;
       return v(cx + Math.cos(ang) * (r + groove), y, cz + Math.sin(ang) * (r + groove));
@@ -698,10 +716,21 @@ const ZFORK = (() => {
 
     // ---- N holes arranged in a ring at rInner, equal angular slices (matches the binning
     // physics.js does on the ball's final orbit angle). Branches start at each hole. ----
+    // REAL BRANCH: per direction, one randomly-chosen branch carries the actual continuing
+    // track (rejoins the main path afterward, same as the sorter already does); the other
+    // N-1 branches are short stubs that snap a ball onto the real branch — at a random
+    // progress point along it, invisibly — once their own short run finishes. This avoids
+    // needing every single branch to independently find its own way to a sane finish (the
+    // 'up to 5 disconnected tracks' problem in the screenshot) while keeping it unpredictable
+    // each race which branch is the 'main' one.
+    const realBranchIdx = Math.floor(rng() * N);
     const branches = {}, branchOrder = [];
-    const BRANCH_LEN = Math.max(40, lenF - APPROACH_NODES - 6);
+    const REAL_BRANCH_LEN = Math.max(40, lenF - APPROACH_NODES - 6);
+    const STUB_BRANCH_LEN = Math.max(18, Math.floor(REAL_BRANCH_LEN * 0.35));   // short — just enough to clear the well before snapping
     for (let i = 0; i < N; i++) {
       const bid = forkId + '_' + i; branchOrder.push(bid);
+      const isReal = (i === realBranchIdx);
+      const BRANCH_LEN = isReal ? REAL_BRANCH_LEN : STUB_BRANCH_LEN;
       const holeAng = (i / N) * 6.2832;
       const hx = cx + Math.cos(holeAng) * rInner, hz = cz + Math.sin(holeAng) * rInner;
       // outward-facing tangent direction at this hole — branches lead AWAY from the well's
@@ -761,9 +790,22 @@ const ZFORK = (() => {
 
     const ends = [];
     for (const bid of branchOrder) ends.push(branches[bid][branches[bid].length - 1]);
+    const realBranchId = forkId + '_' + realBranchIdx;
+    // NO REJOIN: confirmed in simulation that a well branch's actual 3D ending position has
+    // no relationship at all to f.end on the main centerline (measured 634 units apart on a
+    // real track) — branches radiate outward from the well's center in arbitrary directions,
+    // unlike the sorter's branches which roughly continue forward. The generic REJOIN
+    // mechanism (built for the sorter, where that assumption holds) was sending balls that
+    // reached the end of the REAL branch through its fallback-guess logic onto a wildly
+    // wrong main-path location — same fall-through signature as the original well bug this
+    // session already fixed once. The real branch stays a fully standalone track (like
+    // every well branch always was); it's just the ONE standalone track the other (stub)
+    // branches snap onto, via the dedicated WELL STUB MERGE check in physics.js — not the
+    // generic rejoin path.
     return {
       id: forkId, splitIdx, flavor: 'divergent', rejoin: false, lanesOnly: false, isWell: true,
       branches, branchOrder, laneCount: N, ends, end,
+      realBranchId, stubBranchLen: STUB_BRANCH_LEN,
       entryIdx, cx, cz, rOuter, rInner, yTop, yBottom, duration, revolutions, dir,
       wellConeMesh, wellHoleFloorMesh,
     };

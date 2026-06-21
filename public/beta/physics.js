@@ -607,6 +607,47 @@ const ZPHYSICS = (() => {
         }
       }
 
+      // WELL STUB MERGE: a non-real well branch is a short stub (see makeWellFork) — once
+      // a ball reaches its end, snap it onto the well's REAL branch (the one that actually
+      // continues/rejoins the main path) at a random point along that branch's own length,
+      // invisibly. This must run BEFORE the generic REJOIN check below: that check's
+      // fallback guess (splitIdx + curNodes.length, projected onto the MAIN node list) is
+      // only sane for branches that physically continue forward from the split — a well's
+      // stub branches dive in a completely different direction/depth, so the generic
+      // fallback would guess a wildly wrong location (the original fall-through bug this
+      // session already fixed once for the real branch; stubs need their own explicit path
+      // rather than relying on that same fallback by omission).
+      if (b.branch && b.branchFork && b.branchFork.isWell && b.branch !== b.branchFork.realBranchId
+          && b.hint >= curNodes.length - 2) {
+        const realArr = branchNodes[b.branchFork.realBranchId];
+        if (realArr && realArr.length) {
+          // land somewhere in the back 60% of the real branch's length — never right at its
+          // very start (would look like teleporting ahead of where it should be) and never
+          // past its own end.
+          const landIdx = Math.floor(realArr.length * (0.35 + Math.random() * 0.55));
+          b.branch = b.branchFork.realBranchId;
+          b.hint = landIdx;
+          const ln = realArr[Math.min(landIdx, realArr.length - 1)];
+          b.body.setTranslation({ x: ln.pos.x, y: ln.pos.y + 0.05, z: ln.pos.z }, true);
+        } else {
+          // defensive fallback if something's missing — behave like the generic rejoin
+          b.branch = null; b.branchFork = null;
+          b.hint = nearestNodeWide(t, b.branchFork.splitIdx + curNodes.length, 80, nodes);
+        }
+        // BUGFIX: curNodes (captured above, before this block ran) still refers to the OLD
+        // stub array's length. Without this continue, the very next check (generic REJOIN,
+        // right below) re-tests b.hint >= curNodes.length-2 using that STALE length against
+        // the ball's NEW b.hint (an index into the much-longer real branch) — which is
+        // almost always still true, so it immediately re-triggers on the same frame and
+        // sends the ball through the generic rejoin's fallback guess onto the MAIN path at
+        // a nonsensical position. Confirmed in simulation: this was firing on effectively
+        // every stub-branch ball, which is why the whole well regression suite (339/340)
+        // broke the moment this stub-merge feature was added. Skipping the rest of this
+        // ball's step for the frame it merges is harmless — one frame of using its old
+        // velocity is imperceptible, and next frame everything reads fresh or branch.
+        continue;
+      }
+
       // REJOIN: if following a branch that rejoins and we've hit its end, return to main.
       if (b.branch && b.branchFork && b.branchFork.rejoin && b.hint >= curNodes.length - 2) {
         // THE OLD BUG: this searched main from node 0 with a tiny window, so a ball
