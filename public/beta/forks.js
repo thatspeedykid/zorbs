@@ -655,23 +655,34 @@ const ZFORK = (() => {
       coneMeshIdx.push(coneBase, coneBase+1, coneBase+2);
       coneBase += 3;
     };
-    // ringPoint(ringT, ang) -> a point on the cone's surface. ringT 0=rim (rOuter,yTop),
-    // ringT 1=throat (rInner,yBottom). A gentle spiral-groove offset is added to the radius
-    // so the surface itself visually hints at the spiral path balls actually take.
-    // RIM EASE: the cone doesn't jump straight to rOuter at ringT=0 — it starts at the
-    // approach track's OWN actual width (entryNode.halfW) and widens out to rOuter over the
-    // first RIM_EASE fraction of the cone's height, so the mesh is flush with the approach
-    // floor right where they meet instead of an instant jump in radius (the remaining seam
-    // after removing the flat pre-widening trapezoid — that fixed the giant flat wedge, but
-    // the cone itself still started exactly at rOuter with no easing from where the track
-    // actually was).
-    const RIM_EASE = 0.18;
+    // ringPoint(ringT, ang) -> a point on the cone's surface. ringT 0=rim, ringT 1=throat.
+    // A gentle spiral-groove offset is added to the radius so the surface itself visually
+    // hints at the spiral path balls actually take.
+    // DOME BUG FIX: a previous version eased the rim's radius (entryHalfW -> rOuter) over a
+    // SEPARATE, much shorter span (RIM_EASE=0.18 of the total height) than the Y descent —
+    // confirmed numerically: the radius widened from 7.49 to 11.00 while Y dropped only 1.37
+    // units over that same stretch. A nearly-flat, wide horizontal disc near the rim reads as
+    // a solid dome/platform sitting on the track from any distance (matching the screenshot —
+    // confirmed visible from far away, which rules out a depth-sorting/transparency issue and
+    // points at the geometry's actual shape). Fixed by computing radius as a SINGLE curve
+    // driven by the SAME 'ease' parameter that drives Y — entryHalfW -> rOuter (basin widens)
+    // -> rInner (narrows to the throat), so radius and descent are coupled by construction
+    // and the rim can never go flat independently of how far it's actually dropped.
+    const PEAK_EASE = 0.25;   // fraction of the descent where the basin is at its widest
+    const radiusFromEase = (e) => {
+      if (e < PEAK_EASE) {
+        const u = e / PEAK_EASE;
+        const s = u * u * (3 - 2 * u);
+        return entryNode.halfW + (rOuter - entryNode.halfW) * s;
+      } else {
+        const u = (e - PEAK_EASE) / (1 - PEAK_EASE);
+        const s = u * u * (3 - 2 * u);
+        return rOuter + (rInner - rOuter) * s;
+      }
+    };
     const ringPoint = (ringT, ang) => {
       const ease = ringT * ringT * (3 - 2 * ringT);
-      const rimEaseT = Math.min(1, ringT / RIM_EASE);
-      const rimEase = rimEaseT * rimEaseT * (3 - 2 * rimEaseT);
-      const rStart = entryNode.halfW + (rOuter - entryNode.halfW) * rimEase;
-      const r = rStart + (rInner - rStart) * ease;
+      const r = radiusFromEase(ease);
       const y = yTop + (yBottom - yTop) * ease;
       const groove = Math.sin(ang * 5 + ringT * revolutions * 6.2832) * (rOuter - rInner) * 0.02;
       return v(cx + Math.cos(ang) * (r + groove), y, cz + Math.sin(ang) * (r + groove));
