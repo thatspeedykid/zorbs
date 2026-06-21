@@ -343,7 +343,15 @@ const ZFORK = (() => {
     const ringPoint = (k, ang) => {
       const m = mainNodes[splitIdx + k];
       const lateral = ang * m.halfW;
-      const dip = (1 - Math.cos(ang * Math.PI * 0.5)) * m.halfW * 0.35;   // rounds the cross-section into a basin
+      // BUGFIX: dip must be ZERO at the edges (ang=±1, where this mesh has to be flush with
+      // the regular approach floor — the screenshot showed a visible dark gap/wedge because
+      // the previous formula had this backwards: zero dip at center, MAXIMUM dip right at
+      // the edge, so the cone's outer rim sat 0.35*halfW BELOW where the track's actual
+      // floor edge was). cos(ang*PI/2) is 1 at ang=0 (center) and 0 at ang=±1 (edges), so
+      // (1 - that) is correctly 0 at center and 1 at the edges — inverted from what's needed.
+      // Flipping to just cos(ang*PI/2) gives max dip at center, zero at edges — a real basin
+      // that's flush with the approach track on both sides.
+      const dip = Math.cos(ang * Math.PI * 0.5) * m.halfW * 0.35;
       return v(m.pos.x + m.right.x * lateral, m.pos.y - dip, m.pos.z + m.right.z * lateral);
     };
     for (let k = 0; k < BOWL_NODES; k++) {
@@ -592,10 +600,21 @@ const ZFORK = (() => {
     if (N < 2) return null;   // a 1-lane "well" wouldn't read as a sort at all — skip, same as the sorter
 
     // ---- APPROACH: a short straight run leading into the well's rim, so the ball arrives
-    // at a predictable point moving in a predictable direction (tangent to the rim). ----
+    // at a predictable point moving in a predictable direction (tangent to the rim).
+    // WIDEN TO MEET THE RIM: the well's rim (rOuter) is deliberately much wider than the
+    // normal trunk width (LW*2.6, "wide enough to feel like a real basin") — without easing
+    // the approach track out to match, there's an abrupt width jump right at the entry point
+    // (same class of bug as the sorter's cross-section dip: a seam where two pieces of
+    // geometry don't actually meet). Widen smoothly over the approach so the track's edge
+    // and the rim's edge are flush at entryIdx. ----
     const APPROACH_NODES = 10;
+    const rOuterPreview = LW * 2.6;   // computed early so the approach can widen toward it
+    const sstepApproach = (x) => { const t = Math.max(0, Math.min(1, x)); return t*t*(3-2*t); };
     for (let k = 0; k <= APPROACH_NODES; k++) {
       const m = mainNodes[splitIdx + k];
+      if (m._baseHalfW == null) m._baseHalfW = m.halfW;
+      const widen = sstepApproach(k / APPROACH_NODES);
+      m.halfW = m._baseHalfW + (rOuterPreview - m._baseHalfW) * widen;
       m.kind = 'sorter';   // reuse the same lane-pull treatment as the sorter's bowl approach
     }
     const entryNode = mainNodes[splitIdx + APPROACH_NODES];
@@ -603,7 +622,7 @@ const ZFORK = (() => {
 
     // ---- WELL GEOMETRY: center sits ahead of the entry point along its current heading,
     // offset so the entry node sits exactly on the rim (rOuter). ----
-    const rOuter = LW * 2.6;             // wide enough to feel like a real basin, not a pinch
+    const rOuter = rOuterPreview;             // wide enough to feel like a real basin, not a pinch
     const rInner = Math.max(1.6, LW * 0.22);   // tight throat where the holes live
     const fwd = norm(v(entryNode.dir.x, entryNode.dir.y, entryNode.dir.z));
     const cx = entryNode.pos.x + fwd.x * rOuter;
