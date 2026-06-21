@@ -432,7 +432,16 @@ const ZPHYSICS = (() => {
     // vertical axis (centerX, centerZ at well.cx/cz), so the spiral starts exactly where
     // the ball actually is — no snapping/teleporting into position.
     const dx = t.x - well.cx, dz = t.z - well.cz;
-    const r0 = Math.max(well.rInner * 1.05, Math.hypot(dx, dz));   // never start inside the throat
+    // CLAMP TO rOuter: confirmed in a screenshot — a ball could enter the well-detection
+    // window (entryIdx ± 3, for margin against fast movement) slightly off-angle or
+    // off-timing from the geometrically "ideal" entry point, putting its ACTUAL distance
+    // from the well's center beyond rOuter — outside where the cone mesh visually exists at
+    // all. The spiral then eased its radius down from that too-large r0, so for the first
+    // stretch of the orbit the ball was floating in genuinely empty space with no track
+    // under it, before the shrinking radius eventually brought it back inside the visible
+    // cone. Clamping r0 to [rInner*1.05, rOuter] guarantees the orbit only ever happens
+    // within the radius range the mesh actually covers.
+    const r0 = Math.max(well.rInner * 1.05, Math.min(well.rOuter, Math.hypot(dx, dz)));
     const ang0 = Math.atan2(dz, dx);
     // ORBIT DIRECTION: fixed PER WELL (not per ball) — every ball in the same well spins
     // the same way, set once when the well is built (well.dir) and reused here. Originally
