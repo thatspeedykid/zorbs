@@ -254,15 +254,26 @@ const ZFORK = (() => {
     // margin — not a full lane — so size it off the ball radius instead. The tube itself can
     // still widen back out to a full lane once it's clear of its neighbors (see TUBE_NODES
     // below); only the tight point right at the hole needs to be ball-sized.
-    const holeHalfWBase = Math.max(1.3, LW * 0.10);   // small and ball-scaled (ball radius 0.5,
-                                                        // so 1.3 is still ~2.6x ball diameter), with a sane floor
+    const holeHalfWBase = Math.max(0.95, LW * 0.10);   // small and ball-scaled (ball radius 0.5,
+                                                        // so 0.95 is still ~1.9x ball diameter — enough
+                                                        // margin, while letting N=4 actually fit on
+                                                        // typical track widths under the stricter cap below)
     const BOWL_NODES = 16;                  // approach-taper + cone-narrow, shared trunk geometry
     const TUBE_NODES = 13;                  // steep drop + re-level, PER BRANCH
     // roomMax: how many holes can physically fit packed together at the throat. Each needs
     // roughly 2*holeHalfWBase of its own lateral room, so this is a real physical limit now
     // (not the near-no-op it was when sized off the full lane width).
     let roomMax = 4;
-    while (roomMax >= 2 && (holeHalfWBase * (roomMax * 1.1)) > base * 1.7) roomMax--;
+    // ROOMMAX FIX: this cap previously allowed the throat to be up to 1.7x the trunk's own
+    // width — which directly contradicts "the throat must be narrower than the trunk."
+    // Confirmed in simulation: on a narrower track section (base~5.35) with N=4 holes, that
+    // let throatHalfW come out to 5.72 — WIDER than the trunk it's supposed to narrow into,
+    // producing a fan that widens-then-barely-narrows instead of a real cone (exactly the
+    // screenshot: flat splay, no funnel shape at all). The cap now requires the throat stay
+    // meaningfully narrower than the trunk (never more than 70% of base) regardless of N —
+    // if that many holes genuinely don't fit that narrow, drop to fewer lanes instead of
+    // letting the throat balloon past the rim.
+    while (roomMax >= 2 && (holeHalfWBase * (roomMax * 1.1)) > base * 0.70) roomMax--;
     const wr = rng();
     const want = wr < 0.10 ? 1 : wr < 0.40 ? 2 : wr < 0.72 ? 3 : 4;
     let N = Math.min(want, roomMax);
@@ -279,7 +290,7 @@ const ZFORK = (() => {
     // so a ball naturally slides/spirals toward the center as the cone narrows underneath
     // it, and whichever tight hole it ends up over decides its branch.
     const sstep = (a, b, x) => { if (a === b) return x < a ? 0 : 1; let t = (x - a) / (b - a); t = Math.max(0, Math.min(1, t)); return t*t*(3-2*t); };
-    const throatHalfW = Math.max(base * 0.16, holeHalfWBase * (N * 1.1));  // just wide enough to fit all N holes snugly side by side — now genuinely narrow
+    const throatHalfW = Math.min(base * 0.70, Math.max(base * 0.16, holeHalfWBase * (N * 1.1)));  // just wide enough to fit all N holes snugly side by side, but HARD-CAPPED below the trunk's own width — a funnel that doesn't narrow isn't a funnel
     // CONE_DROP: how much EXTRA the floor plunges (beyond the track's normal per-node
     // descent) as it narrows — this is what makes it read as falling INTO a funnel rather
     // than just driving down a narrowing road. Scales with the cone's own width so small
