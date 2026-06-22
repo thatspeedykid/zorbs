@@ -633,19 +633,20 @@ const ZTRACK = (() => {
           branchMeshes.push({ branchId: f.id + '_holes',
             mesh: { floor: f.holeFloorMesh, walls: empty, roof: empty } });
         }
-        // GRAVITY WELL: the real radial cone-of-revolution surface plus its throat disc
-        // with N angular hole gaps (both built in forks.js, makeWellFork). Floor-only,
-        // visual — the ball's actual path through here is fully scripted in physics.js
-        // (startWellOrbit/processWellOrbit), not driven by this mesh at all.
+        // GRAVITY WELL: the real radial cone-of-revolution surface plus the flat sorting
+        // platform at the bottom (both built in forks.js, makeWellFork). Floor-only, visual
+        // — the ball's actual path through the spiral is fully scripted in physics.js
+        // (startWellOrbit/processWellOrbit), and track assignment off the platform is a flat
+        // random roll, not driven by this mesh's shape at all.
         if (f.isWell && f.wellConeMesh) {
           const empty = { positions: new Float32Array(0), indices: new Uint32Array(0) };
           branchMeshes.push({ branchId: f.id + '_wellcone',
             mesh: { floor: f.wellConeMesh, walls: empty, roof: empty } });
         }
-        if (f.isWell && f.wellHoleFloorMesh) {
+        if (f.isWell && f.wellPlatformMesh) {
           const empty = { positions: new Float32Array(0), indices: new Uint32Array(0) };
-          branchMeshes.push({ branchId: f.id + '_wellholes',
-            mesh: { floor: f.wellHoleFloorMesh, walls: empty, roof: empty } });
+          branchMeshes.push({ branchId: f.id + '_wellplatform',
+            mesh: { floor: f.wellPlatformMesh, walls: empty, roof: empty } });
         }
       }
     }

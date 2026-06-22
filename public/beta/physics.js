@@ -432,47 +432,27 @@ const ZPHYSICS = (() => {
     // vertical axis (centerX, centerZ at well.cx/cz), so the spiral starts exactly where
     // the ball actually is — no snapping/teleporting into position.
     const dx = t.x - well.cx, dz = t.z - well.cz;
-    // CLAMP TO rOuter: confirmed in a screenshot — a ball could enter the well-detection
-    // window (entryIdx ± 3, for margin against fast movement) slightly off-angle or
-    // off-timing from the geometrically "ideal" entry point, putting its ACTUAL distance
-    // from the well's center beyond rOuter — outside where the cone mesh visually exists at
-    // all. The spiral then eased its radius down from that too-large r0, so for the first
-    // stretch of the orbit the ball was floating in genuinely empty space with no track
-    // under it, before the shrinking radius eventually brought it back inside the visible
-    // cone. Clamping r0 to [rInner*1.05, rOuter] guarantees the orbit only ever happens
-    // within the radius range the mesh actually covers.
-    const r0 = Math.max(well.rInner * 1.05, Math.min(well.rOuter, Math.hypot(dx, dz)));
+    // CLAMP TO rOuter: a ball could enter the well-detection window (entryIdx ± 3, for
+    // margin against fast movement) slightly off-angle or off-timing from the geometrically
+    // "ideal" entry point, putting its ACTUAL distance from the well's center beyond rOuter
+    // — outside where the cone mesh visually exists at all. Clamping r0 to
+    // [rPlatform*1.05, rOuter] guarantees the orbit only ever happens within the radius
+    // range the mesh actually covers.
+    const r0 = Math.max(well.rPlatform * 1.05, Math.min(well.rOuter, Math.hypot(dx, dz)));
     const ang0 = Math.atan2(dz, dx);
     // ORBIT DIRECTION: fixed PER WELL (not per ball) — every ball in the same well spins
-    // the same way, set once when the well is built (well.dir) and reused here. Originally
-    // this was computed per-ball from each ball's own incoming velocity, which sounds more
-    // "physical" but in practice produced near-identical results for every ball anyway
-    // (balls from a normal spawn grid arrive with very similar headings), so it added no
-    // real variety while making the well's spin direction inconsistent ball-to-ball, which
-    // would have looked wrong visually (different balls spinning opposite ways in the same
-    // funnel). well.dir is computed once in forks.js and seeded with the track.
+    // the same way, set once when the well is built (well.dir) and reused here.
     const dir = well.dir;
-    // PER-BALL SPREAD: confirmed in simulation that balls entering close together (the
-    // normal spawn-grid case) arrive at nearly identical angles, and with a fully
-    // deterministic scripted spiral, identical entries produce identical exits — every
-    // ball landed in the SAME hole, no real sorting at all, then piled up catastrophically
-    // in that one branch's tube. Each ball gets its own random extra spin on top of the
-    // well's base revolution count, which is what actually spreads otherwise-identical
-    // entries across different final angles (and therefore different holes) — same idea
-    // as how real coins spread out from tiny physical differences, just injected directly
-    // since this orbit is scripted rather than simulated.
+    // REVOLUTION JITTER: purely cosmetic now (track assignment off the platform is a flat
+    // random roll, not angle-based — see processWellOrbit below), but kept so balls
+    // entering close together don't all spin in visually identical lockstep.
     const revJitter = (Math.random() - 0.5) * 1.4;   // up to ±0.7 of a full extra revolution
     if (global.__traceWell) console.log('WELL ENTER id='+b._id+' dir='+dir+' ang0='+ang0.toFixed(2)+' revJitter='+revJitter.toFixed(2));
-    // COLLISION OFF DURING THE ORBIT: confirmed in simulation — even with per-ball revolution
-    // jitter spreading balls across different final holes, two balls can still by chance end
-    // up close together (same branch, or just transiently near each other) WHILE one or both
-    // are being forcibly repositioned every frame via setTranslation. That's a teleport into
-    // sudden deep overlap from Rapier's point of view, and the solver's very next step throws
-    // a violent separation impulse at it — which read as "two balls collided and one got
-    // flung off the edge," confirmed by tracing two balls' distance dropping to ~4.5 units
-    // right before one died. The orbit is independent/scripted per ball anyway (no ball is
-    // supposed to interact with another while spiraling), so the honest fix is to just turn
-    // off this ball's collider for the duration — re-enabled the instant it exits.
+    // COLLISION OFF DURING THE ORBIT: a forced setTranslation every frame can teleport a
+    // ball into sudden deep overlap with another ball that's also mid-orbit (or just
+    // standing nearby) — Rapier's solver then throws a violent separation impulse at the
+    // very next step. The orbit is independent/scripted per ball anyway, so disable this
+    // ball's own collider for the duration — re-enabled the instant it exits onto a track.
     b.collider.setEnabled(false);
     b.inWell = {
       well, r0, ang0, dir, revJitter,
@@ -489,11 +469,11 @@ const ZPHYSICS = (() => {
     const u = Math.min(1, W.t / W.duration);          // 0 -> 1 over the orbit's duration
     const ease = u * u * (3 - 2 * u);                  // smoothstep: gentle start/end, no jolt
     const well = W.well;
-    // Each ball uses the well's base revolution count PLUS its own jitter (set once at
-    // entry, see startWellOrbit) — this is what spreads otherwise-identical entry angles
-    // across different final angles/holes instead of every ball landing in the same one.
+    // Revolution jitter (set once at entry, see startWellOrbit) is purely cosmetic now —
+    // track assignment is a flat random roll on landing, not angle-based — kept so balls
+    // entering close together don't all spin in visually identical lockstep.
     const totalRev = well.revolutions + W.revJitter;
-    const radius = W.r0 + (well.rInner - W.r0) * ease;
+    const radius = W.r0 + (well.rPlatform - W.r0) * ease;
     const y = W.y0 + (well.yBottom - W.y0) * ease;
     const ang = W.ang0 + W.dir * totalRev * 6.2832 * ease;
     const x = well.cx + Math.cos(ang) * radius;
@@ -503,7 +483,7 @@ const ZPHYSICS = (() => {
     // ball's linvel already points the right way instead of whatever it had on entry.
     const u2 = Math.min(1, (W.t + dt) / W.duration);
     const ease2 = u2 * u2 * (3 - 2 * u2);
-    const radius2 = W.r0 + (well.rInner - W.r0) * ease2;
+    const radius2 = W.r0 + (well.rPlatform - W.r0) * ease2;
     const y2 = W.y0 + (well.yBottom - W.y0) * ease2;
     const ang2 = W.ang0 + W.dir * totalRev * 6.2832 * ease2;
     const x2 = well.cx + Math.cos(ang2) * radius2, z2 = well.cz + Math.sin(ang2) * radius2;
@@ -511,16 +491,20 @@ const ZPHYSICS = (() => {
     b.body.setLinvel({ x: (x2 - x) / dt, y: (y2 - y) / dt, z: (z2 - z) / dt }, true);
 
     if (u >= 1) {
-      // SPIRAL DONE: bin the final angle into one of N holes (equal angular slices around
-      // the circle), then hand off to that branch's tube exactly like the sorter's commit —
-      // same downstream code (node-following, lane-pull, spinners/bumpers/launch-pins on
-      // the branch) with zero changes needed there.
-      let frac = ang / 6.2832; frac -= Math.floor(frac); if (frac < 0) frac += 1;  // 0..1 around the circle
-      const idx = Math.min(well.branchOrder.length - 1, Math.floor(frac * well.branchOrder.length));
+      // PLATFORM LANDING: fully random track assignment, per direction — the platform
+      // doesn't care where the ball physically lands (no angle-binning, no position math
+      // at all). This replaced an angle-binning scheme that needed the ball's final orbit
+      // angle to fall in a specific narrow slice to reach a given branch, which produced
+      // very unequal distributions when many balls entered with similar headings (most
+      // landed in the same hole) and needed extra jitter machinery to compensate. A flat
+      // random roll sorts evenly with no extra machinery and matches the actual ask
+      // ('platform doesn't care where you land, just randomly assigns a track').
+      const idx = Math.floor(Math.random() * well.branchOrder.length);
       b.branch = well.branchOrder[idx];
       b.branchFork = well;
       b.hint = 0;
       b.collider.setEnabled(true);   // back to normal collision now that it's committed
+      if (global.__traceWell) console.log('WELL EXIT id=' + b._id + ' branch=' + b.branch);
       b.inWell = null;
     }
   }
@@ -616,48 +600,14 @@ const ZPHYSICS = (() => {
         }
       }
 
-      // WELL STUB MERGE: a non-real well branch is a short stub (see makeWellFork) — once
-      // a ball reaches its end, snap it onto the well's REAL branch (the one that actually
-      // continues/rejoins the main path) at a random point along that branch's own length,
-      // invisibly. This must run BEFORE the generic REJOIN check below: that check's
-      // fallback guess (splitIdx + curNodes.length, projected onto the MAIN node list) is
-      // only sane for branches that physically continue forward from the split — a well's
-      // stub branches dive in a completely different direction/depth, so the generic
-      // fallback would guess a wildly wrong location (the original fall-through bug this
-      // session already fixed once for the real branch; stubs need their own explicit path
-      // rather than relying on that same fallback by omission).
-      if (b.branch && b.branchFork && b.branchFork.isWell && b.branch !== b.branchFork.realBranchId
-          && b.hint >= curNodes.length - 2) {
-        const realArr = branchNodes[b.branchFork.realBranchId];
-        if (realArr && realArr.length) {
-          // land somewhere in the back 60% of the real branch's length — never right at its
-          // very start (would look like teleporting ahead of where it should be) and never
-          // past its own end.
-          const landIdx = Math.floor(realArr.length * (0.35 + Math.random() * 0.55));
-          b.branch = b.branchFork.realBranchId;
-          b.hint = landIdx;
-          const ln = realArr[Math.min(landIdx, realArr.length - 1)];
-          b.body.setTranslation({ x: ln.pos.x, y: ln.pos.y + 0.05, z: ln.pos.z }, true);
-        } else {
-          // defensive fallback if something's missing — behave like the generic rejoin
-          b.branch = null; b.branchFork = null;
-          b.hint = nearestNodeWide(t, b.branchFork.splitIdx + curNodes.length, 80, nodes);
-        }
-        // BUGFIX: curNodes (captured above, before this block ran) still refers to the OLD
-        // stub array's length. Without this continue, the very next check (generic REJOIN,
-        // right below) re-tests b.hint >= curNodes.length-2 using that STALE length against
-        // the ball's NEW b.hint (an index into the much-longer real branch) — which is
-        // almost always still true, so it immediately re-triggers on the same frame and
-        // sends the ball through the generic rejoin's fallback guess onto the MAIN path at
-        // a nonsensical position. Confirmed in simulation: this was firing on effectively
-        // every stub-branch ball, which is why the whole well regression suite (339/340)
-        // broke the moment this stub-merge feature was added. Skipping the rest of this
-        // ball's step for the frame it merges is harmless — one frame of using its old
-        // velocity is imperceptible, and next frame everything reads fresh or branch.
-        continue;
-      }
-
       // REJOIN: if following a branch that rejoins and we've hit its end, return to main.
+      // (Well tracks now use this same path as the sorter — every track curves back toward
+      // the main centerline's own forward direction by construction (see makeWellFork),
+      // so the fallback guess below is sane for wells too, not just the sorter. An earlier
+      // well design had ONE 'real' branch and the rest were short stubs that snapped onto
+      // it via a dedicated check here, specifically because branches radiated outward with
+      // no relationship to the main path at all — that asymmetric design is gone now that
+      // every track is built to converge on its own.)
       if (b.branch && b.branchFork && b.branchFork.rejoin && b.hint >= curNodes.length - 2) {
         // THE OLD BUG: this searched main from node 0 with a tiny window, so a ball
         // rejoining at main node ~450 got hint≈24, snapped to the wrong floor height,
@@ -667,7 +617,15 @@ const ZPHYSICS = (() => {
           ? b.branchFork.rejoinIdx[b.branch]
           : b.branchFork.splitIdx + curNodes.length;
         b.branch = null; b.branchFork = null;
-        b.hint = nearestNodeWide(t, guess, 80, nodes);
+        // WIDENED MARGIN: well tracks curve back toward the main direction over their own
+        // length rather than being built forward from the split point like the sorter's
+        // branches, so their actual end position can be off from the recorded rejoinIdx by
+        // up to ~90 units in the worst case (confirmed in testing — most converge within
+        // 30 units, a few near-180°-turn cases land further out). 80 was tight enough that
+        // those worst cases missed the window entirely. 140 covers the measured worst case
+        // with real margin to spare, while still being narrow enough to never accidentally
+        // snap onto an unrelated, distant part of the main track.
+        b.hint = nearestNodeWide(t, guess, 140, nodes);
       }
 
       const N = ballNodes(b);
