@@ -608,27 +608,47 @@ const ZFORK = (() => {
     const entryNode = mainNodes[splitIdx + APPROACH_NODES];
     const entryIdx = splitIdx + APPROACH_NODES;
 
-    // ---- GIANT FUNNEL GEOMETRY — bigger across the board per direction ('a giant funnel'),
-    // with generous margins so it can never read as small/thin/blade-like again regardless
-    // of viewing angle. rOuter scales with N too: more tracks need more room at the bottom,
-    // so a wider mouth keeps the proportions sane instead of forcing a tiny throat. ----
-    const rOuter = Math.max(entryNode.halfW * 1.6, LW * 2.4) * (1 + 0.18 * (N - 1));
-    const rPlatform = Math.max(rOuter * 0.30, LW * 1.1 + (N - 1) * (LW * 0.55));   // flat platform radius — scales with track count so tracks have room to start spaced apart
+    // ---- TWO SEPARATE STAGES, not one curve trying to do both jobs.
+    // REAL BUG (this is what you were seeing as 'flat'): a single funnel can only
+    // narrow in one direction. The platform at the bottom has to be wide enough to fit
+    // N separate tracks side by side (rPlatform, computed below) -- which is WIDER than
+    // the entrance (entryNode.halfW, just the normal single-track approach width). Trying
+    // to make the cone's own throat be that platform width forced the radius to BALLOON
+    // outward partway down just to reach it, then pull back in -- a huge, nearly
+    // horizontal flare in the middle of what should have been a steep cone wall. That's
+    // exactly the flat, sideways-flared shape you kept seeing -- not a tuning problem,
+    // the shape itself was wrong.
+    // Fix: split into two genuinely separate, EACH-monotonic stages, matching what you
+    // actually described -- 'a giant funnel... at the bottom, a platform that sorts':
+    //   1) CONE stage: rim (= entryNode.halfW, so it's seamless with the approach) narrows
+    //      continuously, in ONE direction only, down to a small ball-sized throat -- this
+    //      is the part that has to actually look like the reference photo.
+    //   2) PLATFORM stage: a short, separate widen from that small throat out to
+    //      rPlatform, right at the very bottom -- a distinct tray, not part of the cone's
+    //      own silhouette.
+    const rPlatform = Math.max(LW * 1.3, LW * 0.9 + (N - 1) * (LW * 0.55));   // room for N track exits, spaced apart
+    const rThroat = Math.max(2.2, LW * 0.14);    // small, ball-scaled -- the actual narrow point of the funnel
+    const rOuter = entryNode.halfW;               // the rim is simply the approach's own width -- no seam, no overshoot
     const fwdFlat = norm(v(entryNode.dir.x, 0, entryNode.dir.z));
     const cx = entryNode.pos.x + fwdFlat.x * entryNode.halfW;
     const cz = entryNode.pos.z + fwdFlat.z * entryNode.halfW;
     const yTop = entryNode.pos.y;
-    const DROP = (rOuter - rPlatform) * 1.6 + LW * 2.2;   // generous — a giant funnel needs a real drop to match
+    // CONE_FRAC: how much of the total vertical drop the narrowing cone gets, vs. the
+    // platform-widen stage at the bottom. The cone should dominate -- it's "the funnel" --
+    // the platform stage is deliberately short, so it reads as a tray, not another cone.
+    const CONE_FRAC = 0.74;
+    const DROP = (rOuter - rThroat) * 2.0 + LW * 2.6;   // generous -- a giant funnel needs real vertical room for the cone alone
     const yBottom = yTop - DROP;
+    const yThroat = yTop - DROP * CONE_FRAC;
     const revolutions = 3.0 + rng() * 1.8;     // 3.0–4.8 full loops — more laps for a BIGGER funnel
     const duration = 3.2 + rng() * 1.1;        // seconds the spiral lasts
     const dir = rng() < 0.5 ? 1 : -1;          // every ball in this well spins the same way
 
-    // ---- FUNNEL CONE MESH: true polar geometry, full 360° sweep per ring, radius and
-    // height coupled to the SAME ease parameter throughout (this coupling was the actual
-    // fix for the 'dome' bug last session — keeping it here verbatim) so the wall can never
-    // go flat independently of how far it's descended. Narrows from rOuter at the rim down
-    // to rPlatform at the bottom, where the flat platform takes over. ----
+    // ---- FUNNEL CONE MESH: true polar geometry, full 360° sweep per ring. Each stage
+    // (cone, then platform-widen) is its own independent easing — radius and Y are
+    // coupled within EACH stage (the fix for the earlier 'dome' bug, kept), and the two
+    // stages only ever move in one direction each, so neither can balloon outward
+    // mid-stage the way the single combined curve did. ----
     const sstepW2 = (a, b, x) => { if (a === b) return x < a ? 0 : 1; let t = (x - a) / (b - a); t = Math.max(0, Math.min(1, t)); return t*t*(3-2*t); };
     const CONE_RINGS = 16, CONE_SEGS = 32;
     const coneMeshPos = [], coneMeshIdx = [];
@@ -638,17 +658,17 @@ const ZFORK = (() => {
       coneMeshIdx.push(coneBase, coneBase+1, coneBase+2);
       coneBase += 3;
     };
-    const PEAK_EASE = 0.22;
-    const radiusFromEase = (e) => {
-      if (e < PEAK_EASE) { const u = e / PEAK_EASE; const s = u*u*(3-2*u); return entryNode.halfW + (rOuter - entryNode.halfW) * s; }
-      const u = (e - PEAK_EASE) / (1 - PEAK_EASE); const s = u*u*(3-2*u);
-      return rOuter + (rPlatform - rOuter) * s;
+    const radiusYFromRingT = (ringT) => {
+      if (ringT < CONE_FRAC) {
+        const e = sstepW2(0, 1, ringT / CONE_FRAC);
+        return { r: rOuter + (rThroat - rOuter) * e, y: yTop + (yThroat - yTop) * e };
+      }
+      const e = sstepW2(0, 1, (ringT - CONE_FRAC) / (1 - CONE_FRAC));
+      return { r: rThroat + (rPlatform - rThroat) * e, y: yThroat + (yBottom - yThroat) * e };
     };
     const ringPoint = (ringT, ang) => {
-      const ease = ringT * ringT * (3 - 2 * ringT);
-      const r = radiusFromEase(ease);
-      const y = yTop + (yBottom - yTop) * ease;
-      const groove = Math.sin(ang * 6 + ringT * revolutions * 6.2832) * (rOuter - rPlatform) * 0.018;
+      const { r, y } = radiusYFromRingT(ringT);
+      const groove = Math.sin(ang * 6 + ringT * revolutions * 6.2832) * (rOuter - rThroat) * 0.018;
       return v(cx + Math.cos(ang) * (r + groove), y, cz + Math.sin(ang) * (r + groove));
     };
     for (let ri = 0; ri < CONE_RINGS; ri++) {
@@ -819,7 +839,7 @@ const ZFORK = (() => {
     return {
       id: forkId, splitIdx, flavor: 'divergent', rejoin: true, lanesOnly: false, isWell: true,
       branches, branchOrder, laneCount: N, rejoinIdx, ends, end,
-      entryIdx, cx, cz, rOuter, rPlatform, yTop, yBottom, duration, revolutions, dir,
+      entryIdx, cx, cz, rOuter, rThroat, rPlatform, yTop, yThroat, yBottom, CONE_FRAC, duration, revolutions, dir,
       wellConeMesh, wellPlatformMesh,
     };
   }

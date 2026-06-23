@@ -432,13 +432,15 @@ const ZPHYSICS = (() => {
     // vertical axis (centerX, centerZ at well.cx/cz), so the spiral starts exactly where
     // the ball actually is — no snapping/teleporting into position.
     const dx = t.x - well.cx, dz = t.z - well.cz;
-    // CLAMP TO rOuter: a ball could enter the well-detection window (entryIdx ± 3, for
-    // margin against fast movement) slightly off-angle or off-timing from the geometrically
-    // "ideal" entry point, putting its ACTUAL distance from the well's center beyond rOuter
-    // — outside where the cone mesh visually exists at all. Clamping r0 to
-    // [rPlatform*1.05, rOuter] guarantees the orbit only ever happens within the radius
-    // range the mesh actually covers.
-    const r0 = Math.max(well.rPlatform * 1.05, Math.min(well.rOuter, Math.hypot(dx, dz)));
+    // CLAMP TO [rThroat, rOuter]: a ball could enter the well-detection window slightly
+    // off-angle or off-timing, putting its actual distance from center outside where the
+    // cone mesh exists. rThroat (the narrow point of the cone) and rOuter (the rim) are
+    // the cone's own range now -- rPlatform is a DIFFERENT, much wider radius (the flat
+    // sorting tray at the very bottom of the well, past the throat), so clamping against
+    // it here would force every ball's starting radius bigger than the entire rim. That
+    // was a real bug: rPlatform (15) > rOuter (7.5) for typical track widths, so the old
+    // clamp guaranteed every ball started outside the funnel before this fix.
+    const r0 = Math.max(well.rThroat * 1.05, Math.min(well.rOuter, Math.hypot(dx, dz)));
     const ang0 = Math.atan2(dz, dx);
     // ORBIT DIRECTION: fixed PER WELL (not per ball) — every ball in the same well spins
     // the same way, set once when the well is built (well.dir) and reused here.
@@ -463,29 +465,40 @@ const ZPHYSICS = (() => {
     b.branch = null;   // not on any branch yet — committed only once the spiral finishes
   }
 
+  // Two-stage radius/Y, matching the cone+platform mesh exactly (see makeWellFork in
+  // forks.js for the visual version of this same split) -- the ball's actual flight path
+  // needs to trace the same shape the mesh draws, or it visibly flies somewhere the funnel
+  // doesn't go. ease01 is 0..1 progress through the WHOLE orbit; CONE_FRAC of that is
+  // spent spiraling down to the throat, the rest is spent widening onto the platform.
+  function wellRadiusY(well, r0, ease01) {
+    const sstep = (x) => { const c = Math.max(0, Math.min(1, x)); return c*c*(3-2*c); };
+    if (ease01 < well.CONE_FRAC) {
+      const e = sstep(ease01 / well.CONE_FRAC);
+      return { r: r0 + (well.rThroat - r0) * e, y: well.yTop + (well.yThroat - well.yTop) * e };
+    }
+    const e = sstep((ease01 - well.CONE_FRAC) / (1 - well.CONE_FRAC));
+    return { r: well.rThroat + (well.rPlatform - well.rThroat) * e, y: well.yThroat + (well.yBottom - well.yThroat) * e };
+  }
+
   function processWellOrbit(b, dt) {
     const W = b.inWell;
     W.t += dt;
     const u = Math.min(1, W.t / W.duration);          // 0 -> 1 over the orbit's duration
-    const ease = u * u * (3 - 2 * u);                  // smoothstep: gentle start/end, no jolt
     const well = W.well;
     // Revolution jitter (set once at entry, see startWellOrbit) is purely cosmetic now —
     // track assignment is a flat random roll on landing, not angle-based — kept so balls
     // entering close together don't all spin in visually identical lockstep.
     const totalRev = well.revolutions + W.revJitter;
-    const radius = W.r0 + (well.rPlatform - W.r0) * ease;
-    const y = W.y0 + (well.yBottom - W.y0) * ease;
-    const ang = W.ang0 + W.dir * totalRev * 6.2832 * ease;
+    const { r: radius, y } = wellRadiusY(well, W.r0, u);
+    const ang = W.ang0 + W.dir * totalRev * 6.2832 * Math.min(1, u / well.CONE_FRAC);
     const x = well.cx + Math.cos(ang) * radius;
     const z = well.cz + Math.sin(ang) * radius;
     // Velocity is set to the spiral's own instantaneous tangent+radial direction (numerical
     // derivative via a tiny forward-step) so that if the orbit ends or is interrupted, the
     // ball's linvel already points the right way instead of whatever it had on entry.
     const u2 = Math.min(1, (W.t + dt) / W.duration);
-    const ease2 = u2 * u2 * (3 - 2 * u2);
-    const radius2 = W.r0 + (well.rPlatform - W.r0) * ease2;
-    const y2 = W.y0 + (well.yBottom - W.y0) * ease2;
-    const ang2 = W.ang0 + W.dir * totalRev * 6.2832 * ease2;
+    const { r: radius2, y: y2 } = wellRadiusY(well, W.r0, u2);
+    const ang2 = W.ang0 + W.dir * totalRev * 6.2832 * Math.min(1, u2 / well.CONE_FRAC);
     const x2 = well.cx + Math.cos(ang2) * radius2, z2 = well.cz + Math.sin(ang2) * radius2;
     b.body.setTranslation({ x, y, z }, true);
     b.body.setLinvel({ x: (x2 - x) / dt, y: (y2 - y) / dt, z: (z2 - z) / dt }, true);
