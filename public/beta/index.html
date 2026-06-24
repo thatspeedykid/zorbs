@@ -1283,16 +1283,16 @@ function buildCoreMaterial(skin, baseCol, accent) {
   // characteristic color always shows regardless of scene lighting or env map.
   if (style === 'galaxy') {
     return new THREE.MeshStandardMaterial({ map: galaxyTexture(), color: 0xcc99ff,
-      metalness: 0, roughness: 0.5, emissive: 0x6622ff, emissiveIntensity: 1.8 });
+      metalness: 0, roughness: 0.5, emissive: 0x6622ff, emissiveIntensity: 0.5 });
   }
   if (style === 'lava') {
     return new THREE.MeshStandardMaterial({ map: lavaTexture(), color: 0xff8844,
-      metalness: 0, roughness: 0.65, emissive: 0xff3300, emissiveIntensity: 2.0 });
+      metalness: 0, roughness: 0.65, emissive: 0xff3300, emissiveIntensity: 0.6 });
   }
   if (style === 'glass') {
     return new THREE.MeshStandardMaterial({ color: baseCol,
       metalness: 0, roughness: 0.05,
-      emissive: accent, emissiveIntensity: 1.8,
+      emissive: accent, emissiveIntensity: 0.4,
       transparent: true, opacity: 0.82 });
   }
   if (style === 'marble') {
@@ -1312,13 +1312,13 @@ function buildCoreMaterial(skin, baseCol, accent) {
   if (style === 'crystal') {
     return new THREE.MeshStandardMaterial({ color: baseCol,
       metalness: 0, roughness: 0.02,
-      emissive: accent, emissiveIntensity: 2.2,
+      emissive: accent, emissiveIntensity: 0.55,
       transparent: true, opacity: 0.78 });
   }
   if (style === 'phantom') {
     return new THREE.MeshStandardMaterial({ color: baseCol,
       metalness: 0, roughness: 0.2,
-      emissive: accent, emissiveIntensity: 2.2,
+      emissive: accent, emissiveIntensity: 0.6,
       transparent: true, opacity: 0.72 });
   }
   if (style === 'rainbow') {
@@ -1330,9 +1330,12 @@ function buildCoreMaterial(skin, baseCol, accent) {
       const t = new THREE.CanvasTexture(c); t.wrapS = THREE.RepeatWrapping; _texCache.rainbow = t;
     }
     const rt = _texCache.rainbow.clone(); rt.wrapS = THREE.RepeatWrapping; rt.needsUpdate = true;
+    const rt2 = _texCache.rainbow.clone(); rt2.wrapS = THREE.RepeatWrapping; rt2.needsUpdate = true;
+    // map = the rainbow bands (lit by the scene so the colors stay saturated, not blown white);
+    // a separate emissiveMap clone gives a gentle self-glow without washing the hues out.
     return new THREE.MeshStandardMaterial({ map: rt, color: 0xffffff,
-      metalness: 0, roughness: 0.15, emissive: 0xffffff, emissiveIntensity: 0.9,
-      emissiveMap: rt });
+      metalness: 0, roughness: 0.25, emissive: 0xffffff, emissiveIntensity: 0.35,
+      emissiveMap: rt2 });
   }
   if (style === 'solar') {
     if (!_texCache.solar) {
@@ -1347,7 +1350,7 @@ function buildCoreMaterial(skin, baseCol, accent) {
       _texCache.solar = new THREE.CanvasTexture(c);
     }
     return new THREE.MeshStandardMaterial({ map: _texCache.solar, color: 0xffffff,
-      metalness: 0, roughness: 0.3, emissive: 0xff8800, emissiveIntensity: 2.0 });
+      metalness: 0, roughness: 0.3, emissive: 0xff8800, emissiveIntensity: 0.5 });
   }
   // chrome / classic metal: low metalness so diffuse renders the base color, emissive
   // floor ensures it never goes black even with zero ambient.
@@ -1356,7 +1359,7 @@ function buildCoreMaterial(skin, baseCol, accent) {
     metalness: 0.05,
     roughness: skin.roughness != null ? skin.roughness : 0.3,
     emissive: accent,
-    emissiveIntensity: Math.max(0.8, skin.emissive != null ? skin.emissive : 0),
+    emissiveIntensity: Math.max(0.3, skin.emissive != null ? skin.emissive : 0),
     envMap: _envMap || null, envMapIntensity: 0.6,
   });
 }
@@ -1851,12 +1854,12 @@ function loop(now) {
       const off = z._rainbowT % 1;
       if (z.mesh.material.map) z.mesh.material.map.offset.x = off;
       if (z.mesh.material.emissiveMap) z.mesh.material.emissiveMap.offset.x = off;
-      z.mesh.material.emissiveIntensity = 0.45 + sampleBeat() * 0.6;
+      z.mesh.material.emissiveIntensity = 0.3 + sampleBeat() * 0.35;
       if (z.ring) z.ring.material.color.setHSL(off, 1.0, 0.55);
     }
     // SOLAR PULSE: throb emissive with beat
     if (z.isSolar && !z.eliminated) {
-      z.mesh.material.emissiveIntensity = 0.8 + sampleBeat() * 1.5;
+      z.mesh.material.emissiveIntensity = 0.45 + sampleBeat() * 0.7;
     }
     // elimination: drop and fade
     if (z.eliminated) {
