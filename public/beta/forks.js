@@ -739,7 +739,7 @@ const ZFORK = (() => {
     const TUBE_NODES = 14;
     const tubeHW = Math.max(3.5, LW * 0.22);
     const mainFwd = norm(v(entryNode.dir.x, 0, entryNode.dir.z));
-    const STACK_GAP = 3.0;   // vertical spacing between the finishing decks
+    const STACK_GAP = 6.0;   // vertical spacing between the finishing decks (~3 ball diameters)
     for (let i = 0; i < N; i++) {
       const bid = forkId + '_' + i; branchOrder.push(bid);
       const trackAng = exitAngles[i];
