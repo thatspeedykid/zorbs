@@ -453,9 +453,9 @@ if (THREE.EffectComposer && THREE.UnrealBloomPass) {
   composer.addPass(new THREE.RenderPass(scene, camera));
   const bloom = new THREE.UnrealBloomPass(
     new THREE.Vector2(innerWidth, innerHeight),
-    0.46,   // strength — richer neon glow on rails/arches/pulses
+    0.32,   // strength — neon glow on rails/arches without blowing the balls to white
     0.5,    // radius — softer, wider halo
-    0.82    // threshold — the brightest pixels (rails/pulses) bloom
+    0.9     // threshold — only the very brightest pixels (rails/pulses) bloom, not lit balls
   );
   composer.addPass(bloom);
   _bloom = bloom;
@@ -1210,7 +1210,7 @@ function makeZorb(id, prefs, isSub, platform, founder) {
 
   // EQUATORIAL ENERGY BAND hugging the orb (toned down so it accents, not blinds)
   const band = new THREE.Mesh(BAND_GEO, new THREE.MeshBasicMaterial({
-    color: accent, transparent:true, opacity:0.55, blending:THREE.AdditiveBlending, depthWrite:false
+    color: accent, transparent:true, opacity:0.25, blending:THREE.AdditiveBlending, depthWrite:false
   }));
   band.rotation.x = Math.PI/2; core.add(band);
 
@@ -1229,12 +1229,12 @@ function makeZorb(id, prefs, isSub, platform, founder) {
     ringGlow.rotation.x = Math.PI/2; ringGlow.renderOrder = 5; scene.add(ringGlow);
   }
 
-  // soft fresnel rim glow — much fainter (was 0.28, the main culprit in the white blob)
+  // soft fresnel rim glow — kept very faint so the ball reads as its own color, not a white blob
   const glow = new THREE.Mesh(SPHERE_GEO, new THREE.MeshBasicMaterial({
-    color: accent, transparent:true, opacity:0.12, side:THREE.BackSide,
+    color: accent, transparent:true, opacity:0.05, side:THREE.BackSide,
     blending:THREE.AdditiveBlending, depthWrite:false
   }));
-  glow.scale.setScalar(1.18); core.add(glow);
+  glow.scale.setScalar(1.15); core.add(glow);
 
   const label = makeLabel(id, id === _myMarble); scene.add(label);
 
@@ -1329,13 +1329,14 @@ function buildCoreMaterial(skin, baseCol, accent) {
       cx.fillStyle=g2; cx.fillRect(0,0,256,1);
       const t = new THREE.CanvasTexture(c); t.wrapS = THREE.RepeatWrapping; _texCache.rainbow = t;
     }
-    const rt = _texCache.rainbow.clone(); rt.wrapS = THREE.RepeatWrapping; rt.needsUpdate = true;
-    const rt2 = _texCache.rainbow.clone(); rt2.wrapS = THREE.RepeatWrapping; rt2.needsUpdate = true;
-    // map = the rainbow bands (lit by the scene so the colors stay saturated, not blown white);
-    // a separate emissiveMap clone gives a gentle self-glow without washing the hues out.
+    const rt = _texCache.rainbow.clone(); rt.wrapS = THREE.RepeatWrapping; rt.repeat.x = 3; rt.needsUpdate = true;
+    const rt2 = _texCache.rainbow.clone(); rt2.wrapS = THREE.RepeatWrapping; rt2.repeat.x = 3; rt2.needsUpdate = true;
+    // map = tight rainbow bands (repeat x3 so it's flowing stripes, not a fat-wedge beach ball),
+    // lit by the scene so hues stay saturated; a glossy low-roughness surface + a gentle
+    // emissive glow makes it read as an iridescent rainbow rather than a matte ball.
     return new THREE.MeshStandardMaterial({ map: rt, color: 0xffffff,
-      metalness: 0, roughness: 0.25, emissive: 0xffffff, emissiveIntensity: 0.35,
-      emissiveMap: rt2 });
+      metalness: 0.1, roughness: 0.12, emissive: 0xffffff, emissiveIntensity: 0.3,
+      emissiveMap: rt2, envMap: _envMap || null, envMapIntensity: 0.5 });
   }
   if (style === 'solar') {
     if (!_texCache.solar) {
@@ -1849,12 +1850,13 @@ function loop(now) {
     }
     // RAINBOW STROBE: cycle hue with music beat, strobe faster on beats
     if (z.isRainbow && !z.eliminated) {
-      // scroll the rainbow bands so the whole ball stays multicolored and flows with the beat
-      z._rainbowT += dt * (0.25 + sampleBeat() * 0.6);
+      // scroll the rainbow bands faster so the colors visibly flow around the ball (the
+      // "rainbow effect"), pulsing the glow with the beat. Not a static beach ball.
+      z._rainbowT += dt * (0.6 + sampleBeat() * 0.9);
       const off = z._rainbowT % 1;
       if (z.mesh.material.map) z.mesh.material.map.offset.x = off;
       if (z.mesh.material.emissiveMap) z.mesh.material.emissiveMap.offset.x = off;
-      z.mesh.material.emissiveIntensity = 0.3 + sampleBeat() * 0.35;
+      z.mesh.material.emissiveIntensity = 0.28 + sampleBeat() * 0.3;
       if (z.ring) z.ring.material.color.setHSL(off, 1.0, 0.55);
     }
     // SOLAR PULSE: throb emissive with beat
