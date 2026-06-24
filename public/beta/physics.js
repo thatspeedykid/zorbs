@@ -540,11 +540,10 @@ const ZPHYSICS = (() => {
       // ('platform doesn't care where you land, just randomly assigns a track').
       // Seeded per-ball: numeric hash of ball id XOR numeric hash of well position.
       // well.id is a string like 'fork0'; using it directly in JS bitwise XOR coerces to 0,
-      // making all balls land on branch[0]. Use the well's world position as a numeric key instead.
-      const wellNumId = (((well.cx * 73856093) | 0) ^ ((well.cz * 19349663) | 0)) >>> 0;
-      const _h = (((b._id * 2654435761) ^ wellNumId) >>> 0) * 0x9e3779b9 >>> 0;
-      const idx = _h % well.branchOrder.length;
-      b.branch = well.branchOrder[idx];
+      // Round-robin assignment: each successive ball takes the next branch in order.
+      // Guarantees even distribution regardless of ball id hash collisions.
+      well._nextBranch = ((well._nextBranch || 0) + 1) % well.branchOrder.length;
+      b.branch = well.branchOrder[well._nextBranch];
       b.branchFork = well;
       // Skip the platform-landing step entirely: drop the ball directly into node 3 of its
       // assigned tube with the tube's own forward velocity. Bypasses cylinder bounce ambiguity.

@@ -229,7 +229,7 @@
   // never flash, regardless of how the rest of the page loads.
   try { if (new URLSearchParams(location.search).get('obs') === '1') document.documentElement.classList.add('obsmode'); } catch(_){}
 </script>
-<div id="buildtag" style="position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:99999;background:#0a0;color:#fff;font:bold 11px monospace;padding:2px 10px;border-radius:0 0 6px 6px;letter-spacing:1px;">PLAY6</div>
+<div id="buildtag" style="position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:99999;background:#0a0;color:#fff;font:bold 11px monospace;padding:2px 10px;border-radius:0 0 6px 6px;letter-spacing:1px;">PLAY7</div>
 <canvas id="c"></canvas>
 <div id="hud">
   <div class="brand">
@@ -325,11 +325,11 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/beta/forks.js?v=b6"></script>
-<script src="/beta/track.js?v=b6"></script>
-<script src="/beta/physics.js?v=b6"></script>
-<script src="/beta/cosmetics.js?v=b6"></script>
-<script src="/beta/maps.js?v=b6"></script>
+<script src="/beta/forks.js?v=b7"></script>
+<script src="/beta/track.js?v=b7"></script>
+<script src="/beta/physics.js?v=b7"></script>
+<script src="/beta/cosmetics.js?v=b7"></script>
+<script src="/beta/maps.js?v=b7"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -891,7 +891,7 @@ function buildCourse(seed) {
     const archStep  = isBranch ? 120 : 70;
     for (let i = archStart; i < nodes.length - 20; i += archStep) {
       const n = nodes[i];
-      if (n.kind === 'spiral' || n.kind === 'tunnel' || n.kind === 'tube') continue;
+      if (n.kind === 'spiral' || n.kind === 'tunnel' || n.kind === 'tube' || n.kind === 'sorter') continue;
       if (n.noWallL || n.noWallR || n.noWalls) continue;   // no arch at open-wall rejoin zone
       const archR = n.halfW * 1.02;
       const arch = new THREE.Mesh(
@@ -1963,12 +1963,8 @@ function updateBumpers(){
     // matches bm.riseY in physics.js exactly, so the visual telescopes in lockstep with
     // the real collider instead of just bobbing a little at the top.
     const c = bm.charge || 0;
-    // HIDE_DEPTH: how far below the floor the post's TOP sits when fully retracted (c=0).
-    // The old formula put the top exactly flush with baseY at c=0 — still reads as a visible
-    // sliver/lip from most angles (see screenshot: bases peeking through the floor). Linear
-    // interpolate from "fully buried" (grp.y = baseY - H - HIDE_DEPTH) at c=0 to "fully
-    // extended, unchanged from before this feature" (grp.y = baseY) at c=1.
-    const HIDE_DEPTH = 1.4;
+    vis.grp.visible = c > 0.02;
+    const HIDE_DEPTH = vis.H + 2.0;
     vis.grp.position.y = (vis.baseY - vis.H - HIDE_DEPTH) + c * (vis.H + HIDE_DEPTH);
     vis.post.material.emissiveIntensity = 0.5 + c * 2.0;
     vis.cap.material.opacity = 0.5 + c * 0.5;

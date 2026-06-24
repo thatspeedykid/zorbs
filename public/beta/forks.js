@@ -717,115 +717,86 @@ const ZFORK = (() => {
     }
     const wellPlatformMesh = { positions: new Float32Array(platMeshPos), indices: new Uint32Array(platMeshIdx) };
 
-    // ---- N TRACKS, SPACED APART ----
+    // ---- N TRACKS, CLEARLY SEPARATED ----
+    // Each branch runs outward from the platform at its own angle, stays diverged for most
+    // of its length, then converges onto a STAGGERED rejoin point (each branch targets a
+    // slightly different node so they don't all pile on the exact same seam). The last 1.5
+    // units of height is left elevated above the main track so balls simply FALL down onto
+    // it — no tight visual seam, no hard cap geometry.
     const branches = {}, branchOrder = [];
-    const TRACK_LEN = Math.max(50, lenF - APPROACH_NODES - 6);
-    const TUBE_NODES = 10;
-    const tubeHW = Math.max(3.0, LW * 0.18);
+    const TRACK_LEN = Math.max(60, lenF - APPROACH_NODES - 6);
+    const TUBE_NODES = 14;   // longer tube so the drop from the platform is more dramatic
+    const tubeHW = Math.max(3.5, LW * 0.22);
+    const mainFwd = norm(v(entryNode.dir.x, 0, entryNode.dir.z));
     for (let i = 0; i < N; i++) {
       const bid = forkId + '_' + i; branchOrder.push(bid);
       const trackAng = exitAngles[i];
-      // Tubes start INSIDE the platform edge (0.55 * rPlatform) so they connect visually
-      // through the hole rather than spawning outside it.
-      const tubeStartR = rPlatform * 0.55;
+      // Start from the platform edge (not inside it) so the tube clearly exits the disc.
+      const tubeStartR = rPlatform * 0.72;
       const hx = cx + Math.cos(trackAng) * tubeStartR, hz = cz + Math.sin(trackAng) * tubeStartR;
-      // Steeper downward angle so exit tracks drop more directly under the platform instead
-      // of spreading far sideways first.
-      const outDir = norm(v(Math.cos(trackAng), -0.75, Math.sin(trackAng)));
+      // Tubes drop steeply from the platform, giving them clear separation before levelling.
+      const outDir = norm(v(Math.cos(trackAng), -0.90, Math.sin(trackAng)));
       const nlist = [];
-      let pos = v(hx, yBottom, hz);
+      let pos = v(hx, yBottom - 0.5, hz);
       let heading = v(outDir.x, outDir.y, outDir.z);
       for (let k = 0; k < TUBE_NODES; k++) {
         const t = k / TUBE_NODES;
-        const recoverT = sstepW2(0.35, 1, t);
-        heading.y += ((-0.30) - heading.y) * 0.3 * recoverT + ((outDir.y) - heading.y) * 0.3 * (1 - recoverT);
+        // recover Y toward -0.25 (gentle slope) smoothly over the tube length
+        heading.y += (-0.25 - heading.y) * 0.18;
         heading = norm(heading);
-        pos = add(pos, scale(heading, STEPH));
+        pos = add(pos, scale(heading, STEPH * 1.1));
         const right = norm(cross(heading, worldUp));
         const up = norm(cross(right, heading));
-        const hw = tubeHW + (LW - tubeHW) * sstepW2(0.4, 1, t);
+        const hw = tubeHW + (LW - tubeHW) * sstepW2(0.3, 1, t);
         nlist.push({ pos: v(pos.x, pos.y, pos.z), dir: v(heading.x, heading.y, heading.z), right, up,
           halfW: hw, bank: 0, kind: 'tube', tunnel: false, branchId: bid });
       }
-      // BODY: curves back toward the MAIN track's original line — both HEADING (so it's not
-      // visually still pointed sideways at the end) AND LATERAL POSITION (so it actually
-      // closes the distance, not just ends up parallel to the main line while still far off
-      // to one side). Heading-matching alone left branches converging in DIRECTION but not
-      // POSITION — confirmed in testing: by the time a branch's heading matched the main
-      // track's forward direction, it had already accumulated 90-300+ units of lateral
-      // drift from its early outward-radial heading, with no remaining track length to
-      // close that gap. CURVE_FRAC gives each track its own small variation in how soon it
-      // starts curving back, so the N tracks don't look like identical copies of each other
-      // rotated around a circle.
       const tubeEnd = nlist[nlist.length - 1];
-      const mainFwd = norm(v(entryNode.dir.x, 0, entryNode.dir.z));
-      // EXACT TARGET: the precise main-path node this branch needs to land on/near when it
-      // rejoins — mainNodes[end] is what the fork generator records as this branch's
-      // rejoinIdx, so targeting it directly (rather than gradually nudging toward an
-      // approximate direction/offset and hoping the accumulated drift lands close enough)
-      // guarantees a tight landing. Earlier gradual-correction attempts left up to ~90 units
-      // of residual gap in testing — confirmed via direct measurement that this was large
-      // enough to itself look like / trigger a fall on rejoin (a 25+ unit vertical snap).
-      const target = mainNodes[Math.min(mainNodes.length - 1, end)];
-      // CONVERGE_FRAC: fraction of the body spent actively homing toward the exact target
-      // (vs. the early portion, which just continues outward on its own heading briefly so
-      // the track doesn't look like it instantly snaps into a turn right at the tube exit).
-      const CONVERGE_FRAC = 0.32 + rng() * 0.14;   // 32-46% — longer outward sweep before homing so branches arc gracefully
+      // Each branch targets a DIFFERENT node on the main track (staggered by branch index)
+      // so they don't all converge to the exact same point — avoids the piled-up seam.
+      const rejoinOffset = Math.floor((i / N) * 18);   // spread across ~18 main nodes
+      const target = mainNodes[Math.min(mainNodes.length - 1, end - rejoinOffset)];
+      // DIVERGE 65% of the track length before starting to converge — branches stay clearly
+      // separate for most of their run, only pulling back in the last 35%.
+      const CONVERGE_FRAC = 0.62 + rng() * 0.06;   // 62-68% outward before homing
       const convergeStartK = Math.floor(CONVERGE_FRAC * TRACK_LEN);
-      // GEOMETRIC DECAY RATE: solved once, up front, so that closing this exact fraction of
-      // whatever gap remains EVERY step for the remaining (TRACK_LEN - convergeStartK) steps
-      // lands within targetFinal units of the target by the very last step — guaranteed by
-      // construction (a textbook converging geometric sequence), with the per-step distance
-      // MONOTONICALLY DECREASING throughout (never spikes late, unlike an earlier attempt
-      // that closed a step-count-scaled fraction and produced a 56-unit single-step jump
-      // right before the end — confirmed via direct trace before this fix).
       const gapAtHomingStart = Math.hypot(tubeEnd.pos.x - target.pos.x, tubeEnd.pos.y - target.pos.y, tubeEnd.pos.z - target.pos.z) || 1;
       const stepsAvailable = Math.max(1, TRACK_LEN - convergeStartK);
-      const targetFinalGap = 0.3;   // units of residual gap aimed for by the last homing step
+      // Leave a 1.5-unit vertical gap at rejoin — ball drops naturally onto main track.
+      // This eliminates the seam and any visual connection geometry entirely.
+      const REJOIN_LIFT = 1.5;
+      const targetFinalGap = REJOIN_LIFT;
       const closeFrac = 1 - Math.pow(Math.min(1, targetFinalGap / gapAtHomingStart), 1 / stepsAvailable);
       let bpos = v(tubeEnd.pos.x, tubeEnd.pos.y, tubeEnd.pos.z);
       let bheading = v(tubeEnd.dir.x, tubeEnd.dir.y, tubeEnd.dir.z);
       for (let k = 0; k < TRACK_LEN; k++) {
-        const t = k / TRACK_LEN;
         if (k < convergeStartK) {
-          // brief outward continuation, easing heading toward the main direction so the
-          // homing phase below doesn't start from a jarring sideways-facing angle.
-          const ct = k / convergeStartK;
-          const blend = ct * ct * (3 - 2 * ct);
-          const targetDir = norm(v(mainFwd.x, -0.30, mainFwd.z));
-          bheading.x += (targetDir.x - bheading.x) * 0.10 * blend;
-          bheading.z += (targetDir.z - bheading.z) * 0.10 * blend;
-          bheading.y += (-0.30 - bheading.y) * 0.07;
+          // outward phase: continue in exit direction, gently level out
+          const targetDir = norm(v(mainFwd.x, -0.20, mainFwd.z));
+          const blend = sstepW2(0, 1, k / convergeStartK);
+          bheading.x += (targetDir.x - bheading.x) * 0.06 * blend;
+          bheading.z += (targetDir.z - bheading.z) * 0.06 * blend;
+          bheading.y += (-0.20 - bheading.y) * 0.05;
           bheading = norm(bheading);
           bpos = add(bpos, scale(bheading, STEPH));
         } else {
-          // HOMING: close the SAME fraction (closeFrac) of the remaining gap every step —
-          // a fixed-rate geometric decay, solved above to land within targetFinalGap units
-          // of the exact target by the final step, with strictly decreasing step distances
-          // throughout (no late-step blowup possible).
+          // homing phase: geometric decay toward target position
           const newX = bpos.x + (target.pos.x - bpos.x) * closeFrac;
-          const newY = bpos.y + (target.pos.y - bpos.y) * closeFrac;
+          const newY = bpos.y + (target.pos.y + REJOIN_LIFT - bpos.y) * closeFrac;
           const newZ = bpos.z + (target.pos.z - bpos.z) * closeFrac;
           const moveVec = v(newX - bpos.x, newY - bpos.y, newZ - bpos.z);
           const moveLen = Math.hypot(moveVec.x, moveVec.y, moveVec.z) || 1;
-          bheading = scale(moveVec, 1 / moveLen);   // heading follows the actual move direction — always correct by construction
+          bheading = scale(moveVec, 1 / moveLen);
           bpos = v(newX, newY, newZ);
         }
         const right = norm(cross(bheading, worldUp));
         const up = norm(cross(right, bheading));
-        // Fade walls out over the last 30 nodes so branches merge cleanly instead of
-        // leaving hard wall-cap bars at the rejoin point.
         const nearRejoin = k >= TRACK_LEN - 30;
         nlist.push({ pos: v(bpos.x, bpos.y, bpos.z), dir: v(bheading.x, bheading.y, bheading.z), right, up,
           halfW: LW, bank: 0, kind: 'route', tunnel: false, branchId: bid,
           noWallL: nearRejoin, noWallR: nearRejoin });
       }
-      // FINAL SNAP: force the very last node to sit exactly at the target (zero residual
-      // gap, guaranteed, regardless of how the homing phase performed) — imperceptible
-      // since it's a sub-STEPH adjustment by construction (the shrinking step size above
-      // already brings it within one step of the target before this).
-      const lastNode = nlist[nlist.length - 1];
-      lastNode.pos.x = target.pos.x; lastNode.pos.y = target.pos.y; lastNode.pos.z = target.pos.z;
+      // End elevated — ball falls onto the main track naturally. No position snap needed.
       branches[bid] = nlist;
     }
 
