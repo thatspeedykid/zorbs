@@ -762,20 +762,24 @@ const ZFORK = (() => {
           halfW: hw, bank: 0, kind: 'tube', tunnel: false, branchId: bid });
       }
       const tubeEnd = nlist[nlist.length - 1];
-      // Each branch targets a DIFFERENT node on the main track (staggered by branch index)
-      // so they don't all converge to the exact same point — avoids the piled-up seam.
-      const rejoinOffset = Math.floor((i / N) * 40);   // spread across ~40 main nodes so branches rejoin at distinct points
-      const target = mainNodes[Math.min(mainNodes.length - 1, end - rejoinOffset)];
+      // STACKED LAYERS (per the user's sketch): every branch converges onto the SAME main
+      // centerline in X/Z, but each ends at a stepped HEIGHT and staggered slightly further
+      // back than the branch below it. The result is a descending staircase of overlapping
+      // ramps — a ball on an upper layer rolls off its end and drops onto the SOLID surface of
+      // the layer beneath, cascading down layer-by-layer to the main track and the finish.
+      const LAYER_BACK = 30;                          // nodes further back per stacked layer (> the end meshSkip zone so drops land on solid track)
+      const STACK_GAP = 2.6;                          // vertical spacing between layers
+      const target = mainNodes[Math.min(mainNodes.length - 1, Math.max(0, end - i * LAYER_BACK))];
       // DIVERGE 65% of the track length before starting to converge — branches stay clearly
       // separate for most of their run, only pulling back in the last 35%.
       const CONVERGE_FRAC = 0.62 + rng() * 0.06;   // 62-68% outward before homing
       const convergeStartK = Math.floor(CONVERGE_FRAC * TRACK_LEN);
-      const gapAtHomingStart = Math.hypot(tubeEnd.pos.x - target.pos.x, tubeEnd.pos.y - target.pos.y, tubeEnd.pos.z - target.pos.z) || 1;
+      // Each layer's rejoin height: branch 0 sits one gap above the main track, higher-index
+      // branches stack above it. The ball always falls onto the layer directly below.
+      const REJOIN_LIFT = STACK_GAP * (i + 1);
+      const gapAtHomingStart = Math.hypot(tubeEnd.pos.x - target.pos.x, tubeEnd.pos.y - (target.pos.y + REJOIN_LIFT), tubeEnd.pos.z - target.pos.z) || 1;
       const stepsAvailable = Math.max(1, TRACK_LEN - convergeStartK);
-      // Leave a 1.5-unit vertical gap at rejoin — ball drops naturally onto main track.
-      // This eliminates the seam and any visual connection geometry entirely.
-      const REJOIN_LIFT = 1.5;
-      const targetFinalGap = REJOIN_LIFT;
+      const targetFinalGap = 0.4;   // converge nearly onto the stacked layer height
       const closeFrac = 1 - Math.pow(Math.min(1, targetFinalGap / gapAtHomingStart), 1 / stepsAvailable);
       let bpos = v(tubeEnd.pos.x, tubeEnd.pos.y, tubeEnd.pos.z);
       let bheading = v(tubeEnd.dir.x, tubeEnd.dir.y, tubeEnd.dir.z);
