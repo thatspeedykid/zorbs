@@ -883,8 +883,13 @@ function buildCourse(seed) {
   _pulse = { lane: _pulseLanes[0] || null, lanes: _pulseLanes, laneBaseOpacity: 0.26 };
 
   // NEON ARCH GATES spanning every path every ~70 nodes (so each route gets gates, none in the void).
+  // On branch paths, start late (skip first 50 nodes near platform) and use wider spacing (120)
+  // so arches don't pile up at the platform start or rejoin end convergence point.
   for (const nodes of _paths) {
-    for (let i = 34; i < nodes.length - 6; i += 70) {
+    const isBranch = nodes[0] && nodes[0].branchId;
+    const archStart = isBranch ? 50 : 34;
+    const archStep  = isBranch ? 120 : 70;
+    for (let i = archStart; i < nodes.length - 20; i += archStep) {
       const n = nodes[i];
       if (n.kind === 'spiral' || n.kind === 'tunnel') continue;
       const archR = n.halfW * 1.02;

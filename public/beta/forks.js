@@ -816,8 +816,10 @@ const ZFORK = (() => {
         }
         const right = norm(cross(bheading, worldUp));
         const up = norm(cross(right, bheading));
+        const nearRejoin = k >= TRACK_LEN - 12;
         nlist.push({ pos: v(bpos.x, bpos.y, bpos.z), dir: v(bheading.x, bheading.y, bheading.z), right, up,
-          halfW: LW, bank: 0, kind: 'route', tunnel: false, branchId: bid });
+          halfW: LW, bank: 0, kind: 'route', tunnel: false, branchId: bid,
+          noWallL: nearRejoin, noWallR: nearRejoin });
       }
       // FINAL SNAP: force the very last node to sit exactly at the target (zero residual
       // gap, guaranteed, regardless of how the homing phase performed) — imperceptible

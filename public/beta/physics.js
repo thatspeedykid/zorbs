@@ -16,6 +16,7 @@ const ZPHYSICS = (() => {
   let world = null;
   let ready = false;
   let trackBody = null;
+  let wellPlatBodies = [];  // separate fixed bodies for well platform floors — cleaned up each race
   const balls = new Map(); // id -> { body, drive, lane, speedMul, alive, branch }
   let nodes = null;        // main centerline for steering
   let forks = null;        // fork descriptors
@@ -85,6 +86,8 @@ const ZPHYSICS = (() => {
   function setTrack(colliderBuffers, centerline, forkData) {
     if (!ready) return;
     if (trackBody) { world.removeRigidBody(trackBody); trackBody = null; }
+    for (const b of wellPlatBodies) { try { world.removeRigidBody(b); } catch(_){} }
+    wellPlatBodies = [];
     nodes = centerline;
     forks = (forkData && forkData.forks) || null;
     branchNodes = {};
@@ -104,18 +107,20 @@ const ZPHYSICS = (() => {
       for (const bc of forkData.branchColliders) mk(bc.buffers);
     }
     // WELL PLATFORMS: the platform disc at the bottom of each gravity well is a visual-only
-    // Three.js mesh with no walls/roof, so it's filtered out of branchColliders. Add a flat
-    // cylinder collider for each well so exiting balls land on the platform instead of falling
-    // through. Height 0.3 keeps it thin (just enough to catch a ball at full speed with CCD).
+    // Three.js mesh with no walls/roof, so it's filtered out of branchColliders. Add a solid
+    // cylinder collider for each well. Half-height 2.0 makes it thick enough that CCD can
+    // never tunnel through it, regardless of how fast the ball is going when it exits orbit.
+    // Top surface sits at yBottom; cylinder extends 4 units downward to be safe.
     if (forkData && forkData.forks) {
       for (const f of forkData.forks) {
         if (!f.isWell) continue;
-        const platBd = RAPIER.RigidBodyDesc.fixed().setTranslation(f.cx, f.yBottom - 0.15, f.cz);
+        const platBd = RAPIER.RigidBodyDesc.fixed().setTranslation(f.cx, f.yBottom - 2.0, f.cz);
         const platBody = world.createRigidBody(platBd);
         world.createCollider(
-          RAPIER.ColliderDesc.cylinder(0.15, f.rPlatform + 0.5).setRestitution(0.05).setFriction(0.6),
+          RAPIER.ColliderDesc.cylinder(2.0, f.rPlatform + 0.5).setRestitution(0.0).setFriction(0.7),
           platBody
         );
+        wellPlatBodies.push(platBody);
       }
     }
     // OBSTACLES: bumper pillars that RETRACT into the track and rise back up on a slow
