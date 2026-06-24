@@ -600,10 +600,10 @@ const ZFORK = (() => {
     // plays as a dramatic visual moment with the ball spiraling and landing, just with no
     // sort at the bottom.
     const wr = rng();
-    const N = wr < 0.10 ? 1 : wr < 0.40 ? 2 : wr < 0.72 ? 3 : 4;
+    const N = wr < 0.40 ? 2 : wr < 0.72 ? 3 : 4;   // always ≥2 — single-track wells are boring
 
-    // ---- APPROACH: short run leading into the rim, tangent to the funnel. ----
-    const APPROACH_NODES = 10;
+    // ---- APPROACH: longer runway so the entry track sits well back from the funnel rim. ----
+    const APPROACH_NODES = 22;
     for (let k = 0; k <= APPROACH_NODES; k++) mainNodes[splitIdx + k].kind = 'sorter';
     const entryNode = mainNodes[splitIdx + APPROACH_NODES];
     const entryIdx = splitIdx + APPROACH_NODES;
@@ -683,58 +683,55 @@ const ZFORK = (() => {
     }
     const wellConeMesh = { positions: new Float32Array(coneMeshPos), indices: new Uint32Array(coneMeshIdx) };
 
-    // ---- FLAT SORTING PLATFORM: a solid disc at the bottom, no gaps/holes at all (no
-    // binning math needed — assignment is a flat random roll in physics.js the instant the
-    // orbit finishes, so there's nothing for the platform geometry to get wrong the way the
-    // hole-disc approach kept doing). A raised lip ring around the edge gives it a visible
-    // 'platform' silhouette instead of just blending into the cone. ----
-    const PLATFORM_SEGS = 32;
+    // Pre-compute exit angles here so we can cut matching holes in the platform disc below.
+    const mainAngForward = Math.atan2(entryNode.dir.z, entryNode.dir.x);
+    const ARC_SPAN = Math.min(2.7, 1.3 + N * 0.30);
+    const angStart = mainAngForward - ARC_SPAN / 2;
+    const exitAngles = Array.from({ length: N }, (_, i) => N > 1 ? angStart + (i / (N - 1)) * ARC_SPAN : mainAngForward);
+
+    // ---- SORTING PLATFORM: disc with a hole cut at each exit tube's angle. ----
+    // Assignment is a flat random roll so the holes are purely cosmetic — they tell the
+    // viewer "this is where your ball came out" without the hole positions affecting fairness.
+    const PLATFORM_SEGS = 64;
+    const HOLE_HALF_ANG = Math.min(0.55, Math.PI / N * 0.55);   // angular half-width of each hole
     const platMeshPos = [], platMeshIdx = [];
     let platBase = 0;
-    const pushQuad = (a, b, c, d) => {
-      platMeshPos.push(a.x,a.y,a.z, b.x,b.y,b.z, c.x,c.y,c.z, d.x,d.y,d.z);
-      platMeshIdx.push(platBase, platBase+1, platBase+2, platBase, platBase+2, platBase+3);
-      platBase += 4;
-    };
-    // simple filled disc via triangle fan from center
     const platCenter = v(cx, yBottom, cz);
     for (let s = 0; s < PLATFORM_SEGS; s++) {
       const a0 = (s / PLATFORM_SEGS) * 6.2832, a1 = ((s + 1) / PLATFORM_SEGS) * 6.2832;
+      const aMid = (a0 + a1) * 0.5;
+      // skip sectors that overlap a tube exit hole
+      let inHole = false;
+      for (const ha of exitAngles) {
+        let d = aMid - ha;
+        while (d > Math.PI) d -= 6.2832;
+        while (d < -Math.PI) d += 6.2832;
+        if (Math.abs(d) < HOLE_HALF_ANG) { inHole = true; break; }
+      }
+      if (inHole) continue;
       const p0 = v(cx + Math.cos(a0) * rPlatform, yBottom, cz + Math.sin(a0) * rPlatform);
       const p1 = v(cx + Math.cos(a1) * rPlatform, yBottom, cz + Math.sin(a1) * rPlatform);
-      platMeshPos.push(platCenter.x,platCenter.y,platCenter.z, p0.x,p0.y,p0.z, p1.x,p1.y,p1.z);
-      platMeshIdx.push(platBase, platBase+1, platBase+2);
+      platMeshPos.push(platCenter.x, platCenter.y, platCenter.z, p0.x, p0.y, p0.z, p1.x, p1.y, p1.z);
+      platMeshIdx.push(platBase, platBase + 1, platBase + 2);
       platBase += 3;
     }
     const wellPlatformMesh = { positions: new Float32Array(platMeshPos), indices: new Uint32Array(platMeshIdx) };
 
-    // ---- N TRACKS, SPACED APART, EACH WITH ITS OWN OBSTACLE-SEEDING IDENTITY ----
-    // Real minimum angular gap between tracks (was the actual complaint last round: branches
-    // starting nearly on top of each other). With N tracks evenly spaced around the platform,
-    // the natural gap is 360/N degrees — track exits at radius rPlatform need at least
-    // 2x the tube's own half-width of physical separation at that radius, which constrains
-    // how many tracks can fit; below we just evenly distribute and trust rPlatform (scaled
-    // with N above) to keep them apart, then double check geometrically before returning.
+    // ---- N TRACKS, SPACED APART ----
     const branches = {}, branchOrder = [];
     const TRACK_LEN = Math.max(50, lenF - APPROACH_NODES - 6);
-    const TUBE_NODES = 12;
-    const tubeHW = Math.max(3.0, LW * 0.18);   // wide enough for two balls (collision-safety fix from earlier session, kept)
-    // FORWARD ARC, NOT FULL CIRCLE: tracks used to spread across the entire 360° around the
-    // platform — confirmed in testing this put some tracks almost exactly OPPOSITE the main
-    // direction, needing a near-180° U-turn to curve back, which left them up to ~184 units
-    // away from the rejoin point with no remaining track length to close the gap (the other,
-    // only mildly-offset tracks converged to within ~30 units just fine). Restricting exits
-    // to a forward-facing arc means every track only ever needs a moderate turn, while still
-    // giving real angular separation between tracks (the actual ask: spaced apart, not on
-    // top of each other) without ever requiring a geometrically expensive reversal.
-    const mainAngForward = Math.atan2(entryNode.dir.z, entryNode.dir.x);
-    const ARC_SPAN = Math.min(2.7, 1.3 + N * 0.30);   // radians — widens a little with more tracks, capped well short of a full circle
-    const angStart = mainAngForward - ARC_SPAN / 2;
+    const TUBE_NODES = 10;
+    const tubeHW = Math.max(3.0, LW * 0.18);
     for (let i = 0; i < N; i++) {
       const bid = forkId + '_' + i; branchOrder.push(bid);
-      const trackAng = N > 1 ? angStart + (i / (N - 1)) * ARC_SPAN : mainAngForward;
-      const hx = cx + Math.cos(trackAng) * rPlatform, hz = cz + Math.sin(trackAng) * rPlatform;
-      const outDir = norm(v(Math.cos(trackAng), -0.45, Math.sin(trackAng)));
+      const trackAng = exitAngles[i];
+      // Tubes start INSIDE the platform edge (0.55 * rPlatform) so they connect visually
+      // through the hole rather than spawning outside it.
+      const tubeStartR = rPlatform * 0.55;
+      const hx = cx + Math.cos(trackAng) * tubeStartR, hz = cz + Math.sin(trackAng) * tubeStartR;
+      // Steeper downward angle so exit tracks drop more directly under the platform instead
+      // of spreading far sideways first.
+      const outDir = norm(v(Math.cos(trackAng), -0.75, Math.sin(trackAng)));
       const nlist = [];
       let pos = v(hx, yBottom, hz);
       let heading = v(outDir.x, outDir.y, outDir.z);
@@ -773,7 +770,7 @@ const ZFORK = (() => {
       // CONVERGE_FRAC: fraction of the body spent actively homing toward the exact target
       // (vs. the early portion, which just continues outward on its own heading briefly so
       // the track doesn't look like it instantly snaps into a turn right at the tube exit).
-      const CONVERGE_FRAC = 0.18 + rng() * 0.10;   // 18-28% — starts converging early, leaving most of the length to actually close the gap
+      const CONVERGE_FRAC = 0.32 + rng() * 0.14;   // 32-46% — longer outward sweep before homing so branches arc gracefully
       const convergeStartK = Math.floor(CONVERGE_FRAC * TRACK_LEN);
       // GEOMETRIC DECAY RATE: solved once, up front, so that closing this exact fraction of
       // whatever gap remains EVERY step for the remaining (TRACK_LEN - convergeStartK) steps
@@ -816,7 +813,9 @@ const ZFORK = (() => {
         }
         const right = norm(cross(bheading, worldUp));
         const up = norm(cross(right, bheading));
-        const nearRejoin = k >= TRACK_LEN - 12;
+        // Fade walls out over the last 30 nodes so branches merge cleanly instead of
+        // leaving hard wall-cap bars at the rejoin point.
+        const nearRejoin = k >= TRACK_LEN - 30;
         nlist.push({ pos: v(bpos.x, bpos.y, bpos.z), dir: v(bheading.x, bheading.y, bheading.z), right, up,
           halfW: LW, bank: 0, kind: 'route', tunnel: false, branchId: bid,
           noWallL: nearRejoin, noWallR: nearRejoin });

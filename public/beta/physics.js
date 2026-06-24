@@ -538,35 +538,27 @@ const ZPHYSICS = (() => {
       // landed in the same hole) and needed extra jitter machinery to compensate. A flat
       // random roll sorts evenly with no extra machinery and matches the actual ask
       // ('platform doesn't care where you land, just randomly assigns a track').
-      // Seeded per-ball: hash ball id + fork id so clients agree on branch assignment.
-      const _h = (((b._id * 2654435761) ^ (well.id || 0)) >>> 0) * 0x9e3779b9 >>> 0;
+      // Seeded per-ball: numeric hash of ball id XOR numeric hash of well position.
+      // well.id is a string like 'fork0'; using it directly in JS bitwise XOR coerces to 0,
+      // making all balls land on branch[0]. Use the well's world position as a numeric key instead.
+      const wellNumId = (((well.cx * 73856093) | 0) ^ ((well.cz * 19349663) | 0)) >>> 0;
+      const _h = (((b._id * 2654435761) ^ wellNumId) >>> 0) * 0x9e3779b9 >>> 0;
       const idx = _h % well.branchOrder.length;
       b.branch = well.branchOrder[idx];
       b.branchFork = well;
-      b.hint = 0;
-      // Place ball at the start of its assigned exit tube (node 0 = hole at platform edge).
-      // This bypasses the unreliable "slide across the platform" step and drops the ball
-      // directly into the mouth of its exit tube, 1 ball-radius above the tube floor.
-      // Use node 1 (not 0) so the ball starts with forward momentum already set.
-      // Place ball ON TOP of the platform cylinder (yBottom + clearance), aimed toward
-      // its assigned exit tube. exitNodes[0] is at the platform rim, so we use its XZ
-      // position to determine outward direction but override Y to sit above the cylinder.
+      // Skip the platform-landing step entirely: drop the ball directly into node 3 of its
+      // assigned tube with the tube's own forward velocity. Bypasses cylinder bounce ambiguity.
       const exitNodes = branchNodes[b.branch];
-      if (exitNodes && exitNodes.length > 0) {
-        const eN = exitNodes[0];
-        const dx = eN.pos.x - well.cx, dz = eN.pos.z - well.cz;
-        const dl = Math.hypot(dx, dz) || 1;
-        const pr = well.rPlatform * 0.7; // place slightly inside rim so it lands on cylinder
-        b.body.setTranslation({
-          x: well.cx + (dx / dl) * pr,
-          y: well.yBottom + BALL_R + 1.2,
-          z: well.cz + (dz / dl) * pr,
-        }, true);
-        b.body.setLinvel({ x: (dx / dl) * 4, y: -2, z: (dz / dl) * 4 }, true);
+      const DROP_IDX = Math.min(3, (exitNodes ? exitNodes.length : 1) - 1);
+      b.hint = DROP_IDX;   // start hint at the drop node so nearestNode search starts in the right place
+      const dropNode = exitNodes && exitNodes[DROP_IDX];
+      if (dropNode) {
+        b.body.setTranslation({ x: dropNode.pos.x, y: dropNode.pos.y + BALL_R + 0.3, z: dropNode.pos.z }, true);
+        const spd = 7;
+        b.body.setLinvel({ x: dropNode.dir.x * spd, y: dropNode.dir.y * spd - 2, z: dropNode.dir.z * spd }, true);
       } else {
-        // fallback: center of platform
-        b.body.setTranslation({ x: well.cx, y: well.yBottom + BALL_R + 1.2, z: well.cz }, true);
-        b.body.setLinvel({ x: 0, y: -2, z: 0 }, true);
+        b.body.setTranslation({ x: well.cx, y: well.yBottom + BALL_R + 1.5, z: well.cz }, true);
+        b.body.setLinvel({ x: 0, y: -4, z: 0 }, true);
       }
       b.collider.setEnabled(true);   // back to normal collision now that it's committed
       if (typeof window !== 'undefined' && window.__traceWell) console.log('WELL EXIT id=' + b._id + ' branch=' + b.branch);

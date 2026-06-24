@@ -80,19 +80,19 @@ const ZTRACK = (() => {
       let sec;
       const r = rng();
       if (lastHeavy) {
-        // forced CALM after a heavy piece (straight or a gentle sweep)
-        if (r < 0.5) sec = { kind: 'straight', len: 14 + Math.floor(rng() * 12) };
-        else { dir = -dir; sec = { kind: 'sweep', dir, sharp: 0.018 + rng() * 0.014, len: 26 + Math.floor(rng() * 16) }; }
+        // CALM recovery after a heavy piece — still give it some sweep so it's not dead straight
+        if (r < 0.35) sec = { kind: 'straight', len: 10 + Math.floor(rng() * 10) };
+        else { dir = -dir; sec = { kind: 'sweep', dir, sharp: 0.028 + rng() * 0.022, len: 28 + Math.floor(rng() * 20) }; }
         lastHeavy = false;
       } else {
-        // EVENT piece — all of these keep the track DESCENDING (gravity carries the marbles);
-        // none of them go uphill. 'drop' is a steeper descent, not a valley.
-        if (r < 0.30)      { dir = -dir; sec = { kind: 'sweep',  dir, sharp: 0.026 + rng() * 0.020, len: 28 + Math.floor(rng() * 18) }; lastHeavy = false; }
-        else if (r < 0.52) { sec = { kind: 'funnel', len: 16 + Math.floor(rng() * 12), min: 0.40 + rng() * 0.16 }; lastHeavy = true; }
+        // EVENT pieces — weighted toward sweeping curves so the track feels alive,
+        // not a flat straight road with occasional bumps.
+        if (r < 0.38)      { dir = -dir; sec = { kind: 'sweep',  dir, sharp: 0.042 + rng() * 0.038, len: 34 + Math.floor(rng() * 26) }; lastHeavy = false; }
+        else if (r < 0.56) { sec = { kind: 'funnel', len: 16 + Math.floor(rng() * 12), min: 0.40 + rng() * 0.16 }; lastHeavy = true; }
         else if (r < 0.70) { sec = { kind: 'narrower', len: 18 + Math.floor(rng() * 10), min: 0.34 + rng() * 0.10 }; lastHeavy = true; }
-        else if (r < 0.86) { sec = { kind: 'drop', len: 12 + Math.floor(rng() * 10), drop: 0.9 + rng() * 0.9 }; lastHeavy = true; }
-        else if (r < 0.96) { if (rng() > 0.4) dir = -dir; sec = { kind: 'spiral', dir, len: 28 + Math.floor(rng() * 12) }; lastHeavy = true; }
-        else               { sec = { kind: 'tunnel', dir: rng() < 0.5 ? 1 : -1, len: 16 + Math.floor(rng() * 12) }; lastHeavy = false; }
+        else if (r < 0.84) { sec = { kind: 'drop', len: 14 + Math.floor(rng() * 12), drop: 1.0 + rng() * 1.0 }; lastHeavy = true; }
+        else if (r < 0.95) { if (rng() > 0.35) dir = -dir; sec = { kind: 'spiral', dir, len: 32 + Math.floor(rng() * 16) }; lastHeavy = true; }
+        else               { sec = { kind: 'tunnel', dir: rng() < 0.5 ? 1 : -1, len: 18 + Math.floor(rng() * 14) }; lastHeavy = false; }
       }
       if (sec.len > remaining - 8) sec.len = Math.max(8, remaining - 8);
       plan.push(sec); used += sec.len;
