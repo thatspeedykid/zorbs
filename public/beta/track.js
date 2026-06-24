@@ -659,9 +659,12 @@ const ZTRACK = (() => {
     const branchColliders = branchMeshes.map(bm => ({
       branchId: bm.branchId,
       buffers: (() => {
-        // walls+roof only, same as main
         const positions = []; const indices = []; let base = 0;
-        for (const part of [bm.mesh.walls, bm.mesh.roof]) {
+        // Well cone and platform: floor IS the physics surface (no walls/roof exist).
+        // All other branches: walls+roof only (floors stay analytic via the drive system).
+        const isWellGeom = bm.branchId && (bm.branchId.endsWith('_wellcone') || bm.branchId.endsWith('_wellplatform'));
+        const parts = isWellGeom ? [bm.mesh.floor] : [bm.mesh.walls, bm.mesh.roof];
+        for (const part of parts) {
           for (let k=0;k<part.positions.length;k++) positions.push(part.positions[k]);
           for (let k=0;k<part.indices.length;k++) indices.push(part.indices[k]+base);
           base += part.positions.length/3;

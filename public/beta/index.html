@@ -891,7 +891,7 @@ function buildCourse(seed) {
     const archStep  = isBranch ? 120 : 70;
     for (let i = archStart; i < nodes.length - 20; i += archStep) {
       const n = nodes[i];
-      if (n.kind === 'spiral' || n.kind === 'tunnel') continue;
+      if (n.kind === 'spiral' || n.kind === 'tunnel' || n.kind === 'tube') continue;
       const archR = n.halfW * 1.02;
       const arch = new THREE.Mesh(
         new THREE.TorusGeometry(archR, 0.22, 10, 32, Math.PI),

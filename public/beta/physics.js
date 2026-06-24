@@ -542,11 +542,20 @@ const ZPHYSICS = (() => {
       b.branch = well.branchOrder[idx];
       b.branchFork = well;
       b.hint = 0;
-      // Land ball on the platform surface, slightly above so it doesn't start inside the collider.
-      // Scatter placement by current angle so multiple balls don't stack exactly (small radial offset).
-      const landR = Math.min(well.rPlatform * 0.5, well.rPlatform - BALL_R * 2);
-      b.body.setTranslation({ x: well.cx + Math.cos(ang) * landR, y: well.yBottom + BALL_R + 0.35, z: well.cz + Math.sin(ang) * landR }, true);
-      b.body.setLinvel({ x: 0, y: -3, z: 0 }, true);   // gentle downward nudge onto the platform
+      // Place ball at the start of its assigned exit tube (node 0 = hole at platform edge).
+      // This bypasses the unreliable "slide across the platform" step and drops the ball
+      // directly into the mouth of its exit tube, 1 ball-radius above the tube floor.
+      // Use node 1 (not 0) so the ball starts with forward momentum already set.
+      const exitNodes = branchNodes[b.branch];
+      if (exitNodes && exitNodes.length > 1) {
+        const en = exitNodes[1];
+        b.body.setTranslation({ x: en.pos.x, y: en.pos.y + BALL_R * 2 + 0.4, z: en.pos.z }, true);
+        b.body.setLinvel({ x: en.dir.x * 6, y: -4, z: en.dir.z * 6 }, true);
+      } else {
+        // fallback: center of platform
+        b.body.setTranslation({ x: well.cx, y: well.yBottom + BALL_R + 1.0, z: well.cz }, true);
+        b.body.setLinvel({ x: 0, y: -4, z: 0 }, true);
+      }
       b.collider.setEnabled(true);   // back to normal collision now that it's committed
       if (typeof window !== 'undefined' && window.__traceWell) console.log('WELL EXIT id=' + b._id + ' branch=' + b.branch);
       b.inWell = null;
