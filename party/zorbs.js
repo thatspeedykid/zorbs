@@ -32,7 +32,7 @@ export default class ZorbsRoom {
     this.boostLog = new Map();      // per-chatter !boost timestamps for rate limiting (subs 2/30s, others 1/20s)
     this.official = null;
     // private-lobby control state (defaults: autoplay OFF, everyone may join)
-    this.control = { autoplay: false, joinMode: 'all' };
+    this.control = { autoplay: false, joinMode: 'all', map: null };
     this.directed = null;          // an owner-started race { id, seed, startTime, roster }
     this.owners = new Set();        // connection ids that authed as this room's owner
     this._dn = 0;                   // directed-race counter (unique id per start)
@@ -100,9 +100,9 @@ export default class ZorbsRoom {
       // room id (rooms are named after the streamer). TODO: verify the Kick token server-side.
       if (!this.isPublic && String(m.as || '').toLowerCase() === this.party.id) {
         this.owners.add(sender.id);
-        this.send(sender, { type: 'controlState', autoplay: this.control.autoplay, joinMode: this.control.joinMode, owner: true });
+        this.send(sender, { type: 'controlState', autoplay: this.control.autoplay, joinMode: this.control.joinMode, map: this.control.map, owner: true });
       } else {
-        this.send(sender, { type: 'controlState', autoplay: this.control.autoplay, joinMode: this.control.joinMode, owner: false });
+        this.send(sender, { type: 'controlState', autoplay: this.control.autoplay, joinMode: this.control.joinMode, map: this.control.map, owner: false });
       }
 
     } else if (m.type === 'control') {
@@ -111,6 +111,8 @@ export default class ZorbsRoom {
       if (a === 'set') {
         if (typeof m.autoplay === 'boolean') this.control.autoplay = m.autoplay;
         if (['all','subs','followers'].includes(m.joinMode)) this.control.joinMode = m.joinMode;
+        // lobby map: a community map id all clients load for this lobby's races, or null = default.
+        if ('map' in m) this.control.map = (typeof m.map === 'string' && m.map) ? m.map.slice(0, 24).replace(/[^a-z0-9]/gi, '') : null;
         this.broadcastControl();
       } else if (a === 'start') {
         this._dn++;
@@ -140,7 +142,7 @@ export default class ZorbsRoom {
   }
 
   broadcastControl() {
-    this.party.broadcast(JSON.stringify({ type: 'controlState', autoplay: this.control.autoplay, joinMode: this.control.joinMode }));
+    this.party.broadcast(JSON.stringify({ type: 'controlState', autoplay: this.control.autoplay, joinMode: this.control.joinMode, map: this.control.map }));
   }
   broadcastPlayers() {
     this.party.broadcast(JSON.stringify({ type: 'players', players: this.rosterList() }));

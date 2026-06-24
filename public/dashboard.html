@@ -185,6 +185,7 @@ body{background:#05050f;color:#fff;font-family:'Courier New',monospace;min-heigh
       <div class="nav-item active" onclick="showPage('overview')" id="ni-overview"><span class="icon">◈</span> OVERVIEW</div>
       <div class="nav-item" onclick="showPage('races')" id="ni-races"><span class="icon">🏁</span> MY RACES</div>
       <div class="nav-item" onclick="showPage('leaderboard')" id="ni-leaderboard"><span class="icon">◉</span> LEADERBOARD</div>
+      <div class="nav-item" onclick="showPage('community')" id="ni-community"><span class="icon">🌐</span> COMMUNITY MAPS</div>
 
       <div class="nav-section">CREATE <span class="nav-badge">v0.4</span></div>
       <div class="nav-item" onclick="openMapEditor()" id="ni-mapeditor"><span class="icon">🗺️</span> MAP EDITOR</div>
@@ -345,6 +346,17 @@ body{background:#05050f;color:#fff;font-family:'Courier New',monospace;min-heigh
             <div style="font-size:9px;color:rgba(255,255,255,0.25);margin-top:5px;">Subs is enforced from the chat badge. Followers is best-effort (any chatter) until follower lookup lands.</div>
           </div>
           <div style="margin-top:16px;">
+            <div class="ctl-label">MAP SELECTION <span class="nav-badge" style="margin-left:6px">v0.4</span></div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+              <select id="lobby-map-sel" onchange="lobbySetMap(this.value)" style="background:#0c1120;color:#fff;border:1px solid rgba(0,240,255,0.2);border-radius:8px;padding:8px 10px;font:inherit;min-width:200px;">
+                <option value="">Default (random generated track)</option>
+                <option value="random">🎲 Randomizer (community maps)</option>
+              </select>
+              <button class="btn btn-cyan" onclick="loadLobbyMapOptions()">↻ REFRESH</button>
+            </div>
+            <div style="font-size:9px;color:rgba(255,255,255,0.25);margin-top:5px;">Pick a community-built map for your lobby, or Randomizer to cycle them. Default = the auto-generated track. Applies to everyone in your room.</div>
+          </div>
+          <div style="margin-top:16px;">
             <div class="ctl-label">OBS CAMERA</div>
             <div class="seg" id="seg-cam">
               <button class="seg-btn active" data-v="leader" onclick="lobbyCam('leader')">AUTO</button>
@@ -442,6 +454,23 @@ body{background:#05050f;color:#fff;font-family:'Courier New',monospace;min-heigh
             <thead><tr><th>KICK USERNAME</th><th>RACES</th><th>PLAYERS</th><th>STATUS</th><th>JOINED</th><th>ACTIONS</th></tr></thead>
             <tbody id="admin-streamers-table">
               <tr><td colspan="6" style="color:rgba(255,255,255,0.2);padding:20px;text-align:center">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- COMMUNITY MAPS -->
+      <div class="page" id="page-community">
+        <div class="page-title">COMMUNITY MAPS</div>
+        <div style="display:flex;gap:10px;margin-bottom:16px;align-items:center;flex-wrap:wrap;">
+          <button class="btn btn-green btn-big" onclick="window.open('/beta/?map=random','_blank')">🎲 PLAY RANDOMIZER</button>
+          <span style="font-size:11px;color:rgba(255,255,255,0.4)">Randomizer cycles a new community-built track every race. Or pick a specific map below.</span>
+        </div>
+        <div class="card">
+          <table class="tbl">
+            <thead><tr><th>NAME</th><th>AUTHOR</th><th>DIFFICULTY</th><th>PIECES</th><th>PLAYS</th><th></th></tr></thead>
+            <tbody id="community-table">
+              <tr><td colspan="6" style="color:rgba(255,255,255,0.2);padding:20px;text-align:center">Loading…</td></tr>
             </tbody>
           </table>
         </div>
@@ -668,10 +697,29 @@ function showPage(id){
   if(page) page.classList.add('active');
   if(nav)  nav.classList.add('active');
   if(id === 'leaderboard') loadGlobalLeaderboard();
-  if(id === 'obs') { fillLobbyLinks(); initCustom(); connectLobby(); }
+  if(id === 'obs') { fillLobbyLinks(); initCustom(); connectLobby(); loadLobbyMapOptions(); }
   if(id === 'marketplace') buildDashSkinGrid();
   if(id === 'mymaps') loadMyMaps();
+  if(id === 'community') loadCommunityMaps();
   if(id === 'admin-maps') loadAdminMaps();
+}
+
+async function loadCommunityMaps(){
+  const tb = document.getElementById('community-table');
+  try {
+    const r = await fetch('/api/maps?list=approved');
+    const j = await r.json().catch(()=>({}));
+    const maps = (j && j.maps) || [];
+    if(!maps.length){ tb.innerHTML = '<tr><td colspan="6" style="color:rgba(255,255,255,0.2);padding:20px;text-align:center">No community maps approved yet — build one in the Map Editor!</td></tr>'; return; }
+    // featured first, then by plays
+    maps.sort((a,b)=> (b.featured?1:0)-(a.featured?1:0) || (b.plays||0)-(a.plays||0));
+    tb.innerHTML = maps.map(m => `<tr>
+      <td>${m.featured?'⭐ ':''}${esc(m.name)}${m.description?`<div style="font-size:9px;color:rgba(255,255,255,0.3)">${esc(m.description)}</div>`:''}</td>
+      <td>${esc(m.author)}</td><td style="text-transform:capitalize">${esc(m.difficulty)}</td>
+      <td>${m.sectionCount}</td><td>${m.plays||0}</td>
+      <td><button class="btn btn-cyan" onclick="window.open('/beta/?map=${m.id}','_blank')">▶ PLAY</button></td>
+    </tr>`).join('');
+  } catch(_){ tb.innerHTML = '<tr><td colspan="6" style="color:#ff4060;padding:20px;text-align:center">Could not load community maps.</td></tr>'; }
 }
 
 // ── MAP EDITOR / COMMUNITY MAPS ────────────────────────────────────────────
@@ -764,6 +812,10 @@ function connectLobby(){
       setConn(_lobbyOwner ? '● connected — you control this room' : '● connected (view only)', true);
       const ap = document.getElementById('ctl-autoplay'); if(ap) ap.checked = !!m.autoplay;
       if(m.joinMode) segSet('seg-join', m.joinMode);
+      // reflect the room's current lobby map in the dropdown (a concrete id shows as that map;
+      // null shows Default). The dropdown may not list it yet until options load — that's fine.
+      const ms = document.getElementById('lobby-map-sel');
+      if(ms && 'map' in m){ const has=[...ms.options].some(o=>o.value===(m.map||'')); ms.value = (m.map && has) ? m.map : (m.map ? 'random' : ''); }
       // push our current view defaults to the OBS overlay (music muted, leader cam)
       const mute = document.getElementById('ctl-mute'); lobbyMute(mute ? mute.checked : true);
     }
@@ -773,6 +825,36 @@ function connectLobby(){
 }
 function lobbyCmd(obj){ if(_lobbyWS && _lobbyWS.readyState === 1){ _lobbyWS.send(JSON.stringify(Object.assign({ type:'control' }, obj))); } else { setConn('● not connected — reopen MY LOBBY', false); } }
 function lobbySetAutoplay(on){ lobbyCmd({ action:'set', autoplay: !!on }); }
+// LOBBY MAP: send a community map id (or null = default) for the whole room. "Randomizer" rolls a
+// random approved map to a concrete id so every client loads the same one (multiplayer stays synced).
+async function lobbySetMap(v){
+  let mapId = null;
+  if(v === 'random'){
+    try {
+      const r = await fetch('/api/maps?list=approved');
+      const j = await r.json().catch(()=>({}));
+      const maps = (j && j.maps) || [];
+      if(maps.length) mapId = maps[Math.floor(Math.random()*maps.length)].id;
+      else { alert('No community maps approved yet — Randomizer needs at least one.'); document.getElementById('lobby-map-sel').value=''; return; }
+    } catch(_){ return; }
+  } else if(v){ mapId = v; }
+  lobbyCmd({ action:'set', map: mapId });
+  localStorage.setItem('zorbs_lobby_map', v || '');
+}
+async function loadLobbyMapOptions(){
+  const sel = document.getElementById('lobby-map-sel'); if(!sel) return;
+  const cur = sel.value;
+  try {
+    const r = await fetch('/api/maps?list=approved');
+    const j = await r.json().catch(()=>({}));
+    const maps = (j && j.maps) || [];
+    // rebuild: keep Default + Randomizer, then list each approved map
+    sel.innerHTML = '<option value="">Default (random generated track)</option>'
+      + '<option value="random">🎲 Randomizer (community maps)</option>'
+      + maps.map(m => `<option value="${m.id}">${esc(m.name)} — ${esc(m.author)} (${esc(m.difficulty)})</option>`).join('');
+    sel.value = cur;
+  } catch(_){}
+}
 function lobbyJoinMode(v){ segSet('seg-join', v); lobbyCmd({ action:'set', joinMode: v }); }
 function lobbyStart(){ lobbyCmd({ action:'start' }); }
 function lobbyReset(){ lobbyCmd({ action:'reset' }); }

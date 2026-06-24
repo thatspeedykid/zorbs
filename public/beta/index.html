@@ -1770,8 +1770,16 @@ function loop(now) {
       phase = 'done'; reportResult(); showEndCard();
       // FRESH MODE: queue the next race on a brand-new random track
       if (_freshMode && !_freshQueued) { _freshQueued = true; setTimeout(() => { _freshQueued = false; startFreshRace(); }, 5000); }
-      // CUSTOM MAP preview: re-run the same authored track so it loops for testing
-      else if (window._zorbsCustomMap && !_freshQueued) { _freshQueued = true; setTimeout(() => { _freshQueued = false; startCustomMapRace(); }, 5000); }
+      // CUSTOM MAP preview: re-run the same authored track so it loops for testing. In RANDOMIZER
+      // mode, pull a fresh random community map for the next race instead of repeating.
+      else if (window._zorbsCustomMap && !_freshQueued) {
+        _freshQueued = true;
+        setTimeout(async () => {
+          _freshQueued = false;
+          if (_randomizerMode) { const m = await pickRandomCommunityMap(); if (m && m.sections) window._zorbsCustomMap = m; }
+          startCustomMapRace();
+        }, 5000);
+      }
     }
   }
 
@@ -2148,6 +2156,39 @@ function startFreshRace(){
   setStatus('⬡ fresh track every race', true);
   startRace(seed, names);
 }
+// RANDOMIZER (?map=random): pull the approved community map list and pick one at random. Returns
+// the full map object (with sections), or null if there are none yet. Re-rolled each race loop.
+let _randomizerMode = false;
+let _communityMapList = null;
+async function pickRandomCommunityMap(){
+  try {
+    if (!_communityMapList) {
+      const r = await fetch('/api/maps?list=approved');
+      const j = await r.json().catch(() => null);
+      _communityMapList = (j && j.maps) || [];
+    }
+    if (!_communityMapList.length) return null;
+    const pick = _communityMapList[Math.floor(Math.random() * _communityMapList.length)];
+    const r2 = await fetch('/api/maps?id=' + encodeURIComponent(pick.id));
+    const j2 = await r2.json().catch(() => null);
+    return (j2 && j2.map) || null;
+  } catch (_) { return null; }
+}
+// LOBBY MAP (private streamer lobby): the host can pin a community map for their room. The room
+// relays its id in control state; every client loads the SAME map so multiplayer races stay in
+// sync (geometry from the shared map, field/timing still from the server seed). null = default.
+let _lobbyMapId = undefined;
+async function applyLobbyMap(mapId){
+  const id = mapId || null;
+  if (id === _lobbyMapId) return;   // unchanged — nothing to do
+  _lobbyMapId = id;
+  if (!id) { window._zorbsCustomMap = null; return; }
+  try {
+    const r = await fetch('/api/maps?id=' + encodeURIComponent(id));
+    const j = await r.json().catch(() => null);
+    window._zorbsCustomMap = (j && j.map && Array.isArray(j.map.sections)) ? j.map : null;
+  } catch (_) { window._zorbsCustomMap = null; }
+}
 // CUSTOM MAP preview race — solo field on the authored course (window._zorbsCustomMap is already
 // set). Auto-loops on a fixed seed so the same hand-built track repeats for testing.
 function startCustomMapRace(){
@@ -2333,7 +2374,7 @@ function runMultiplayer(){
     ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch(_){ return; }
       if (m.type === 'welcome') { gotWelcome = true; offset = m.serverTime - Date.now(); _mpOffset = offset; roster = m.players || [];
         if (m.official) { _officialSlot = m.official.slot; _officialOrder = m.official.order; _officialFinished = m.official.finished || 0; }
-        if (m.control) { _ctl.autoplay = !!m.control.autoplay; _ctl.joinMode = m.control.joinMode || 'all'; }
+        if (m.control) { _ctl.autoplay = !!m.control.autoplay; _ctl.joinMode = m.control.joinMode || 'all'; applyLobbyMap(m.control.map); }
         // PRIVATE lobby obeys the host: a directed race pending? run it. else autoplay on? loop. else wait.
         if (_PRIVATE && m.directed && (m.directed.startTime - offset) > Date.now() - 4000) scheduleDirected(m.directed);
         else if (!_PRIVATE || _ctl.autoplay) scheduleRace(m.race);
@@ -2356,6 +2397,7 @@ function runMultiplayer(){
       else if (m.type === 'controlState') {
         const wasAuto = _ctl.autoplay;
         _ctl.autoplay = !!m.autoplay; _ctl.joinMode = m.joinMode || _ctl.joinMode;
+        applyLobbyMap(m.map);
         if (_PRIVATE && phase !== 'spawning' && phase !== 'racing') {
           if (_ctl.autoplay && !wasAuto) scheduleRace(curRaceNow());
           else if (!_ctl.autoplay && wasAuto) waitForHost();
@@ -2394,11 +2436,16 @@ async function boot() {
   // CUSTOM MAP MODE (?map=test from the editor, or ?map=<id> for a community map): load the
   // authored section plan, then run it as a solo preview race so creators can play-test before
   // submitting and players can preview a community course.
+  // ?map=random = RANDOMIZER: each race pulls a random approved community map (a fresh one every
+  // race, via startCustomMapRace's loop re-rolling _randomizerMode below).
   const _mapParam = _ZP.get('map');
   if (_mapParam) {
     try {
       if (_mapParam === 'test') {
         window._zorbsCustomMap = JSON.parse(sessionStorage.getItem('zorbs_testmap') || 'null');
+      } else if (_mapParam === 'random') {
+        _randomizerMode = true;
+        window._zorbsCustomMap = await pickRandomCommunityMap();
       } else {
         const r = await fetch('/api/maps?id=' + encodeURIComponent(_mapParam));
         const j = await r.json().catch(() => null);
@@ -2409,7 +2456,7 @@ async function boot() {
       startCustomMapRace();
       return;
     }
-    setStatus('map not found — running normal race', false);
+    setStatus(_randomizerMode ? 'no community maps yet — running normal race' : 'map not found — running normal race', false);
   }
 
   // FRESH MODE: brand-new random track every race, auto-looping (no slot lock).
