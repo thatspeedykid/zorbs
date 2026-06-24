@@ -546,15 +546,25 @@ const ZPHYSICS = (() => {
       // This bypasses the unreliable "slide across the platform" step and drops the ball
       // directly into the mouth of its exit tube, 1 ball-radius above the tube floor.
       // Use node 1 (not 0) so the ball starts with forward momentum already set.
+      // Place ball ON TOP of the platform cylinder (yBottom + clearance), aimed toward
+      // its assigned exit tube. exitNodes[0] is at the platform rim, so we use its XZ
+      // position to determine outward direction but override Y to sit above the cylinder.
       const exitNodes = branchNodes[b.branch];
-      if (exitNodes && exitNodes.length > 1) {
-        const en = exitNodes[1];
-        b.body.setTranslation({ x: en.pos.x, y: en.pos.y + BALL_R * 2 + 0.4, z: en.pos.z }, true);
-        b.body.setLinvel({ x: en.dir.x * 6, y: -4, z: en.dir.z * 6 }, true);
+      if (exitNodes && exitNodes.length > 0) {
+        const eN = exitNodes[0];
+        const dx = eN.pos.x - well.cx, dz = eN.pos.z - well.cz;
+        const dl = Math.hypot(dx, dz) || 1;
+        const pr = well.rPlatform * 0.7; // place slightly inside rim so it lands on cylinder
+        b.body.setTranslation({
+          x: well.cx + (dx / dl) * pr,
+          y: well.yBottom + BALL_R + 1.2,
+          z: well.cz + (dz / dl) * pr,
+        }, true);
+        b.body.setLinvel({ x: (dx / dl) * 4, y: -2, z: (dz / dl) * 4 }, true);
       } else {
         // fallback: center of platform
-        b.body.setTranslation({ x: well.cx, y: well.yBottom + BALL_R + 1.0, z: well.cz }, true);
-        b.body.setLinvel({ x: 0, y: -4, z: 0 }, true);
+        b.body.setTranslation({ x: well.cx, y: well.yBottom + BALL_R + 1.2, z: well.cz }, true);
+        b.body.setLinvel({ x: 0, y: -2, z: 0 }, true);
       }
       b.collider.setEnabled(true);   // back to normal collision now that it's committed
       if (typeof window !== 'undefined' && window.__traceWell) console.log('WELL EXIT id=' + b._id + ' branch=' + b.branch);
