@@ -659,12 +659,15 @@ const ZTRACK = (() => {
     const branchColliders = branchMeshes.map(bm => ({
       branchId: bm.branchId,
       buffers: (() => {
+        // Well cone and platform are VISUAL ONLY.
+        // The cone's exterior trimesh normals deflect balls outward on approach (wrong direction).
+        // The platform trimesh normals face DOWN so it's transparent from above.
+        // Physics for the well is 100% scripted (orbit) + a thick cylinder in setTrack.
+        if (bm.branchId && (bm.branchId.endsWith('_wellcone') || bm.branchId.endsWith('_wellplatform'))) {
+          return { positions: new Float32Array(0), indices: new Uint32Array(0) };
+        }
         const positions = []; const indices = []; let base = 0;
-        // Well cone and platform: floor IS the physics surface (no walls/roof exist).
-        // All other branches: walls+roof only (floors stay analytic via the drive system).
-        const isWellGeom = bm.branchId && (bm.branchId.endsWith('_wellcone') || bm.branchId.endsWith('_wellplatform'));
-        const parts = isWellGeom ? [bm.mesh.floor] : [bm.mesh.walls, bm.mesh.roof];
-        for (const part of parts) {
+        for (const part of [bm.mesh.walls, bm.mesh.roof]) {
           for (let k=0;k<part.positions.length;k++) positions.push(part.positions[k]);
           for (let k=0;k<part.indices.length;k++) indices.push(part.indices[k]+base);
           base += part.positions.length/3;

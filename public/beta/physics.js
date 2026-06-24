@@ -114,10 +114,12 @@ const ZPHYSICS = (() => {
     if (forkData && forkData.forks) {
       for (const f of forkData.forks) {
         if (!f.isWell) continue;
-        const platBd = RAPIER.RigidBodyDesc.fixed().setTranslation(f.cx, f.yBottom - 2.0, f.cz);
+        // Cylinder top sits at yBottom. Center is 3 units below, half-height 3 = 6-unit
+        // thick slab. Extra depth prevents any CCD tunneling regardless of exit velocity.
+        const platBd = RAPIER.RigidBodyDesc.fixed().setTranslation(f.cx, f.yBottom - 3.0, f.cz);
         const platBody = world.createRigidBody(platBd);
         world.createCollider(
-          RAPIER.ColliderDesc.cylinder(2.0, f.rPlatform + 0.5).setRestitution(0.0).setFriction(0.7),
+          RAPIER.ColliderDesc.cylinder(3.0, f.rPlatform + 1.0).setRestitution(0.0).setFriction(0.7),
           platBody
         );
         wellPlatBodies.push(platBody);
@@ -314,7 +316,7 @@ const ZPHYSICS = (() => {
     let h = 0; for (let k = 0; k < id.length; k++) h = (h * 31 + id.charCodeAt(k)) | 0;
     const rnd = (Math.abs(h % 1000) / 1000);
     balls.set(id, {
-      _id: id,
+      _id: (Math.abs(h) >>> 0) || 1,   // numeric hash of id string — used in well branch assignment
       body,
       collider,
       hint: 0,
