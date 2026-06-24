@@ -2611,10 +2611,13 @@ if (_volEl) {
     };
   }
 
+  // Load saved skin from the dashboard — applies to ALL players (Kick or guest).
+  if (sess && sess.skin) _myPrefs = { skin: sess.skin, owned: ['Rainbow','Solar','Galaxy','Lava','Plasma','Void','Gold'] };
+
   if (sess && sess.username) {
     // signed in with Kick → race as that account, no nickname needed
     _kickName = sess.username;
-    // Load saved skin prefs from session
+    // Skin already loaded above; re-apply here in case session has both username + skin.
     if (sess.skin) _myPrefs = { skin: sess.skin, owned: ['Rainbow','Solar','Galaxy','Lava','Plasma','Void','Gold'] };
     // am I a beta tester? → render the gold founders ball. Re-send to the room if it
     // resolves after we've already joined, so others see the founders ball too.
