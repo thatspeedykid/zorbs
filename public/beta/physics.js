@@ -453,7 +453,7 @@ const ZPHYSICS = (() => {
     // random roll, not angle-based — see processWellOrbit below), but kept so balls
     // entering close together don't all spin in visually identical lockstep.
     const revJitter = (Math.random() - 0.5) * 1.4;   // up to ±0.7 of a full extra revolution
-    if (global.__traceWell) console.log('WELL ENTER id='+b._id+' dir='+dir+' ang0='+ang0.toFixed(2)+' revJitter='+revJitter.toFixed(2));
+    if (typeof window !== 'undefined' && window.__traceWell) console.log('WELL ENTER id='+b._id+' dir='+dir+' ang0='+ang0.toFixed(2)+' revJitter='+revJitter.toFixed(2));
     // COLLISION OFF DURING THE ORBIT: a forced setTranslation every frame can teleport a
     // ball into sudden deep overlap with another ball that's also mid-orbit (or just
     // standing nearby) — Rapier's solver then throws a violent separation impulse at the
@@ -523,7 +523,7 @@ const ZPHYSICS = (() => {
       b.branchFork = well;
       b.hint = 0;
       b.collider.setEnabled(true);   // back to normal collision now that it's committed
-      if (global.__traceWell) console.log('WELL EXIT id=' + b._id + ' branch=' + b.branch);
+      if (typeof window !== 'undefined' && window.__traceWell) console.log('WELL EXIT id=' + b._id + ' branch=' + b.branch);
       b.inWell = null;
     }
   }
