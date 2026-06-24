@@ -427,6 +427,10 @@ const ZTRACK = (() => {
   function generate(seed, lengthNodes = 700, ballCount = 20, customPlan = null) {
     // for custom maps, size the node budget to the authored plan (sum of section lengths + slack)
     const _secs = Array.isArray(customPlan) ? customPlan : (customPlan && Array.isArray(customPlan.sections) ? customPlan.sections : null);
+    // CUSTOM MAP: the author controls every obstacle by hand, so ALL the seeded/random obstacle,
+    // boost, spinner and launch-pin generators are skipped — only the user's placed obstacles
+    // (injected at the end of generate) appear on the track.
+    const _isCustom = !!(_secs && _secs.length);
     if (_secs && _secs.length) {
       const sum = _secs.reduce((s, sec) => s + (sec.len | 0), 0);
       lengthNodes = Math.max(lengthNodes, sum + 120);
@@ -447,7 +451,7 @@ const ZTRACK = (() => {
     // untouched. MEDIUM mode: a pad zone roughly every ~70 nodes, ~14 nodes long, on BOTH
     // edges (forgiving — hug either side to catch it). Density/side become mode-driven later.
     const boosts = [];
-    {
+    if (!_isCustom) {
       const brng = mulberry32((seed ^ 0x9e3779b9) >>> 0);
       const GAP_MIN = 55, GAP_VAR = 40, LEN_MIN = 12, LEN_VAR = 8;
       let i = platStart + 30;
@@ -474,7 +478,7 @@ const ZTRACK = (() => {
     // so the rest of the layout is untouched. Placed on open nodes — never on platform, forks,
     // tunnels, boost zones or gaps — offset across the width, with a gap between clusters.
     const obstacles = [];
-    {
+    if (!_isCustom) {
       const orng = mulberry32((seed ^ 0x5bd1e995) >>> 0);
       let i = platStart + 70;
       while (i < nodes.length - 60) {
@@ -503,7 +507,7 @@ const ZTRACK = (() => {
     // and different per side (medium density). Branch floors are analytic, so a world-positioned
     // bumper cylinder rides the route fine. Junction zones (meshSkip) and route ends are skipped,
     // and each post is pushed to one side so there's always a clear lane past it.
-    for (const f of forks) {
+    if (!_isCustom) for (const f of forks) {
       if (f.flavor !== 'divergent' || !f.branches) continue;
       for (const bid in f.branches) {
         const arr = f.branches[bid];
@@ -539,7 +543,7 @@ const ZTRACK = (() => {
     // PER-ROUTE BOOST PADS: each route gets its own boost strips — random per race & per side.
     // Physics reads the ball's CURRENT (branch) node .boost, so setting it on branch nodes applies
     // the burst; boost zones are tagged with branchId so the chevron renderer draws them on the route.
-    for (const f of forks) {
+    if (!_isCustom) for (const f of forks) {
       if (f.flavor !== 'divergent' || !f.branches) continue;
       for (const bid in f.branches) {
         const arr = f.branches[bid];
@@ -566,7 +570,7 @@ const ZTRACK = (() => {
     // entry. Sparse — bigger disruption than a bumper, so overdoing it stalls the race.
     // Skips the same hazards as boosts/obstacles (platform, fork, tunnel, existing boost/launch).
     const launchPins = [];
-    {
+    if (!_isCustom) {
       const lrng = mulberry32((seed ^ 0x2f8a3c91) >>> 0);
       const GAP_MIN = 130, GAP_VAR = 90, PAD_LEN = 6;   // short pad, wide gaps (rare event)
       // RUNWAY CHECK: a launch sends the ball airborne for up to ~1s while the track keeps
@@ -708,7 +712,7 @@ const ZTRACK = (() => {
     // at any moment during rotation. Sparser than bumpers (race can stall if overdone).
     // Own rng seed so the rest of the layout is untouched.
     const spinners = [];
-    {
+    if (!_isCustom) {
       const srng = mulberry32((seed ^ 0x1a2b3c4d) >>> 0);
       // SPACING RULE: a spinner must never land right next to a bumper post — back-to-back
       // they defeat each other's purpose (the spinner just slams the ball straight into the

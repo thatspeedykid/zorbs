@@ -326,6 +326,20 @@ let _hoverT=-1;         // obstacle t to show when dragging from palette
 function draw(){
   ctx.clearRect(0,0,cv.width,cv.height);
   const{pts,sectionStarts,platEnd}=buildPath();
+  // EMPTY STATE — no track pieces yet: show a prompt instead of a stretched lone platform
+  if(!sections.length){
+    ctx.fillStyle='rgba(127,140,173,.6)';
+    ctx.font=`${15*devicePixelRatio}px system-ui`; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('Drag a track piece here to start building', cv.width/2, cv.height/2);
+    ctx.font=`${12*devicePixelRatio}px system-ui`; ctx.fillStyle='rgba(127,140,173,.4)';
+    ctx.fillText('(or click a piece in the left palette)', cv.width/2, cv.height/2+24*devicePixelRatio);
+    // still show the insertion cursor when dragging the first piece in
+    if(_hoverInsert>=0){
+      ctx.strokeStyle='#39c8e0'; ctx.lineWidth=2.5*devicePixelRatio;
+      ctx.beginPath(); ctx.arc(cv.width/2,cv.height/2-40*devicePixelRatio,9*devicePixelRatio,0,7); ctx.stroke();
+    }
+    return;
+  }
   if(pts.length<2) return;
 
   // compute edge normals
