@@ -302,6 +302,7 @@
 <script src="/beta/track.js?v=b1"></script>
 <script src="/beta/physics.js?v=b1"></script>
 <script src="/beta/cosmetics.js?v=b1"></script>
+<script src="/beta/maps.js?v=b1"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -438,7 +439,7 @@ addEventListener('orientationchange', () => setTimeout(doResize, 200));
 if (window.visualViewport) visualViewport.addEventListener('resize', doResize);
 
 // lights (slightly hotter than before — ACES tone mapping eats some brightness)
-scene.add(new THREE.AmbientLight(0x445577, 0.75));
+const _ambientLight = new THREE.AmbientLight(0x445577, 0.75); scene.add(_ambientLight);
 const key = new THREE.DirectionalLight(0xaaccff, 1.6); key.position.set(20, 60, 10); scene.add(key);
 const rim = new THREE.DirectionalLight(0xff66cc, 0.6); rim.position.set(-30, 20, -20); scene.add(rim);
 const fill = new THREE.DirectionalLight(0x00e5ff, 0.5); fill.position.set(0, 10, -40); scene.add(fill);
@@ -446,7 +447,7 @@ const fill = new THREE.DirectionalLight(0x00e5ff, 0.5); fill.position.set(0, 10,
 // stops the balls going pure black when their lit side faces away from the camera —
 // every surface now gets some colored ambient, so the metal reads as metal, not a
 // silhouette. Big readability win for a dark scene.
-scene.add(new THREE.HemisphereLight(0x9fc8ff, 0x16203a, 0.7));
+const _hemiLight = new THREE.HemisphereLight(0x9fc8ff, 0x16203a, 0.7); scene.add(_hemiLight);
 
 // STARFIELD: a sphere of additive points behind everything — instant depth + scale.
 let _skyDome = null, _starField = null;   // re-centered on the camera every frame (see
@@ -504,8 +505,12 @@ function buildEnvMap() {
   const g = new THREE.SphereGeometry(900, 24, 16);
   const m = new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite:false, depthTest:false, fog:false,
-    uniforms:{}, vertexShader:`varying vec3 p; void main(){ p=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
-    fragmentShader:`varying vec3 p; void main(){ float h=normalize(p).y*0.5+0.5; vec3 top=vec3(0.02,0.05,0.13); vec3 bot=vec3(0.0,0.10,0.18); gl_FragColor=vec4(mix(bot,top,h),1.0); }`
+    uniforms:{
+      uTop: { value: new THREE.Vector3(0.02, 0.05, 0.13) },
+      uBot: { value: new THREE.Vector3(0.00, 0.10, 0.18) },
+    },
+    vertexShader:`varying vec3 p; void main(){ p=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+    fragmentShader:`uniform vec3 uTop; uniform vec3 uBot; varying vec3 p; void main(){ float h=normalize(p).y*0.5+0.5; gl_FragColor=vec4(mix(uBot,uTop,h),1.0); }`
   });
   const mesh = new THREE.Mesh(g, m); mesh.renderOrder = -1000; scene.add(mesh);
   _skyDome = mesh;
@@ -601,18 +606,24 @@ const BEAT_COLORS = [[0.0,0.9,1.0],[1.0,0.25,0.8],[0.4,1.0,0.5],[1.0,0.6,0.15],[
 // emissive map (lines glow + bloom) and a subtle base map. Brightened from before so
 // the floor NEVER renders near-black: lighter base, real emissive floor, moderate metal.
 let _gridCanvas = null;
-function gridTexture() {
+// Theme vars — updated by applyMapTheme() each race
+let _themeRailL      = 0x00e5ff, _themeRailR      = 0xff8800;
+let _themeRailLHalo  = 0x0090ff, _themeRailRHalo  = 0xff5500;
+let _themeArchEmissive = 0x00e5ff, _themeArchEmissiveI = 2.2;
+let _themeEnergyLane = 0x39c8e0, _themeFinishGlow = 0x00ffcc;
+function gridTexture(bg1, bg2, lineColor) {
+  bg1 = bg1 || '#2b4a8f'; bg2 = bg2 || '#1c3263'; lineColor = lineColor || '#7df6ff';
   const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d');
   _gridCanvas = c;
   // PANEL BACKGROUND must be clearly visible — a near-black panel (my earlier bug) made
   // the whole floor read black, since this drives both the base color and the emissive.
   const g = x.createLinearGradient(0,0,0,128);
-  g.addColorStop(0,'#2b4a8f'); g.addColorStop(1,'#1c3263');   // visible medium blue panel
+  g.addColorStop(0, bg1); g.addColorStop(1, bg2);
   x.fillStyle = g; x.fillRect(0,0,128,128);
-  // bright cyan grid lines (these bloom into glowing seams)
-  x.shadowColor = '#5cf0ff'; x.shadowBlur = 7;
-  x.strokeStyle = '#7df6ff'; x.lineWidth = 4; x.strokeRect(3,3,122,122);
-  x.lineWidth = 2; x.strokeStyle = 'rgba(120,230,255,0.7)';
+  // bright grid lines (these bloom into glowing seams)
+  x.shadowColor = lineColor; x.shadowBlur = 7;
+  x.strokeStyle = lineColor; x.lineWidth = 4; x.strokeRect(3,3,122,122);
+  x.lineWidth = 2; x.strokeStyle = lineColor.replace('#', 'rgba(').replace(/([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i, (_,r,g2,b)=>`${parseInt(r,16)},${parseInt(g2,16)},${parseInt(b,16)},0.7)`);
   for (let i=32;i<128;i+=32){ x.beginPath(); x.moveTo(i,0); x.lineTo(i,128); x.moveTo(0,i); x.lineTo(128,i); x.stroke(); }
   const t = new THREE.CanvasTexture(c);
   t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(3, 1);
@@ -661,9 +672,41 @@ function weldVertices(geo) {
   return ng;
 }
 
+function applyMapTheme(t) {
+  if (!t) return;
+  // sky gradient
+  if (_skyDome && _skyDome.material.uniforms) {
+    _skyDome.material.uniforms.uTop.value.set(t.skyTop[0], t.skyTop[1], t.skyTop[2]);
+    _skyDome.material.uniforms.uBot.value.set(t.skyBot[0], t.skyBot[1], t.skyBot[2]);
+    _skyDome.material.needsUpdate = true;
+  }
+  // fog
+  if (scene.fog) { scene.fog.color.setHex(t.fogColor); scene.fog.density = t.fogDensity; }
+  // floor / wall materials
+  const newFloor = gridTexture(t.floorBg1, t.floorBg2, t.floorLine);
+  FLOOR_MAT.map = newFloor; FLOOR_MAT.needsUpdate = true;
+  WALL_MAT.color.setHex(t.wallColor); WALL_MAT.emissive.setHex(t.wallEmissive); WALL_MAT.emissiveIntensity = t.wallEmissiveI; WALL_MAT.needsUpdate = true;
+  ROOF_MAT.emissive.setHex(t.roofEmissive); ROOF_MAT.needsUpdate = true;
+  // lights
+  _ambientLight.color.setHex(t.ambient); _ambientLight.intensity = t.ambientI;
+  _hemiLight.color.setHex(t.hemiSky); _hemiLight.groundColor.setHex(t.hemiGnd); _hemiLight.intensity = t.hemiI;
+  key.color.setHex(t.keyColor); key.intensity = t.keyI;
+  rim.color.setHex(t.rimColor); rim.intensity = t.rimI;
+  fill.color.setHex(t.fillColor); fill.intensity = t.fillI;
+  // stars
+  if (_starField) _starField.material.color.setHex(t.starColor);
+  // theme vars for buildCourse geometry
+  _themeRailL      = t.railLeft;   _themeRailR      = t.railRight;
+  _themeRailLHalo  = t.railLeftHalo; _themeRailRHalo  = t.railRightHalo;
+  _themeArchEmissive = t.archEmissive; _themeArchEmissiveI = t.archEmissiveI;
+  _themeEnergyLane = t.energyLane; _themeFinishGlow = t.finishGlow;
+}
+
 function buildCourse(seed) {
   trackMeshes.forEach(m => scene.remove(m)); trackMeshes = [];
   _bumperVis = []; _spinnerVis = []; _launchVis = [];
+  // Apply map theme before building geometry so colors are correct
+  if (typeof ZMAPS !== 'undefined') applyMapTheme(ZMAPS.getThemeForSeed(seed));
   // EXPERIMENTAL: ?forks=divergent enables the true divergent-route forks (two separate
   // ribbons that bow apart and rejoin). Default is the clean side-by-side lane forks.
   if (typeof ZFORK !== 'undefined' && ZFORK.setDivergent)
@@ -736,10 +779,10 @@ function buildCourse(seed) {
       scene.add(mesh); trackMeshes.push(mesh);
     }
   }
-  buildRail(-1, 0x00e5ff, 0.11);          // left edge: cyan
-  buildRail( 1, 0xff8800, 0.11);          // right edge: orange
-  buildRail(-1, 0x0090ff, 0.34, 0.16);    // left halo
-  buildRail( 1, 0xff5500, 0.34, 0.16);    // right halo
+  buildRail(-1, _themeRailL,     0.11);          // left edge
+  buildRail( 1, _themeRailR,     0.11);          // right edge
+  buildRail(-1, _themeRailLHalo, 0.34, 0.16);    // left halo
+  buildRail( 1, _themeRailRHalo, 0.34, 0.16);    // right halo
 
   // CENTER ENERGY LANE + STREAKING PULSE down every path.
   const _pulseLanes = [];
@@ -749,7 +792,7 @@ function buildCourse(seed) {
     if (cpts.length < 2) continue;
     const laneGeo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(cpts), cpts.length*2, 0.09, 6, false);
     const lane = new THREE.Mesh(laneGeo, new THREE.MeshBasicMaterial({
-      color:0x39c8e0, transparent:true, opacity:0.26, blending:THREE.AdditiveBlending, depthWrite:false }));
+      color:_themeEnergyLane, transparent:true, opacity:0.26, blending:THREE.AdditiveBlending, depthWrite:false }));
     scene.add(lane); trackMeshes.push(lane); _pulseLanes.push(lane);
   }
   _pulse = { lane: _pulseLanes[0] || null, lanes: _pulseLanes, laneBaseOpacity: 0.26 };
@@ -763,7 +806,7 @@ function buildCourse(seed) {
       const arch = new THREE.Mesh(
         new THREE.TorusGeometry(archR, 0.22, 10, 32, Math.PI),
         new THREE.MeshStandardMaterial({ color:0x0a2a4a, metalness:0.8, roughness:0.3,
-          emissive:0x00e5ff, emissiveIntensity:2.2 }));
+          emissive:_themeArchEmissive, emissiveIntensity:_themeArchEmissiveI }));
       arch.position.set(n.pos.x, n.pos.y - 0.1, n.pos.z);
       const m4 = new THREE.Matrix4();
       const across = new THREE.Vector3(n.right.x, 0, n.right.z).normalize();
@@ -794,7 +837,7 @@ function buildCourse(seed) {
     for (let a=0;a<NX;a++) for (let b=0;b<NY;b++){ cx.fillStyle = ((a+b)%2)?'#ffffff':'#0b0b14'; cx.fillRect(a*sx,b*sy,sx,sy); }
     const tex = new THREE.CanvasTexture(cv);
     // glowing posts + top bar (hot emissive = catches bloom)
-    const glowMat = new THREE.MeshStandardMaterial({ color:0x0a2a4a, metalness:0.8, roughness:0.3, emissive:0x00ffcc, emissiveIntensity:2.5 });
+    const glowMat = new THREE.MeshStandardMaterial({ color:0x0a2a4a, metalness:0.8, roughness:0.3, emissive:_themeFinishGlow, emissiveIntensity:2.5 });
     for (const s of [-1, 1]) {
       const post = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, postH, 10), glowMat);
       post.position.set(s*W, postH/2 - 0.1, 0); grp.add(post);
@@ -1145,6 +1188,62 @@ function buildCoreMaterial(skin, baseCol, accent) {
       transmission: 0.92, thickness: 0.6, ior: 1.4, transparent: true,
       emissive: accent, emissiveIntensity: 0.12,
       clearcoat: 1.0, clearcoatRoughness: 0.05, envMap: _envMap || null, envMapIntensity: 1.0 });
+  }
+  if (style === 'marble') {
+    if (!_texCache.marble) {
+      const c = document.createElement('canvas'); c.width = c.height = 256; const cx = c.getContext('2d');
+      cx.fillStyle = '#f5f0e8'; cx.fillRect(0,0,256,256);
+      for (let i=0;i<12;i++) {
+        const g2 = cx.createLinearGradient(Math.random()*256,0,Math.random()*256,256);
+        g2.addColorStop(0,'rgba(180,160,140,0)'); g2.addColorStop(0.5,`rgba(${100+Math.random()*80|0},${80+Math.random()*80|0},${60+Math.random()*60|0},0.4)`); g2.addColorStop(1,'rgba(180,160,140,0)');
+        cx.fillStyle = g2; cx.fillRect(0,0,256,256);
+      }
+      _texCache.marble = new THREE.CanvasTexture(c);
+    }
+    return new THREE.MeshStandardMaterial({ map: _texCache.marble, color: 0xffffff,
+      metalness: 0.0, roughness: 0.55, envMap: _envMap || null, envMapIntensity: 0.4 });
+  }
+  if (style === 'crystal') {
+    return THREE.MeshPhysicalMaterial
+      ? new THREE.MeshPhysicalMaterial({ color: baseCol, metalness: 0.0, roughness: 0.02,
+          transmission: 0.7, thickness: 1.0, ior: 1.8, transparent: true,
+          emissive: accent, emissiveIntensity: 0.4,
+          clearcoat: 1.0, clearcoatRoughness: 0.0, envMap: _envMap || null, envMapIntensity: 1.4 })
+      : new THREE.MeshStandardMaterial({ color: baseCol, metalness: 0.1, roughness: 0.02,
+          emissive: accent, emissiveIntensity: 0.4, transparent: true, opacity: 0.85 });
+  }
+  if (style === 'phantom') {
+    return new THREE.MeshStandardMaterial({ color: baseCol, metalness: 0.3, roughness: 0.2,
+      emissive: accent, emissiveIntensity: 0.7, transparent: true, opacity: 0.72,
+      envMap: _envMap || null, envMapIntensity: 0.6 });
+  }
+  if (style === 'rainbow') {
+    if (!_texCache.rainbow) {
+      const c = document.createElement('canvas'); c.width = 256; c.height = 1; const cx = c.getContext('2d');
+      const g2 = cx.createLinearGradient(0,0,256,0);
+      ['#ff0000','#ff8800','#ffff00','#00ff00','#00ffff','#0088ff','#8800ff','#ff0088','#ff0000'].forEach((col,i,a)=>g2.addColorStop(i/(a.length-1),col));
+      cx.fillStyle=g2; cx.fillRect(0,0,256,1);
+      const t = new THREE.CanvasTexture(c); t.wrapS = THREE.RepeatWrapping; _texCache.rainbow = t;
+    }
+    return new THREE.MeshStandardMaterial({ map: _texCache.rainbow, color: 0xffffff,
+      metalness: 0.2, roughness: 0.15, emissive: accent, emissiveIntensity: 0.7,
+      envMap: _envMap || null, envMapIntensity: 1.0 });
+  }
+  if (style === 'solar') {
+    if (!_texCache.solar) {
+      const c = document.createElement('canvas'); c.width = c.height = 256; const cx = c.getContext('2d');
+      cx.fillStyle='#ff8800'; cx.fillRect(0,0,256,256);
+      for (let i=0;i<20;i++){
+        const gx=Math.random()*256, gy=Math.random()*256;
+        const gr=cx.createRadialGradient(gx,gy,0,gx,gy,20+Math.random()*50);
+        gr.addColorStop(0,'#ffffff'); gr.addColorStop(0.3,'#ffee44'); gr.addColorStop(1,'rgba(255,100,0,0)');
+        cx.fillStyle=gr; cx.fillRect(0,0,256,256);
+      }
+      _texCache.solar = new THREE.CanvasTexture(c);
+    }
+    return new THREE.MeshStandardMaterial({ map: _texCache.solar, color: 0xffffff,
+      metalness: 0.4, roughness: 0.3, emissive: 0xff6600, emissiveIntensity: 1.0,
+      emissiveMap: _texCache.solar, envMap: _envMap || null, envMapIntensity: 0.6 });
   }
   // default: metallic sci-fi orb (clearcoat sheen if available). Emissive floored so it
   // never renders as a black silhouette regardless of light angle.

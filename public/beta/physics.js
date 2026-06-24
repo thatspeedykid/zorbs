@@ -512,7 +512,9 @@ const ZPHYSICS = (() => {
       // landed in the same hole) and needed extra jitter machinery to compensate. A flat
       // random roll sorts evenly with no extra machinery and matches the actual ask
       // ('platform doesn't care where you land, just randomly assigns a track').
-      const idx = Math.floor(Math.random() * well.branchOrder.length);
+      // Seeded per-ball: hash ball id + fork id so clients agree on branch assignment.
+      const _h = (((b._id * 2654435761) ^ (well.id || 0)) >>> 0) * 0x9e3779b9 >>> 0;
+      const idx = _h % well.branchOrder.length;
       b.branch = well.branchOrder[idx];
       b.branchFork = well;
       b.hint = 0;

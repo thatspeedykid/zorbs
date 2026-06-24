@@ -13,6 +13,11 @@ const ZCOSMETICS = (() => {
     galaxy:  { name: 'Galaxy',  tier: 'paid', style: 'galaxy', color: 0x2a1b4a, metalness: 0.3, roughness: 0.4, emissive: 0.5 },
     lava:    { name: 'Lava',    tier: 'paid', style: 'lava',   color: 0x401005, metalness: 0.2, roughness: 0.6, emissive: 0.9 },
     glass:   { name: 'Glass',   tier: 'sub',  style: 'glass',  color: 0xbfe9ff, metalness: 0.0, roughness: 0.05, emissive: 0.05 },
+    marble:  { name: 'Marble',  tier: 'free', style: 'marble', color: 0xf5f0e8, metalness: 0.0, roughness: 0.55, emissive: 0.0 },
+    crystal: { name: 'Crystal', tier: 'sub',  style: 'crystal',color: 0x88ffee, metalness: 0.1, roughness: 0.02, emissive: 0.3 },
+    phantom: { name: 'Phantom', tier: 'sub',  style: 'phantom',color: 0x8844cc, metalness: 0.3, roughness: 0.2,  emissive: 0.6 },
+    rainbow: { name: 'Rainbow', tier: 'paid', style: 'rainbow',color: null,     metalness: 0.2, roughness: 0.15, emissive: 0.7 },
+    solar:   { name: 'Solar',   tier: 'paid', style: 'solar',  color: 0xffcc00, metalness: 0.4, roughness: 0.3,  emissive: 1.0 },
   };
 
   // ---- RING STYLES (the Saturn ring around each ball) ----
