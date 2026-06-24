@@ -2135,7 +2135,7 @@ function startFreshRace(){
   try { if (typeof hideLobby === 'function') hideLobby(); } catch(_){}
   const seed = (Math.random() * 1e9) >>> 0;
   if (!_myMarble) _myMarble = 'you';
-  const names = mpBots(seed).map(n => ({ id:n, prefs:{}, isSub:false }));
+  const names = mpBots(seed).map(n => ({ id:n, prefs:botPrefs(n), isSub:true, platform:'bot' }));
   names[0] = { id:_myMarble, prefs:_myPrefs, isSub:!!_myPrefs.skin };
   _mpMode = false;
   setStatus('⬡ fresh track every race', true);
@@ -2159,6 +2159,11 @@ function reportResult(){
 function mpSeedForSlot(slot){ let h=(slot^0x9e3779b9)>>>0; h=Math.imul(h^(h>>>16),0x45d9f3b)>>>0; h=Math.imul(h^(h>>>16),0x45d9f3b)>>>0; return (h^(h>>>16))>>>0; }
 const MP_BOTS = ['Nitro','Blaze','Comet','Volt','Zephyr','Ember','Sonic','Quartz','Pulse','Rhino','Dash','Bolt','Jet','Onyx','Flux','Rocket'];
 function mpBots(seed){ const a=[]; let s=seed>>>0; for(let i=0;i<MP_FIELD;i++){ s=(Math.imul(s,1664525)+1013904223)>>>0; a.push(MP_BOTS[s%MP_BOTS.length]); } return a; }
+// Each bot gets a random (but stable per-name) skin so the field is visually varied.
+// isSub + full owned list so every tier resolves and actually renders.
+const BOT_SKINS = ['chrome','galaxy','lava','glass','marble','crystal','phantom','rainbow','solar'];
+const ALL_OWNED = ['Rainbow','Solar','Galaxy','Lava','Chrome','Glass','Crystal','Phantom','Marble'];
+function botPrefs(name){ let h=0; for(let i=0;i<name.length;i++) h=(Math.imul(h,31)+name.charCodeAt(i))>>>0; return { skin: BOT_SKINS[h % BOT_SKINS.length], owned: ALL_OWNED }; }
 
 function runMultiplayer(){
   const params = new URLSearchParams(location.search);
@@ -2213,7 +2218,7 @@ function runMultiplayer(){
     const cap = _PRIVATE ? 16 : MP_FIELD;   // private lobbies fit more chat (!play) racers
     for (const p of roster.slice(0, cap)) { if(used.has(p.name)) continue; const isMe = p.name === _joinName; names.push({ id:p.name, isSub:!!p.isSub || isMe && !!_myPrefs.skin, prefs: isMe ? _myPrefs : {}, platform: p.platform || 'guest', founder: !!p.founder }); used.add(p.name); }
     const bots = mpBots(race.seed); let bi = 0;
-    while (names.length < MP_FIELD) { let bn = bots[bi++ % bots.length]; while(used.has(bn)) bn += '·'; used.add(bn); names.push({ id:bn, isSub:false, prefs:{}, platform:'bot' }); }
+    while (names.length < MP_FIELD) { let bn = bots[bi++ % bots.length]; while(used.has(bn)) bn += '·'; used.add(bn); names.push({ id:bn, isSub:true, prefs:botPrefs(bn), platform:'bot' }); }
     startRace(race.seed, names);
     setStatus('');   // race is live now → hide the countdown chip (standings take over)
     // Auto-loop only in PUBLIC, or in a private lobby with autoplay ON. Otherwise this was a
@@ -2264,7 +2269,7 @@ function runMultiplayer(){
       const cap = _PRIVATE ? 16 : MP_FIELD;
       for (const p of roster.slice(0, cap)){ if(used.has(p.name)) continue; names.push({ id:p.name, isSub:!!p.isSub, prefs:{}, platform:p.platform||'guest', founder:!!p.founder }); used.add(p.name); }
       const bots = mpBots(seed); let bi=0;
-      while (names.length < MP_FIELD){ let bn=bots[bi++%bots.length]; while(used.has(bn)) bn+='·'; used.add(bn); names.push({ id:bn, isSub:false, prefs:{}, platform:'bot' }); }
+      while (names.length < MP_FIELD){ let bn=bots[bi++%bots.length]; while(used.has(bn)) bn+='·'; used.add(bn); names.push({ id:bn, isSub:true, prefs:botPrefs(bn), platform:'bot' }); }
     }
     startRace(seed, names);
     setStatus('');
@@ -2345,7 +2350,7 @@ function runMultiplayer(){
   function soloFallback(){
     hideLobby();
     const seed = (Math.random()*1e9) >>> 0;
-    const names = mpBots(seed).map(n => ({ id:n, prefs:{}, isSub:false }));
+    const names = mpBots(seed).map(n => ({ id:n, prefs:botPrefs(n), isSub:true, platform:'bot' }));
     names[0] = { id:_myMarble, prefs:_myPrefs, isSub:!!(_myPrefs && _myPrefs.skin), platform: _kickName ? 'kick' : 'guest', founder: _isFounder };
     setStatus('offline — solo race', false);
     startRace(seed, names);
