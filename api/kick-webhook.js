@@ -23,12 +23,23 @@ export default async function handler(req, res) {
       if (username && broadcaster && (message === '!play' || message === '!boost')) {
         const room = broadcaster.replace(/[^a-z0-9_-]/g, '').slice(0, 32);
         const url = PARTY_BASE + encodeURIComponent(room);
+        // On !play, pull the chatter's saved ball skin (chosen on the main dashboard) so their
+        // custom ball shows up in the streamer's race. Best-effort — null if none / no DB.
+        let skin = null;
+        if (message === '!play') {
+          try {
+            const host = req.headers['x-forwarded-host'] || req.headers.host;
+            const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0];
+            const r = await fetch(`${proto}://${host}/api/leaderboard?skin=${encodeURIComponent(username)}`);
+            if (r.ok) { const j = await r.json().catch(() => null); skin = (j && j.skin) || null; }
+          } catch (_) {}
+        }
         await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             cmd: message === '!play' ? 'play' : 'boost',
-            name: username, isSub, secret: INJECT_SECRET,
+            name: username, isSub, skin, secret: INJECT_SECRET,
           }),
         });
       }

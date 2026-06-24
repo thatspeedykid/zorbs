@@ -72,6 +72,19 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, configured });
   }
 
+  // BALL SKIN lookup by Kick username (used by the chat !play webhook so a chatter's ball
+  // shows the skin they chose on the dashboard). Returns null gracefully if no DB / no skin.
+  const skinUser = clean(req.query && req.query.skin).toLowerCase();
+  if (skinUser) {
+    if (!configured) return res.status(200).json({ ok: true, skin: null });
+    try {
+      const s = await redis(['GET', 'zskin:' + skinUser]);
+      return res.status(200).json({ ok: true, skin: s || null });
+    } catch (e) {
+      return res.status(200).json({ ok: true, skin: null });
+    }
+  }
+
   if (!configured) {
     return res.status(200).json({ ok: false, configured: false, leaderboard: [], you: null });
   }
@@ -84,6 +97,23 @@ export default async function handler(req, res) {
       const kickId = clean(body.kickId);
       const username = clean(body.username);
       const place = parseInt(body.place, 10); // 1 = win, 0 = DNF
+
+      // SKIN SAVE (no race recorded): { username, skin } [, kickId]. Keyed by username so the
+      // chat !play webhook (which only knows the username) can look it up.
+      if (body.skin !== undefined && body.place === undefined) {
+        const uname = username.toLowerCase();
+        if (!uname) return res.status(400).json({ ok: false, error: 'missing user' });
+        const skin = clean(body.skin).toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 16);
+        const cmds = [['SET', 'zskin:' + uname, skin]];
+        if (kickId) {
+          const raw = await redis(['GET', 'zuser:' + kickId]);
+          let u = {}; if (raw) { try { u = JSON.parse(raw); } catch (_) { u = {}; } }
+          u.skin = skin; u.username = username; u.kickId = kickId; u.updated = Date.now();
+          cmds.push(['SET', 'zuser:' + kickId, JSON.stringify(u)]);
+        }
+        await pipeline(cmds);
+        return res.status(200).json({ ok: true, skin });
+      }
 
       if (!kickId || !username) return res.status(400).json({ ok: false, error: 'missing user' });
 

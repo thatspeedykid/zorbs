@@ -1016,12 +1016,7 @@ function buildDashSkinGrid(){
     card.addEventListener('click', () => {
       grid.querySelectorAll('.skin-card').forEach(c=>c.classList.remove('selected'));
       card.classList.add('selected'); _dashSkinChoice = sk.id;
-      // auto-save on click so there's no separate save step
-      try {
-        const s = JSON.parse(localStorage.getItem('zorbs_session')||'{}');
-        s.skin = sk.id;
-        localStorage.setItem('zorbs_session', JSON.stringify(s));
-      } catch(_){}
+      persistSkin(sk.id);   // auto-save on click — no separate save step needed
       if (msg) { msg.style.display='inline'; setTimeout(()=>{ msg.style.display='none'; }, 1500); }
     });
     grid.appendChild(card);
@@ -1029,13 +1024,25 @@ function buildDashSkinGrid(){
   const btn = document.getElementById('btn-save-skin');
   if (btn) btn.onclick = () => {
     if (!_dashSkinChoice) return;
-    try {
-      const s = JSON.parse(localStorage.getItem('zorbs_session')||'{}');
-      s.skin = _dashSkinChoice;
-      localStorage.setItem('zorbs_session', JSON.stringify(s));
-    } catch(_){}
+    persistSkin(_dashSkinChoice);
     if (msg) { msg.style.display='inline'; setTimeout(()=>{ msg.style.display='none'; }, 1500); }
   };
+}
+// Save the chosen skin locally AND (when signed in to Kick) server-side, keyed by username,
+// so a chatter's !play ball in any streamer's lobby shows the skin they picked here.
+function persistSkin(skinId){
+  let s = {};
+  try { s = JSON.parse(localStorage.getItem('zorbs_session')||'{}'); } catch(_){ s = {}; }
+  s.skin = skinId;
+  try { localStorage.setItem('zorbs_session', JSON.stringify(s)); } catch(_){}
+  if (s.username) {
+    try {
+      fetch('/api/leaderboard', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: s.username, kickId: s.kickId || '', skin: skinId }),
+      }).catch(()=>{});
+    } catch(_){}
+  }
 }
 
 // ── SETTINGS ───────────────────────────────────────────

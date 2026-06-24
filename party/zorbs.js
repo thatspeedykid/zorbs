@@ -164,7 +164,10 @@ export default class ZorbsRoom {
         if (this.control.joinMode === 'subs' && !b.isSub) {
           return new Response(JSON.stringify({ ok: true, skipped: 'not-sub' }), { headers: { 'content-type': 'application/json' } });
         }
-        if (this.chatPlayers.size < 60) this.chatPlayers.set(name.toLowerCase(), { name, isSub: !!b.isSub });
+        // skin (optional) — the chatter's saved ball skin, looked up by the webhook. Sanitized
+        // to a short key so every client renders the chat player the same way.
+        const skin = (typeof b.skin === 'string') ? b.skin.slice(0, 16).replace(/[^a-z0-9_-]/gi, '') : null;
+        if (this.chatPlayers.size < 60) this.chatPlayers.set(name.toLowerCase(), { name, isSub: !!b.isSub, skin });
         this.broadcastPlayers();
         return new Response(JSON.stringify({ ok: true, joined: name, count: this.chatPlayers.size }), { headers: { 'content-type': 'application/json' } });
       } else if (b.cmd === 'boost') {
