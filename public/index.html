@@ -5,11 +5,12 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
 <meta charset="UTF-8">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='z' cx='38%25' cy='30%25' r='72%25'%3E%3Cstop offset='0%25' stop-color='%23cdf6ff'/%3E%3Cstop offset='38%25' stop-color='%232ea8ff'/%3E%3Cstop offset='100%25' stop-color='%230a235e'/%3E%3C/radialGradient%3E%3C/defs%3E%3Crect width='64' height='64' fill='%2302050d'/%3E%3Ccircle cx='32' cy='32' r='23' fill='none' stroke='%233fd0ff' stroke-width='2' opacity='0.45'/%3E%3Ccircle cx='32' cy='32' r='18' fill='url(%23z)'/%3E%3Cellipse cx='25' cy='23' rx='6.5' ry='4' fill='%23ffffff' opacity='0.75'/%3E%3C/svg%3E">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Zorbs On Stream</title>
+<title>Zorbs On Stream — v0.3</title>
 <style>
   html,body { margin:0; height:100%; background:#02050d; overflow:hidden; font-family:'Courier New',monospace;
     touch-action:manipulation; overscroll-behavior:none; -webkit-text-size-adjust:100%; -webkit-tap-highlight-color:transparent; }
@@ -44,6 +45,22 @@
   #arm #kickbtn:hover { background:rgba(83,252,24,.18); box-shadow:0 0 18px rgba(83,252,24,.25); }
   #arm #kickbtn .ki { background:#53fc18; color:#000; width:20px; height:20px; border-radius:4px; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:12px; }
   #arm .hint { font-size:11px; color:#6b9; letter-spacing:1px; }
+  /* --- Kick Skin Picker (shown once at first Kick sign-in) --- */
+  #skinPicker { position:fixed; inset:0; background:rgba(0,0,0,.82); z-index:200; display:none; align-items:center; justify-content:center; }
+  #skinPicker .sp-box { background:linear-gradient(160deg,rgba(10,20,50,.95),rgba(4,8,24,.97)); border:1px solid rgba(0,200,255,.4); border-radius:18px; padding:32px 36px; max-width:520px; width:90vw; text-align:center; box-shadow:0 0 60px rgba(20,120,255,.35); }
+  #skinPicker h2 { font-size:18px; letter-spacing:4px; color:#fff; margin:0 0 6px; }
+  #skinPicker .sp-sub { font-size:11px; color:#7fb8e0; letter-spacing:2px; margin-bottom:22px; }
+  #skinPicker .sp-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:22px; }
+  #skinPicker .sp-card { border:2px solid rgba(80,180,255,.25); border-radius:10px; padding:12px 8px 10px; cursor:pointer; transition:border-color .15s,box-shadow .15s; }
+  #skinPicker .sp-card:hover { border-color:rgba(0,220,255,.7); box-shadow:0 0 14px rgba(0,200,255,.35); }
+  #skinPicker .sp-card.selected { border-color:#00e5ff; box-shadow:0 0 18px rgba(0,229,255,.5); }
+  #skinPicker .sp-card canvas { width:52px; height:52px; border-radius:50%; display:block; margin:0 auto 6px; }
+  #skinPicker .sp-card .sp-name { font-size:11px; letter-spacing:1.5px; color:#cce8ff; }
+  #skinPicker .sp-card .sp-tier { font-size:9px; color:#53fc18; letter-spacing:1px; margin-top:2px; }
+  #skinPicker .sp-card .sp-tier.paid { color:#ffaa44; }
+  #skinPicker .sp-confirm { width:200px; padding:12px; border-radius:9px; cursor:pointer; font-family:inherit; font-size:14px; letter-spacing:3px; background:linear-gradient(90deg,rgba(40,140,255,.6),rgba(120,60,255,.6)); color:#fff; border:1px solid rgba(120,200,255,.6); font-weight:bold; }
+  #skinPicker .sp-confirm:hover { background:linear-gradient(90deg,rgba(40,140,255,.9),rgba(120,60,255,.9)); }
+  #skinPicker .sp-note { font-size:10px; color:#7fb8e0; margin-top:14px; opacity:.7; }
   #leader { display:none; }
   #lobby { position:fixed; inset:0; display:none; align-items:center; justify-content:center; z-index:40; pointer-events:none; }
   #lobby .lb { text-align:center; background:rgba(4,12,28,.5); backdrop-filter:blur(2px); border:1px solid rgba(80,180,255,.3);
@@ -213,6 +230,7 @@
   // never flash, regardless of how the rest of the page loads.
   try { if (new URLSearchParams(location.search).get('obs') === '1') document.documentElement.classList.add('obsmode'); } catch(_){}
 </script>
+<div id="buildtag" style="position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:99999;background:#0a0;color:#fff;font:bold 11px monospace;padding:2px 10px;border-radius:0 0 6px 6px;letter-spacing:1px;">PLAY13</div>
 <canvas id="c"></canvas>
 <div id="hud">
   <div class="brand">
@@ -230,7 +248,7 @@
       <path d="M13 41 q19 9 38 0" stroke="#7fe9ff" stroke-width="2.4" fill="none" opacity="0.65" stroke-linecap="round"/>
     </svg>
     <div class="txt">
-      <div class="bt">ZORBS <b>On Stream</b> <small>V0.2</small></div>
+      <div class="bt">ZORBS <b>On Stream</b> <small>V0.3</small></div>
       <div class="by">BY MARSSCUMBAGS</div>
     </div>
   </div>
@@ -259,6 +277,17 @@
   <div class="hint">races run live — you'll drop into the next one</div>
   <a href="/dashboard" style="font-size:11px;color:#7fb8e0;letter-spacing:1px;text-decoration:none;opacity:.85;border-bottom:1px solid rgba(127,184,224,.3);padding-bottom:1px">📊 my stats &amp; leaderboard</a>
 </div></div>
+
+<!-- Kick Skin Picker — shown once at first Kick sign-in, hidden after choice saved -->
+<div id="skinPicker">
+  <div class="sp-box">
+    <h2>CHOOSE YOUR ZORB</h2>
+    <div class="sp-sub">KICK SUBSCRIBERS GET A FREE SKIN FOREVER — PICK ONE</div>
+    <div class="sp-grid" id="spGrid"></div>
+    <button class="sp-confirm" id="spConfirm">LOCK IT IN ▶</button>
+    <div class="sp-note">After 1.0 launch, skins move to the shop. Lock yours in now.</div>
+  </div>
+</div>
 
 <!-- SpeedyGoWild background music: self-hosted playlist (music/playlist.json) when present
      = zero YouTube + zero ad-blocker issues; otherwise falls back to the YouTube embed -->
@@ -297,10 +326,11 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/v2/forks.js?v=v13"></script>
-<script src="/v2/track.js?v=v13"></script>
-<script src="/v2/physics.js?v=v13"></script>
-<script src="/v2/cosmetics.js?v=v13"></script>
+<script src="/beta/forks.js?v=b14"></script>
+<script src="/beta/track.js?v=b14"></script>
+<script src="/beta/physics.js?v=b14"></script>
+<script src="/beta/cosmetics.js?v=b14"></script>
+<script src="/beta/maps.js?v=b14"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -315,7 +345,7 @@ const statusEl = document.getElementById('nextrace');
 // BUILD STAMP: shown in the HUD + console so there is never any question about which
 // version the browser is actually running. If the stamp doesn't match the latest
 // commit, the problem is deployment/caching — not the code.
-const BUILD = 'v1.3';
+const BUILD = 'v0.3';
 console.log('[ZORBS] build', BUILD);
 
 // ---- MOBILE UX: mark touch devices, block pinch/double-tap zoom, wire fullscreen button ----
@@ -437,7 +467,7 @@ addEventListener('orientationchange', () => setTimeout(doResize, 200));
 if (window.visualViewport) visualViewport.addEventListener('resize', doResize);
 
 // lights (slightly hotter than before — ACES tone mapping eats some brightness)
-scene.add(new THREE.AmbientLight(0x445577, 0.75));
+const _ambientLight = new THREE.AmbientLight(0x445577, 0.75); scene.add(_ambientLight);
 const key = new THREE.DirectionalLight(0xaaccff, 1.6); key.position.set(20, 60, 10); scene.add(key);
 const rim = new THREE.DirectionalLight(0xff66cc, 0.6); rim.position.set(-30, 20, -20); scene.add(rim);
 const fill = new THREE.DirectionalLight(0x00e5ff, 0.5); fill.position.set(0, 10, -40); scene.add(fill);
@@ -445,9 +475,12 @@ const fill = new THREE.DirectionalLight(0x00e5ff, 0.5); fill.position.set(0, 10,
 // stops the balls going pure black when their lit side faces away from the camera —
 // every surface now gets some colored ambient, so the metal reads as metal, not a
 // silhouette. Big readability win for a dark scene.
-scene.add(new THREE.HemisphereLight(0x9fc8ff, 0x16203a, 0.7));
+const _hemiLight = new THREE.HemisphereLight(0x9fc8ff, 0x16203a, 0.7); scene.add(_hemiLight);
 
 // STARFIELD: a sphere of additive points behind everything — instant depth + scale.
+let _skyDome = null, _starField = null;   // re-centered on the camera every frame (see
+                                            // updateSkyFollow) so neither ever "ends" no
+                                            // matter how far the race travels from origin
 (function stars(){
   const COUNT = 1400;
   const pos = new Float32Array(COUNT * 3);
@@ -465,6 +498,8 @@ scene.add(new THREE.HemisphereLight(0x9fc8ff, 0x16203a, 0.7));
   const m = new THREE.PointsMaterial({ color:0x99ccff, size:2.2, sizeAttenuation:false,
     transparent:true, opacity:0.85, blending:THREE.AdditiveBlending, depthWrite:false, fog:false });
   const pts = new THREE.Points(g, m); pts.renderOrder = -999; scene.add(pts);
+  _starField = pts;   // re-centered on the camera every frame (see updateSkyFollow) so the
+                       // field never "ends" no matter how far the race travels from origin
 })();
 // Environment map: render the gradient sky to a cube so metal balls reflect it (sci-fi sheen)
 let _envMap = null;
@@ -486,15 +521,35 @@ function buildEnvMap() {
 }
 
 // gradient sky dome (always behind everything)
+// BUGFIX: this dome sits at a fixed radius (900) around WORLD ORIGIN and was never moved.
+// The track travels hundreds to thousands of units from origin over a race (deep descents,
+// long lateral drift), so once the camera went far enough from (0,0,0) it ended up OUTSIDE
+// the dome's own radius — looking at the BackSide material from the wrong side, which is
+// culled/invisible, revealing the empty black void beyond. That's the hard wedge cutoff in
+// the screenshot: inside the dome's radius from origin = see the gradient, outside = nothing.
+// Fix: re-center the dome (and the star field) on the CAMERA every frame in updateSkyFollow()
+// so it always surrounds the viewer regardless of how far the race has traveled.
 (function sky(){
   const g = new THREE.SphereGeometry(900, 24, 16);
   const m = new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite:false, depthTest:false, fog:false,
-    uniforms:{}, vertexShader:`varying vec3 p; void main(){ p=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
-    fragmentShader:`varying vec3 p; void main(){ float h=normalize(p).y*0.5+0.5; vec3 top=vec3(0.02,0.05,0.13); vec3 bot=vec3(0.0,0.10,0.18); gl_FragColor=vec4(mix(bot,top,h),1.0); }`
+    uniforms:{
+      uTop: { value: new THREE.Vector3(0.02, 0.05, 0.13) },
+      uBot: { value: new THREE.Vector3(0.00, 0.10, 0.18) },
+    },
+    vertexShader:`varying vec3 p; void main(){ p=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+    fragmentShader:`uniform vec3 uTop; uniform vec3 uBot; varying vec3 p; void main(){ float h=normalize(p).y*0.5+0.5; gl_FragColor=vec4(mix(uBot,uTop,h),1.0); }`
   });
   const mesh = new THREE.Mesh(g, m); mesh.renderOrder = -1000; scene.add(mesh);
+  _skyDome = mesh;
 })();
+// Keep the sky dome and star field centered on the camera every frame — called from the
+// main render loop. A moving backdrop with no parallax (it's only ever seen from the inside
+// at a fixed radius) reads as infinitely far away, exactly like a real skybox should.
+function updateSkyFollow() {
+  if (_skyDome) _skyDome.position.copy(camera.position);
+  if (_starField) _starField.position.copy(camera.position);
+}
 
 // ---- PLANET OVERWORLD: a giant world suspended far below the track ----
 let _planet = null, _clouds = null;
@@ -564,7 +619,7 @@ let _planet = null, _clouds = null;
 })();
 
 // ---- build the course ----
-let track = null, trackMeshes = [];
+let track = null, trackMeshes = [], _bumperVis = [], _spinnerVis = [], _launchVis = [];
 let _pulse = null;                  // streaking-pulse animation state (set in buildCourse)
 let _boostMats = [];                // boost-pad chevron textures (scrolled each frame)
 const _tmpV = new THREE.Vector3();  // scratch vector reused each frame (no per-frame alloc)
@@ -579,18 +634,24 @@ const BEAT_COLORS = [[0.0,0.9,1.0],[1.0,0.25,0.8],[0.4,1.0,0.5],[1.0,0.6,0.15],[
 // emissive map (lines glow + bloom) and a subtle base map. Brightened from before so
 // the floor NEVER renders near-black: lighter base, real emissive floor, moderate metal.
 let _gridCanvas = null;
-function gridTexture() {
+// Theme vars — updated by applyMapTheme() each race
+let _themeRailL      = 0x00e5ff, _themeRailR      = 0xff8800;
+let _themeRailLHalo  = 0x0090ff, _themeRailRHalo  = 0xff5500;
+let _themeArchEmissive = 0x00e5ff, _themeArchEmissiveI = 2.2;
+let _themeEnergyLane = 0x39c8e0, _themeFinishGlow = 0x00ffcc;
+function gridTexture(bg1, bg2, lineColor) {
+  bg1 = bg1 || '#2b4a8f'; bg2 = bg2 || '#1c3263'; lineColor = lineColor || '#7df6ff';
   const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d');
   _gridCanvas = c;
   // PANEL BACKGROUND must be clearly visible — a near-black panel (my earlier bug) made
   // the whole floor read black, since this drives both the base color and the emissive.
   const g = x.createLinearGradient(0,0,0,128);
-  g.addColorStop(0,'#2b4a8f'); g.addColorStop(1,'#1c3263');   // visible medium blue panel
+  g.addColorStop(0, bg1); g.addColorStop(1, bg2);
   x.fillStyle = g; x.fillRect(0,0,128,128);
-  // bright cyan grid lines (these bloom into glowing seams)
-  x.shadowColor = '#5cf0ff'; x.shadowBlur = 7;
-  x.strokeStyle = '#7df6ff'; x.lineWidth = 4; x.strokeRect(3,3,122,122);
-  x.lineWidth = 2; x.strokeStyle = 'rgba(120,230,255,0.7)';
+  // bright grid lines (these bloom into glowing seams)
+  x.shadowColor = lineColor; x.shadowBlur = 7;
+  x.strokeStyle = lineColor; x.lineWidth = 4; x.strokeRect(3,3,122,122);
+  x.lineWidth = 2; x.strokeStyle = lineColor.replace('#', 'rgba(').replace(/([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i, (_,r,g2,b)=>`${parseInt(r,16)},${parseInt(g2,16)},${parseInt(b,16)},0.7)`);
   for (let i=32;i<128;i+=32){ x.beginPath(); x.moveTo(i,0); x.lineTo(i,128); x.moveTo(0,i); x.lineTo(128,i); x.stroke(); }
   const t = new THREE.CanvasTexture(c);
   t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(3, 1);
@@ -639,12 +700,45 @@ function weldVertices(geo) {
   return ng;
 }
 
+function applyMapTheme(t) {
+  if (!t) return;
+  // sky gradient
+  if (_skyDome && _skyDome.material.uniforms) {
+    _skyDome.material.uniforms.uTop.value.set(t.skyTop[0], t.skyTop[1], t.skyTop[2]);
+    _skyDome.material.uniforms.uBot.value.set(t.skyBot[0], t.skyBot[1], t.skyBot[2]);
+    _skyDome.material.needsUpdate = true;
+  }
+  // fog
+  if (scene.fog) { scene.fog.color.setHex(t.fogColor); scene.fog.density = t.fogDensity; }
+  // floor / wall materials
+  const newFloor = gridTexture(t.floorBg1, t.floorBg2, t.floorLine);
+  FLOOR_MAT.map = newFloor; FLOOR_MAT.needsUpdate = true;
+  WALL_MAT.color.setHex(t.wallColor); WALL_MAT.emissive.setHex(t.wallEmissive); WALL_MAT.emissiveIntensity = t.wallEmissiveI; WALL_MAT.needsUpdate = true;
+  ROOF_MAT.emissive.setHex(t.roofEmissive); ROOF_MAT.needsUpdate = true;
+  // lights
+  _ambientLight.color.setHex(t.ambient); _ambientLight.intensity = t.ambientI;
+  _hemiLight.color.setHex(t.hemiSky); _hemiLight.groundColor.setHex(t.hemiGnd); _hemiLight.intensity = t.hemiI;
+  key.color.setHex(t.keyColor); key.intensity = t.keyI;
+  rim.color.setHex(t.rimColor); rim.intensity = t.rimI;
+  fill.color.setHex(t.fillColor); fill.intensity = t.fillI;
+  // stars
+  if (_starField) _starField.material.color.setHex(t.starColor);
+  // theme vars for buildCourse geometry
+  _themeRailL      = t.railLeft;   _themeRailR      = t.railRight;
+  _themeRailLHalo  = t.railLeftHalo; _themeRailRHalo  = t.railRightHalo;
+  _themeArchEmissive = t.archEmissive; _themeArchEmissiveI = t.archEmissiveI;
+  _themeEnergyLane = t.energyLane; _themeFinishGlow = t.finishGlow;
+}
+
 function buildCourse(seed) {
   trackMeshes.forEach(m => scene.remove(m)); trackMeshes = [];
+  _bumperVis = []; _spinnerVis = []; _launchVis = [];
+  // Apply map theme before building geometry so colors are correct
+  if (typeof ZMAPS !== 'undefined') applyMapTheme(ZMAPS.getThemeForSeed(seed));
   // EXPERIMENTAL: ?forks=divergent enables the true divergent-route forks (two separate
   // ribbons that bow apart and rejoin). Default is the clean side-by-side lane forks.
   if (typeof ZFORK !== 'undefined' && ZFORK.setDivergent)
-    ZFORK.setDivergent(new URLSearchParams(location.search).get('forks') === 'divergent');
+    ZFORK.setDivergent(new URLSearchParams(location.search).get('forks') !== 'lanes');
   // wire the (now-built) env map into the glossy floor/wall so they reflect the sky+rails
   if (_envMap) { WALL_MAT.envMap = _envMap; ROOF_MAT.envMap = _envMap;
     WALL_MAT.needsUpdate = ROOF_MAT.needsUpdate = true; }
@@ -652,93 +746,168 @@ function buildCourse(seed) {
   // for fair/wagered races). ~620–820 nodes targets roughly a 2–3 min completion;
   // was a flat 1100 which felt too long. Derived from the seed, never Math.random.
   const lenRng = (Math.abs((seed * 2654435761) >>> 0) % 200);   // 0..199
-  const trackLen = 620 + lenRng;                                  // 620..819
+  const trackLen = 760 + lenRng;                                  // 760..959 (longer: room for a wide fan)
   track = ZTRACK.generate(seed, trackLen, _fieldSize || 20);
+  // DIAGNOSTIC: show the seed + lane count so it's obvious whether each race is a new track.
+  try {
+    let dbg = document.getElementById('seedDbg');
+    if (!dbg) { dbg = document.createElement('div'); dbg.id = 'seedDbg';
+      dbg.style.cssText = 'position:fixed;top:6px;right:8px;z-index:9999;font:11px monospace;color:#9fd6ff;background:rgba(0,0,0,.45);padding:3px 7px;border-radius:6px;pointer-events:none';
+      document.body.appendChild(dbg); }
+    const lanes = (track.forks && track.forks[0]) ? track.forks[0].branchOrder.length : 1;
+    dbg.textContent = 'seed ' + (seed >>> 0) + ' · ' + lanes + ' lane' + (lanes === 1 ? '' : 's');
+  } catch (_) {}
   if (typeof computeMiniBounds === 'function') computeMiniBounds();
   meshFrom(track.mesh.floor, FLOOR_MAT, true);   // weld = smooth-shaded ramp
   meshFrom(track.mesh.walls, WALL_MAT);
   if (track.mesh.roof && track.mesh.roof.indices.length) meshFrom(track.mesh.roof, ROOF_MAT);
+  // Gravity well funnel material — no UV needed (ShaderMaterial), emissive glow.
+  // Built fresh each race so the theme colors (railLeft = energy color) apply.
+  // Fixed purple+gold — visible in ALL themes (Glacier is all white/blue and
+  // made a theme-tinted funnel invisible against the floor).
+  const wellConeMat = new THREE.MeshStandardMaterial({
+    color: 0x1a0830,
+    emissive: new THREE.Color(0xcc44ff),
+    emissiveIntensity: 0.55,
+    metalness: 0.6, roughness: 0.35,
+    side: THREE.DoubleSide, transparent: true, opacity: 0.92,
+  });
+  const wellPlatMat = new THREE.MeshStandardMaterial({
+    color: 0x1a1000,
+    emissive: new THREE.Color(0xffaa00),
+    emissiveIntensity: 0.45,
+    metalness: 0.6, roughness: 0.3,
+    side: THREE.DoubleSide, transparent: true, opacity: 0.88,
+  });
   // draw each fork branch ribbon
   if (track.branchMeshes) {
     for (const bm of track.branchMeshes) {
+      // Well cone + platform get their own emissive material (no UVs in those meshes)
+      if (bm.branchId && bm.branchId.endsWith('_wellcone')) {
+        meshFrom(bm.mesh.floor, wellConeMat);
+        continue;
+      }
+      if (bm.branchId && bm.branchId.endsWith('_wellplatform')) {
+        meshFrom(bm.mesh.floor, wellPlatMat);
+        continue;
+      }
       meshFrom(bm.mesh.floor, FLOOR_MAT, true);
       meshFrom(bm.mesh.walls, WALL_MAT);
       if (bm.mesh.roof && bm.mesh.roof.indices.length) meshFrom(bm.mesh.roof, ROOF_MAT);
     }
   }
-  // GLOWING TUBE RAILS along both track edges. The old rails were 1-pixel lines —
-  // tubes have real thickness, catch the bloom pass, and read as the Tron light-edge
-  // from any distance. Sampled every 4th node to keep the geometry cheap.
-  function buildRail(side, color) {
-    const pts = [];
-    for (let i = 0; i < track.nodes.length; i += 4) {
-      const n = track.nodes[i];
-      pts.push(new THREE.Vector3(
-        n.pos.x + n.right.x * n.halfW * side,
-        n.pos.y + 0.12,
-        n.pos.z + n.right.z * n.halfW * side
-      ));
+  // DECORATION PATHS: the main centerline split at meshSkip gaps (so nothing runs through the open
+  // loop interior) PLUS every route. Rails, halos, the energy lane and the arch gates all follow
+  // these — so a fork carries its glow rails/arches down BOTH routes instead of the dead spine.
+  function _decoPaths() {
+    const paths = []; let run = [];
+    for (const n of track.nodes) {
+      if (n.meshSkip) { if (run.length > 1) paths.push(run); run = []; }
+      else run.push(n);
     }
-    const curve = new THREE.CatmullRomCurve3(pts);
-    const geo = new THREE.TubeGeometry(curve, pts.length * 2, 0.11, 6, false);
-    const mat = new THREE.MeshBasicMaterial({ color });   // unlit = full brightness = blooms
-    const mesh = new THREE.Mesh(geo, mat);
-    scene.add(mesh); trackMeshes.push(mesh);
-  }
-  buildRail(-1, 0x00e5ff);   // left: cyan
-  buildRail( 1, 0xff8800);   // right: orange
-
-  // CENTER ENERGY LANE + RAIL HALOS + STREAKING PULSES — these add depth and *motion*
-  // (the thing a static glowing track lacks). The centerline curve is reused for all
-  // three and stored on `_pulse` so the render loop can animate the streaks forward.
-  const cpts = [];
-  for (let i = 0; i < track.nodes.length; i += 3) {
-    const n = track.nodes[i];
-    cpts.push(new THREE.Vector3(n.pos.x, n.pos.y + 0.14, n.pos.z));
-  }
-  const centerCurve = new THREE.CatmullRomCurve3(cpts);
-  // bright center lane down the middle of the floor
-  const laneGeo = new THREE.TubeGeometry(centerCurve, cpts.length * 2, 0.09, 6, false);
-  const lane = new THREE.Mesh(laneGeo, new THREE.MeshBasicMaterial({
-    color:0x39c8e0, transparent:true, opacity:0.26, blending:THREE.AdditiveBlending, depthWrite:false }));
-  scene.add(lane); trackMeshes.push(lane);
-  // faint wide HALO around each edge rail (makes the rails read thick + glowy)
-  for (const [side, col] of [[-1,0x0090ff],[1,0xff5500]]) {
-    const hp = [];
-    for (let i = 0; i < track.nodes.length; i += 4) {
-      const n = track.nodes[i];
-      hp.push(new THREE.Vector3(n.pos.x + n.right.x*n.halfW*side, n.pos.y+0.12, n.pos.z + n.right.z*n.halfW*side));
+    if (run.length > 1) paths.push(run);
+    if (track.forks) for (const f of track.forks) {
+      if (f.branches) for (const bid in f.branches) { const b = f.branches[bid]; if (b && b.length > 1) paths.push(b); }
     }
-    const hgeo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(hp), hp.length*2, 0.34, 6, false);
-    const halo = new THREE.Mesh(hgeo, new THREE.MeshBasicMaterial({
-      color:col, transparent:true, opacity:0.16, blending:THREE.AdditiveBlending, depthWrite:false }));
-    scene.add(halo); trackMeshes.push(halo);
+    return paths;
   }
-  _pulse = { lane, laneBaseOpacity: 0.26 };
+  const _paths = _decoPaths();
+  function _branchNodesById(id) {
+    if (track.forks) for (const f of track.forks) { if (f.branches && f.branches[id]) return f.branches[id]; }
+    return null;
+  }
 
-  // NEON ARCH GATES spanning the track every ~70 nodes. archR = halfW so the two legs
-  // of the half-torus land exactly on the left/right floor edges (they were at 1.3x =
-  // floating outside the track = 'not attached'). Lowered slightly so legs touch floor.
-  for (let i = track.platform.endIdx + 40; i < track.nodes.length - 10; i += 70) {
-    const n = track.nodes[i];
-    if (n.kind === 'spiral' || n.kind === 'tunnel') continue;   // skip messy sections
-    const archR = n.halfW * 1.02;
-    const arch = new THREE.Mesh(
-      new THREE.TorusGeometry(archR, 0.22, 10, 32, Math.PI),  // half torus = arch
-      new THREE.MeshStandardMaterial({ color:0x0a2a4a, metalness:0.8, roughness:0.3,
-        emissive:0x00e5ff, emissiveIntensity:2.2 })   // hot enough to bloom
-    );
-    arch.position.set(n.pos.x, n.pos.y - 0.1, n.pos.z);
-    // The half-torus arcs over the top half of its local XY plane. We want that plane to
-    // face along the track direction so the arch spans left-right and rises overhead.
-    // Build a basis: across = n.right (arch width), up = world up, forward = n.dir.
-    const m4 = new THREE.Matrix4();
-    const across = new THREE.Vector3(n.right.x, 0, n.right.z).normalize();
-    const up = new THREE.Vector3(0,1,0);
-    const fwd = new THREE.Vector3().crossVectors(across, up).normalize();
-    m4.makeBasis(across, up, fwd);
-    arch.quaternion.setFromRotationMatrix(m4);
-    scene.add(arch); trackMeshes.push(arch);
+  // GLOWING TUBE RAILS along both edges of every path (cheap: every 4th node).
+  function buildRail(side, color, radius, opacity) {
+    for (const nodes of _paths) {
+      const pts = [];
+      for (let i = 0; i < nodes.length; i += 4) {
+        const n = nodes[i];
+        pts.push(new THREE.Vector3(n.pos.x + n.right.x*n.halfW*side, n.pos.y+0.12, n.pos.z + n.right.z*n.halfW*side));
+      }
+      if (pts.length < 2) continue;
+      const geo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), pts.length*2, radius, 6, false);
+      const mat = opacity != null
+        ? new THREE.MeshBasicMaterial({ color, transparent:true, opacity, blending:THREE.AdditiveBlending, depthWrite:false })
+        : new THREE.MeshBasicMaterial({ color });
+      const mesh = new THREE.Mesh(geo, mat);
+      scene.add(mesh); trackMeshes.push(mesh);
+    }
+  }
+  buildRail(-1, _themeRailL,     0.11);          // left edge
+  buildRail( 1, _themeRailR,     0.11);          // right edge
+  buildRail(-1, _themeRailLHalo, 0.34, 0.16);    // left halo
+  buildRail( 1, _themeRailRHalo, 0.34, 0.16);    // right halo
+
+  // GRAVITY WELL RIM RINGS: a glowing torus at the lip of each funnel so it reads clearly.
+  if (track.forks) {
+    for (const f of track.forks) {
+      if (!f.isWell) continue;
+      // outer rim ring at the top
+      const rimGeo = new THREE.TorusGeometry(f.rOuter, 0.28, 10, 48);
+      const rimMat = new THREE.MeshStandardMaterial({ color: 0x001122, metalness: 0.8, roughness: 0.2,
+        emissive: new THREE.Color(_themeRailL), emissiveIntensity: 2.5 });
+      const rim = new THREE.Mesh(rimGeo, rimMat);
+      rim.position.set(f.cx, f.yTop + 0.1, f.cz);
+      rim.rotation.x = Math.PI / 2;
+      scene.add(rim); trackMeshes.push(rim);
+      // throat ring at the narrow point
+      const throatGeo = new THREE.TorusGeometry(f.rThroat + 0.3, 0.18, 8, 32);
+      const throatMat = new THREE.MeshStandardMaterial({ color: 0x001122, metalness: 0.8, roughness: 0.2,
+        emissive: new THREE.Color(_themeRailR), emissiveIntensity: 2.8 });
+      const throatMesh = new THREE.Mesh(throatGeo, throatMat);
+      throatMesh.position.set(f.cx, f.yThroat, f.cz);
+      throatMesh.rotation.x = Math.PI / 2;
+      scene.add(throatMesh); trackMeshes.push(throatMesh);
+      // platform rim ring at the bottom
+      const platGeo = new THREE.TorusGeometry(f.rPlatform, 0.22, 8, 48);
+      const platMat = new THREE.MeshStandardMaterial({ color: 0x001122, metalness: 0.8, roughness: 0.2,
+        emissive: new THREE.Color(_themeRailR), emissiveIntensity: 1.8 });
+      const platMesh = new THREE.Mesh(platGeo, platMat);
+      platMesh.position.set(f.cx, f.yBottom + 0.1, f.cz);
+      platMesh.rotation.x = Math.PI / 2;
+      scene.add(platMesh); trackMeshes.push(platMesh);
+    }
+  }
+
+  // CENTER ENERGY LANE + STREAKING PULSE down every path.
+  const _pulseLanes = [];
+  for (const nodes of _paths) {
+    const cpts = [];
+    for (let i = 0; i < nodes.length; i += 3) { const n = nodes[i]; cpts.push(new THREE.Vector3(n.pos.x, n.pos.y+0.14, n.pos.z)); }
+    if (cpts.length < 2) continue;
+    const laneGeo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(cpts), cpts.length*2, 0.09, 6, false);
+    const lane = new THREE.Mesh(laneGeo, new THREE.MeshBasicMaterial({
+      color:_themeEnergyLane, transparent:true, opacity:0.26, blending:THREE.AdditiveBlending, depthWrite:false }));
+    scene.add(lane); trackMeshes.push(lane); _pulseLanes.push(lane);
+  }
+  _pulse = { lane: _pulseLanes[0] || null, lanes: _pulseLanes, laneBaseOpacity: 0.26 };
+
+  // NEON ARCH GATES spanning every path every ~70 nodes (so each route gets gates, none in the void).
+  // On branch paths, start late (skip first 50 nodes near platform) and use wider spacing (120)
+  // so arches don't pile up at the platform start or rejoin end convergence point.
+  for (const nodes of _paths) {
+    const isBranch = nodes[0] && nodes[0].branchId;
+    const archStart = isBranch ? 50 : 34;
+    const archStep  = isBranch ? 120 : 70;
+    for (let i = archStart; i < nodes.length - 20; i += archStep) {
+      const n = nodes[i];
+      if (n.kind === 'spiral' || n.kind === 'tunnel' || n.kind === 'tube' || n.kind === 'sorter') continue;
+      if (n.noWallL || n.noWallR || n.noWalls) continue;   // no arch at open-wall rejoin zone
+      const archR = n.halfW * 1.02;
+      const arch = new THREE.Mesh(
+        new THREE.TorusGeometry(archR, 0.22, 10, 32, Math.PI),
+        new THREE.MeshStandardMaterial({ color:0x0a2a4a, metalness:0.8, roughness:0.3,
+          emissive:_themeArchEmissive, emissiveIntensity:_themeArchEmissiveI }));
+      arch.position.set(n.pos.x, n.pos.y - 0.1, n.pos.z);
+      const m4 = new THREE.Matrix4();
+      const across = new THREE.Vector3(n.right.x, 0, n.right.z).normalize();
+      const up = new THREE.Vector3(0,1,0);
+      const fwd = new THREE.Vector3().crossVectors(across, up).normalize();
+      m4.makeBasis(across, up, fwd);
+      arch.quaternion.setFromRotationMatrix(m4);
+      scene.add(arch); trackMeshes.push(arch);
+    }
   }
 
   // FINISH LINE: a checkered banner on two glowing posts, placed at the win node (where a
@@ -760,7 +929,7 @@ function buildCourse(seed) {
     for (let a=0;a<NX;a++) for (let b=0;b<NY;b++){ cx.fillStyle = ((a+b)%2)?'#ffffff':'#0b0b14'; cx.fillRect(a*sx,b*sy,sx,sy); }
     const tex = new THREE.CanvasTexture(cv);
     // glowing posts + top bar (hot emissive = catches bloom)
-    const glowMat = new THREE.MeshStandardMaterial({ color:0x0a2a4a, metalness:0.8, roughness:0.3, emissive:0x00ffcc, emissiveIntensity:2.5 });
+    const glowMat = new THREE.MeshStandardMaterial({ color:0x0a2a4a, metalness:0.8, roughness:0.3, emissive:_themeFinishGlow, emissiveIntensity:2.5 });
     for (const s of [-1, 1]) {
       const post = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, postH, 10), glowMat);
       post.position.set(s*W, postH/2 - 0.1, 0); grp.add(post);
@@ -783,10 +952,12 @@ function buildCourse(seed) {
     const bx = bc.getContext('2d'); bx.strokeStyle = '#5a88ff'; bx.lineWidth = 7; bx.lineCap = 'round';
     bx.beginPath(); bx.moveTo(5,22); bx.lineTo(16,8); bx.lineTo(27,22); bx.stroke();
     for (const z of track.boosts) {
+      const arr = z.branchId ? _branchNodesById(z.branchId) : track.nodes;
+      if (!arr) continue;
       for (const side of [-1, 1]) {
         const pts = [];
         for (let i = z.startIdx; i <= z.endIdx; i++) {
-          const n = track.nodes[i];
+          const n = arr[i]; if (!n) continue;
           const off = n.halfW * 0.82 * side;
           pts.push(new THREE.Vector3(n.pos.x + n.right.x*off, n.pos.y + 0.16, n.pos.z + n.right.z*off));
         }
@@ -801,6 +972,157 @@ function buildCourse(seed) {
         scene.add(strip); trackMeshes.push(strip);
         _boostMats.push(tex);
       }
+    }
+  }
+
+  // OBSTACLES — electric bumper pylons (theme cyan). The blue post bobs UP as it charges, fires a
+  // mushroom discharge at the peak (shocking nearby balls) with flickering arcs + a static zap.
+  _bumperVis = [];
+  if (track.obstacles && track.obstacles.length) {
+    for (const ob of track.obstacles) {
+      const baseY = ob.pos.y, H = ob.height, R = ob.radius;
+      const grp = new THREE.Group();
+      grp.position.set(ob.pos.x, baseY, ob.pos.z);
+      const post = new THREE.Mesh(
+        new THREE.CylinderGeometry(R * 0.9, R, H, 20),
+        new THREE.MeshStandardMaterial({ color: 0x2aa8ff, emissive: 0x0a7cff, emissiveIntensity: 0.6, metalness: 0.45, roughness: 0.25, transparent: true, opacity: 0.93 })
+      );
+      post.position.y = H / 2; grp.add(post);
+      // a couple of cyan "cap" rings near the top so it reads as a charged emitter
+      const cap = new THREE.Mesh(new THREE.TorusGeometry(R + 0.08, 0.09, 8, 20),
+        new THREE.MeshBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.9 }));
+      cap.rotation.x = Math.PI / 2; cap.position.y = H - 0.1; grp.add(cap);
+      // flickering electric arcs (jagged lines, animated in updateBumpers)
+      const arcs = [];
+      for (let a = 0; a < 3; a++) {
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(7 * 3), 3));
+        const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xbff7ff, transparent: true, opacity: 0 }));
+        grp.add(line); arcs.push(line);
+      }
+      // mushroom discharge cap (hemisphere that expands + fades when it zaps)
+      const burst = new THREE.Mesh(
+        new THREE.SphereGeometry(R, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2),
+        new THREE.MeshBasicMaterial({ color: 0xd6ffff, transparent: true, opacity: 0 })
+      );
+      burst.position.y = H; grp.add(burst);
+      scene.add(grp); trackMeshes.push(grp);
+      _bumperVis.push({ grp, post, cap, arcs, burst, baseY, H, R, wasFullyUp: false, burstT: 0 });
+    }
+  }
+
+  // SPINNERS — rotating arm obstacles. Orange-red glowing arms on a hub post.
+  // The visual group rotates to match the physics kinematic body angle each frame.
+  _spinnerVis = [];
+  if (track.spinners && track.spinners.length) {
+    for (const sp of track.spinners) {
+      const ARM_H = sp.armHeight || 0.85;
+      const armL = sp.armLen;
+      const grp = new THREE.Group();
+      grp.position.set(sp.pos.x, sp.pos.y + ARM_H, sp.pos.z);
+      // hub: small cylinder at the pivot point
+      const hub = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.22, 0.22, ARM_H * 2.2, 12),
+        new THREE.MeshStandardMaterial({ color: 0xff4400, emissive: 0xff2200, emissiveIntensity: 1.1, metalness: 0.6, roughness: 0.25 })
+      );
+      grp.add(hub);
+      // two arms: flat orange bars extending left and right
+      const armMat = new THREE.MeshStandardMaterial({ color: 0xff6600, emissive: 0xff3300, emissiveIntensity: 0.85, metalness: 0.5, roughness: 0.3 });
+      for (const signX of [1, -1]) {
+        const arm = new THREE.Mesh(
+          new THREE.BoxGeometry(armL, ARM_H * 0.55, 0.28),
+          armMat
+        );
+        arm.position.x = signX * armL * 0.5;
+        grp.add(arm);
+      }
+      // a faint glow ring in the spin plane so it reads as "active" even at rest
+      const glow = new THREE.Mesh(
+        new THREE.TorusGeometry(armL * 0.52, 0.06, 8, 28),
+        new THREE.MeshBasicMaterial({ color: 0xff8844, transparent: true, opacity: 0.35 })
+      );
+      glow.rotation.x = Math.PI / 2;
+      grp.add(glow);
+      scene.add(grp); trackMeshes.push(grp);
+      _spinnerVis.push({ grp, initAngle: 0 });
+    }
+  }
+
+  // LAUNCH-PINS — a glowing pad embedded flush in the floor that flashes when a ball
+  // crosses it. Resolve world position from the node range (main path or a branch).
+  _launchVis = [];
+  if (track.launchPins && track.launchPins.length) {
+    const resolveNodes = (lp) => {
+      if (lp.branchId) {
+        for (const f of track.forks) { if (f.branches && f.branches[lp.branchId]) return f.branches[lp.branchId]; }
+        return null;
+      }
+      return track.nodes;
+    };
+    for (const lp of track.launchPins) {
+      const arr = resolveNodes(lp);
+      if (!arr) continue;
+      const midIdx = Math.floor((lp.startIdx + lp.endIdx) / 2);
+      const nd = arr[midIdx]; if (!nd) continue;
+      const grp = new THREE.Group();
+      grp.position.set(nd.pos.x, nd.pos.y + 0.06, nd.pos.z);   // flush with the floor, tiny lift to avoid z-fighting
+      // orient flat in the track's local plane (use node's right/dir so it sits naturally on slopes)
+      const padW = Math.min(nd.halfW * 1.5, 6.5);
+      const pad = new THREE.Mesh(
+        new THREE.CircleGeometry(padW * 0.5, 28),
+        new THREE.MeshStandardMaterial({ color: 0xffd700, emissive: 0xffaa00, emissiveIntensity: 0.9, metalness: 0.3, roughness: 0.4, transparent: true, opacity: 0.85, side: THREE.DoubleSide })
+      );
+      pad.rotation.x = -Math.PI / 2;   // lie flat
+      grp.add(pad);
+      // pulsing ring outline
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(padW * 0.48, padW * 0.56, 28),
+        new THREE.MeshBasicMaterial({ color: 0xffe27a, transparent: true, opacity: 0.9, side: THREE.DoubleSide })
+      );
+      ring.rotation.x = -Math.PI / 2;
+      grp.add(ring);
+      // upward chevron arrows (read as "this launches you")
+      const chevronMat = new THREE.MeshBasicMaterial({ color: 0xfff3c4, transparent: true, opacity: 0.7 });
+      const chevrons = [];
+      for (let c = 0; c < 3; c++) {
+        const chev = new THREE.Mesh(new THREE.ConeGeometry(padW * 0.16, padW * 0.22, 4), chevronMat);
+        chev.position.y = 0.3 + c * 0.55;
+        chev.rotation.y = Math.PI / 4;
+        grp.add(chev); chevrons.push(chev);
+      }
+      scene.add(grp); trackMeshes.push(grp);
+      _launchVis.push({ grp, pad, ring, chevrons, pos: { x: nd.pos.x, y: nd.pos.y, z: nd.pos.z }, flashT: 0 });
+    }
+  }
+}
+
+// Trigger the flash animation on the nearest launch-pin visual to a world position
+// (called when physics reports a ball got launched — see updateLaunchPins below).
+function flashLaunchPin(pos) {
+  let best = null, bestD = 1e9;
+  for (const lv of _launchVis) {
+    const dx = lv.pos.x - pos.x, dz = lv.pos.z - pos.z;
+    const d = dx * dx + dz * dz;
+    if (d < bestD) { bestD = d; best = lv; }
+  }
+  if (best && bestD < 25) best.flashT = 1;
+}
+function updateLaunchPins(now) {
+  for (const lv of _launchVis) {
+    // idle pulse: gentle breathing glow
+    const pulse = 0.7 + 0.3 * Math.sin(now / 1000 * 3 + lv.pos.x * 0.3);
+    lv.ring.material.opacity = 0.5 + pulse * 0.4;
+    for (const c of lv.chevrons) c.position.y = (c.position.y + 0.4 * (1/60)) % 1.65 + 0.3;
+    // flash burst on trigger
+    if (lv.flashT > 0) {
+      lv.flashT = Math.max(0, lv.flashT - 0.045);
+      const e = lv.flashT;
+      lv.pad.material.opacity = 0.85 + e * 0.15;
+      lv.pad.scale.setScalar(1 + (1 - e) * 0.5);
+      lv.ring.scale.setScalar(1 + (1 - e) * 1.8);
+    } else {
+      lv.pad.scale.setScalar(1);
+      lv.ring.scale.setScalar(1);
     }
   }
 }
@@ -835,13 +1157,18 @@ function makeLabel(text, isMe){
 
 function makeZorb(id, prefs, isSub, platform, founder) {
   const cos = ZCOSMETICS.resolveForPlayer(prefs, isSub, prefs.owned || []);
+  // A player who has explicitly picked (and is entitled to) a non-Classic skin gets that
+  // skin, even if they're a beta tester. The gold founders ball is only the default for
+  // testers who haven't chosen a skin of their own.
+  const chosenSkin = cos.skin !== ZCOSMETICS.ballSkins.classic;
+  const useFounder = founder && !chosenSkin;
   let color = (cos.skin.color != null) ? cos.skin.color : PALETTE[(colorIdx++) % PALETTE.length];
-  if (founder) color = 0xFFC83A;   // FOUNDERS BALL — shared gold skin for all beta testers
+  if (useFounder) color = 0xFFC83A;   // FOUNDERS BALL — shared gold skin for all beta testers
   const accent = new THREE.Color(color);
   const baseCol = new THREE.Color(color);
 
   // ---- skin material builder (procedural textures, no external assets) ----
-  const core = new THREE.Mesh(SPHERE_GEO, founder ? buildFounderMaterial() : buildCoreMaterial(cos.skin, baseCol, accent));
+  const core = new THREE.Mesh(SPHERE_GEO, useFounder ? buildFounderMaterial() : buildCoreMaterial(cos.skin, baseCol, accent));
   scene.add(core);
 
   // DARK OUTLINE: a slightly larger back-face black shell behind the ball gives a thin
@@ -909,10 +1236,13 @@ function makeZorb(id, prefs, isSub, platform, founder) {
   zorbs.set(id, {
     mesh: core, ring, ringGlow, band, color, trail, trailPos, trailLen: TRAIL_LEN, streak, label,
     platform: platform || 'guest',
-    founder: !!founder,
+    founder: !!useFounder,
+    isRainbow: cos.skin.style === 'rainbow',
+    isSolar: cos.skin.style === 'solar',
     spawnT: 0, spawnAnim: cos.spawn, ringSpin: cos.ring.spin || 2.0,
     ringBob: Math.random()*Math.PI*2, eliminated:false, fallT:0,
     rollQ: new THREE.Quaternion(),
+    _rainbowT: Math.random() * Math.PI * 2,
   });
 }
 
@@ -958,6 +1288,62 @@ function buildCoreMaterial(skin, baseCol, accent) {
       transmission: 0.92, thickness: 0.6, ior: 1.4, transparent: true,
       emissive: accent, emissiveIntensity: 0.12,
       clearcoat: 1.0, clearcoatRoughness: 0.05, envMap: _envMap || null, envMapIntensity: 1.0 });
+  }
+  if (style === 'marble') {
+    if (!_texCache.marble) {
+      const c = document.createElement('canvas'); c.width = c.height = 256; const cx = c.getContext('2d');
+      cx.fillStyle = '#f5f0e8'; cx.fillRect(0,0,256,256);
+      for (let i=0;i<12;i++) {
+        const g2 = cx.createLinearGradient(Math.random()*256,0,Math.random()*256,256);
+        g2.addColorStop(0,'rgba(180,160,140,0)'); g2.addColorStop(0.5,`rgba(${100+Math.random()*80|0},${80+Math.random()*80|0},${60+Math.random()*60|0},0.4)`); g2.addColorStop(1,'rgba(180,160,140,0)');
+        cx.fillStyle = g2; cx.fillRect(0,0,256,256);
+      }
+      _texCache.marble = new THREE.CanvasTexture(c);
+    }
+    return new THREE.MeshStandardMaterial({ map: _texCache.marble, color: 0xffffff,
+      metalness: 0.0, roughness: 0.55, envMap: _envMap || null, envMapIntensity: 0.4 });
+  }
+  if (style === 'crystal') {
+    return THREE.MeshPhysicalMaterial
+      ? new THREE.MeshPhysicalMaterial({ color: baseCol, metalness: 0.0, roughness: 0.02,
+          transmission: 0.7, thickness: 1.0, ior: 1.8, transparent: true,
+          emissive: accent, emissiveIntensity: 0.4,
+          clearcoat: 1.0, clearcoatRoughness: 0.0, envMap: _envMap || null, envMapIntensity: 1.4 })
+      : new THREE.MeshStandardMaterial({ color: baseCol, metalness: 0.1, roughness: 0.02,
+          emissive: accent, emissiveIntensity: 0.4, transparent: true, opacity: 0.85 });
+  }
+  if (style === 'phantom') {
+    return new THREE.MeshStandardMaterial({ color: baseCol, metalness: 0.3, roughness: 0.2,
+      emissive: accent, emissiveIntensity: 0.7, transparent: true, opacity: 0.72,
+      envMap: _envMap || null, envMapIntensity: 0.6 });
+  }
+  if (style === 'rainbow') {
+    if (!_texCache.rainbow) {
+      const c = document.createElement('canvas'); c.width = 256; c.height = 1; const cx = c.getContext('2d');
+      const g2 = cx.createLinearGradient(0,0,256,0);
+      ['#ff0000','#ff8800','#ffff00','#00ff00','#00ffff','#0088ff','#8800ff','#ff0088','#ff0000'].forEach((col,i,a)=>g2.addColorStop(i/(a.length-1),col));
+      cx.fillStyle=g2; cx.fillRect(0,0,256,1);
+      const t = new THREE.CanvasTexture(c); t.wrapS = THREE.RepeatWrapping; _texCache.rainbow = t;
+    }
+    return new THREE.MeshStandardMaterial({ map: _texCache.rainbow, color: 0xffffff,
+      metalness: 0.2, roughness: 0.15, emissive: accent, emissiveIntensity: 0.7,
+      envMap: _envMap || null, envMapIntensity: 1.0 });
+  }
+  if (style === 'solar') {
+    if (!_texCache.solar) {
+      const c = document.createElement('canvas'); c.width = c.height = 256; const cx = c.getContext('2d');
+      cx.fillStyle='#ff8800'; cx.fillRect(0,0,256,256);
+      for (let i=0;i<20;i++){
+        const gx=Math.random()*256, gy=Math.random()*256;
+        const gr=cx.createRadialGradient(gx,gy,0,gx,gy,20+Math.random()*50);
+        gr.addColorStop(0,'#ffffff'); gr.addColorStop(0.3,'#ffee44'); gr.addColorStop(1,'rgba(255,100,0,0)');
+        cx.fillStyle=gr; cx.fillRect(0,0,256,256);
+      }
+      _texCache.solar = new THREE.CanvasTexture(c);
+    }
+    return new THREE.MeshStandardMaterial({ map: _texCache.solar, color: 0xffffff,
+      metalness: 0.4, roughness: 0.3, emissive: 0xff6600, emissiveIntensity: 1.0,
+      emissiveMap: _texCache.solar, envMap: _envMap || null, envMapIntensity: 0.6 });
   }
   // default: metallic sci-fi orb (clearcoat sheen if available). Emissive floored so it
   // never renders as a black silhouette regardless of light angle.
@@ -1161,7 +1547,10 @@ let _miniBounds = null;
 function computeMiniBounds(){
   if (!track || !track.nodes || !track.nodes.length) { _miniBounds = null; return; }
   let a=1e9,b=-1e9,c=1e9,d=-1e9;
-  for (const n of track.nodes){ const x=n.pos.x, z=n.pos.z; if(x<a)a=x; if(x>b)b=x; if(z<c)c=z; if(z>d)d=z; }
+  const acc = (x,z)=>{ if(x<a)a=x; if(x>b)b=x; if(z<c)c=z; if(z>d)d=z; };
+  for (const n of track.nodes){ acc(n.pos.x, n.pos.z); }
+  // include the fan lanes — they spread far wider than the spine, so the bounds must cover them
+  if (track.forks) for (const f of track.forks) for (const bid in f.branches) for (const n of f.branches[bid]) acc(n.pos.x, n.pos.z);
   _miniBounds = { minx:a, maxx:b, minz:c, maxz:d };
 }
 function drawMinimap(snap){
@@ -1176,6 +1565,13 @@ function drawMinimap(snap){
   for (let i=0;i<track.nodes.length;i+=2){ const n=track.nodes[i]; if(n.meshSkip){pen=false;continue;}
     const X=px(n.pos.x), Z=pz(n.pos.z); if(!pen){miniCtx.moveTo(X,Z);pen=true;} else miniCtx.lineTo(X,Z); }
   miniCtx.strokeStyle='rgba(130,205,255,.55)'; miniCtx.lineWidth=2.5; miniCtx.lineJoin='round'; miniCtx.stroke();
+  // fan lanes — the spine is hidden (meshSkip) through the fork, so draw each branch lane to fill it
+  if (track.forks) for (const f of track.forks) for (const bid in f.branches){
+    const br = f.branches[bid]; if (!br || !br.length) continue;
+    miniCtx.beginPath();
+    for (let i=0;i<br.length;i+=2){ const n=br[i]; const X=px(n.pos.x), Z=pz(n.pos.z); if(i===0) miniCtx.moveTo(X,Z); else miniCtx.lineTo(X,Z); }
+    miniCtx.stroke();
+  }
   // start (green) + finish (gold)
   const s0 = track.start || track.nodes[0];
   const fN = track.finish || track.nodes[track.nodes.length-1];
@@ -1194,7 +1590,7 @@ function startRace(seed, names) {
   _mapView = null;   // re-frame the overhead map cam for the new track
   buildCourse(seed);
   ZPHYSICS.clearBalls();
-  ZPHYSICS.setTrack(track.collider, track.nodes, { forks: track.forks, branchColliders: track.branchColliders });  // new track each race
+  ZPHYSICS.setTrack(track.collider, track.nodes, { forks: track.forks, branchColliders: track.branchColliders, obstacles: track.obstacles, spinners: track.spinners });  // new track each race
   zorbs.forEach(z => { scene.remove(z.mesh); if(z.ring) scene.remove(z.ring); if(z.ringGlow) scene.remove(z.ringGlow); if(z.trail) scene.remove(z.trail); if(z.streak) scene.remove(z.streak); if(z.label) scene.remove(z.label); });
   _explosions.forEach(e => { scene.remove(e.pts); scene.remove(e.flash); }); _explosions.length = 0;
   _resultSent = false; _officialOrder = null; _officialSlot = -1; _boostQueue.length = 0;
@@ -1312,10 +1708,11 @@ function loop(now) {
   // each beat THUD (rising edge) advances the center line to the next neon color
   if (beat > 0.5 && _lastBeat <= 0.5) _hueIdx = (_hueIdx + 1) % BEAT_COLORS.length;
   _lastBeat = beat;
-  if (_pulse && _pulse.lane) {
+  if (_pulse && (_pulse.lanes || _pulse.lane)) {
     const c = BEAT_COLORS[_hueIdx];
-    _pulse.lane.material.color.setRGB(c[0], c[1], c[2]);
-    _pulse.lane.material.opacity = Math.min(0.85, _pulse.laneBaseOpacity + beat * 0.6);
+    const op = Math.min(0.85, _pulse.laneBaseOpacity + beat * 0.6);
+    const lanes = _pulse.lanes && _pulse.lanes.length ? _pulse.lanes : [_pulse.lane];
+    for (const ln of lanes) { if (!ln) continue; ln.material.color.setRGB(c[0], c[1], c[2]); ln.material.opacity = op; }
   }
 
   if (phase === 'spawning') {
@@ -1360,6 +1757,8 @@ function loop(now) {
     const total = zorbs.size;
     if (winner && ((now - _winAt > 4000) || (_finishedSet.size + _fellSet.size >= total))) {
       phase = 'done'; reportResult(); showEndCard();
+      // FRESH MODE: queue the next race on a brand-new random track
+      if (_freshMode && !_freshQueued) { _freshQueued = true; setTimeout(() => { _freshQueued = false; startFreshRace(); }, 5000); }
     }
   }
 
@@ -1383,6 +1782,7 @@ function loop(now) {
     if (s) {
       z.mesh.position.set(s.x, s.y, s.z);
       if (z.label) { z.label.position.set(s.x, s.y + BALL_R + 0.95, s.z); z.label.material.opacity = z.eliminated ? 0.35 : 1; }
+      if (s.justLaunched) flashLaunchPin({ x: s.x, z: s.z });
     }
     // spawn animation
     if (z.spawnT < 1) {
@@ -1443,6 +1843,18 @@ function loop(now) {
         z.ringGlow.visible = !z.eliminated;
       }
     }
+    // RAINBOW STROBE: cycle hue with music beat, strobe faster on beats
+    if (z.isRainbow && !z.eliminated) {
+      z._rainbowT += dt * (3.5 + sampleBeat() * 8);
+      const hue = (z._rainbowT % (Math.PI * 2)) / (Math.PI * 2);
+      z.mesh.material.emissive.setHSL(hue, 1.0, 0.5);
+      z.mesh.material.emissiveIntensity = 0.6 + sampleBeat() * 1.2;
+      if (z.ring) z.ring.material.color.setHSL(hue, 1.0, 0.55);
+    }
+    // SOLAR PULSE: throb emissive with beat
+    if (z.isSolar && !z.eliminated) {
+      z.mesh.material.emissiveIntensity = 0.8 + sampleBeat() * 1.5;
+    }
     // elimination: drop and fade
     if (z.eliminated) {
       z.fallT += dt;
@@ -1454,6 +1866,10 @@ function loop(now) {
   }
 
   updateCamera(dt);
+  updateBumpers();
+  updateSpinners();
+  updateLaunchPins(now);
+  updateSkyFollow();
 
   if (composer && !_LITE) composer.render(); else renderer.render(scene, camera);   // bloom off in lite mode
 }
@@ -1461,6 +1877,9 @@ function loop(now) {
 // ---- camera: follow YOUR marble (public mode) or the leader (solo / after you're out) ----
 const camTarget = new THREE.Vector3();
 const camPos = new THREE.Vector3();
+const _camBallPos = new THREE.Vector3();   // smoothed actual position of the followed ball
+const _camDir = new THREE.Vector3(0, 0, 1); // smoothed travel direction of the followed ball
+let _camHasBall = false;
 const lookAt = new THREE.Vector3();
 let camLeadIdx = 0;
 // OBS overlay + in-game camera control:
@@ -1504,6 +1923,98 @@ function pickCameraTarget(){
   // ...otherwise (solo, after you're out, or OBS with no own ball) follow the race leader.
   return ZPHYSICS.isReady() ? ZPHYSICS.leader() : null;
 }
+// electric "zzzt" static burst (filtered white noise) — no audio file, generated on the fly
+let _zapCtx = null;
+function playZap(vol){
+  try {
+    if (!_zapCtx) _zapCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = _zapCtx; if (ctx.state === 'suspended') ctx.resume();
+    const dur = 0.13, n = Math.floor(ctx.sampleRate * dur);
+    const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 2);  // decaying noise
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2400 + Math.random() * 800; bp.Q.value = 0.7;
+    const g = ctx.createGain(); g.gain.value = Math.min(0.22, vol * 0.22);
+    src.connect(bp); bp.connect(g); g.connect(ctx.destination); src.start();
+  } catch(_){}
+}
+function updateSpinners() {
+  if (!_spinnerVis.length || !ZPHYSICS.getSpinners) return;
+  const sps = ZPHYSICS.getSpinners();
+  for (let k = 0; k < _spinnerVis.length; k++) {
+    const vis = _spinnerVis[k], sp = sps[k]; if (!sp) continue;
+    // Match the visual rotation to the physics body's full orientation: baseQuat (aligns
+    // the spin plane to the track's local tilt/bank) composed with the live spin angle
+    // around local-Y. Using the same quaternion math as physics.js keeps them pixel-locked.
+    const ha = sp.angle * 0.5, s = Math.sin(ha), c = Math.cos(ha);
+    const spinQ = new THREE.Quaternion(0, s, 0, c);
+    if (sp.baseQuat) {
+      const baseQ = new THREE.Quaternion(sp.baseQuat.x, sp.baseQuat.y, sp.baseQuat.z, sp.baseQuat.w);
+      vis.grp.quaternion.copy(baseQ).multiply(spinQ);
+    } else {
+      vis.grp.quaternion.copy(spinQ);
+    }
+  }
+}
+// drive the electric-bumper visuals from the physics charge: post bobs UP as it charges, arcs
+// flicker, and at the peak (discharge) a mushroom cap bursts + a static zap plays.
+function updateBumpers(){
+  if (!_bumperVis.length || !ZPHYSICS.getBumpers) return;
+  const bms = ZPHYSICS.getBumpers();
+  let zaps = 0;                                   // cap audible zaps per frame
+  for (let k = 0; k < _bumperVis.length; k++){
+    const vis = _bumperVis[k], bm = bms[k]; if (!bm) continue;
+    // bm.charge now means "how risen" (0 = fully retracted/hidden, 1 = fully extended) —
+    // matches bm.riseY in physics.js exactly, so the visual telescopes in lockstep with
+    // the real collider instead of just bobbing a little at the top.
+    const c = bm.charge || 0;
+    // GROW UP FROM THE FLOOR — never below it. The group stays anchored at the floor (baseY)
+    // and the post SCALES vertically from 0 (flush/invisible) to full height. Old code slid the
+    // whole group down below the track, so at mid-charge the post hung in open space beneath the
+    // floor (visible from every angle, since walls/skirt are semi-transparent). Scaling from the
+    // floor means the mushroom emerges from the track surface and retracts into it — clean.
+    vis.grp.visible = c > 0.02;
+    vis.grp.position.y = vis.baseY;
+    const sc = Math.max(0.0001, c);
+    vis.post.scale.y = sc;
+    vis.post.position.y = (vis.H * sc) / 2;     // bottom stays pinned at the floor
+    vis.cap.position.y = vis.H * sc - 0.1;       // cap rides the top of the post
+    vis.burst.position.y = vis.H * sc;           // discharge fires from the top
+    vis.post.material.emissiveIntensity = 0.5 + c * 2.0;
+    vis.cap.material.opacity = 0.5 + c * 0.5;
+    // arcs only flicker once it's mostly risen (it's "live" near the top of its travel)
+    const live = c > 0.85 && Math.random() < 0.25 + c * 0.55;
+    for (const line of vis.arcs){
+      if (live){
+        const ang = Math.random() * 6.283, rr = vis.R + 0.14;
+        const pos = line.geometry.attributes.position.array;
+        for (let p = 0; p < 7; p++){
+          pos[p*3]   = Math.cos(ang) * rr + (Math.random()-0.5) * 0.45;
+          pos[p*3+1] = (p / 6) * vis.H * sc;
+          pos[p*3+2] = Math.sin(ang) * rr + (Math.random()-0.5) * 0.45;
+        }
+        line.geometry.attributes.position.needsUpdate = true;
+        line.material.opacity = 0.6 + Math.random() * 0.4;
+      } else line.material.opacity *= 0.55;
+    }
+    // DISCHARGE: fires once at the moment it reaches FULLY risen (rising edge into c>=0.999),
+    // matching physics.js's bm.wasFullyUp edge exactly — was previously a sawtooth-wrap
+    // detector that no longer makes sense now the cycle is hide→rise→hold→retract.
+    const fullyUp = c >= 0.999;
+    if (fullyUp && !vis.wasFullyUp){
+      vis.burstT = 1;
+      if (zaps < 3){ const dd = camera.position.distanceTo(vis.grp.position); if (dd < 32){ playZap(1 - dd/32); zaps++; } }
+    }
+    vis.wasFullyUp = fullyUp;
+    if (vis.burstT > 0){
+      vis.burstT = Math.max(0, vis.burstT - 0.07);
+      const e = 1 - vis.burstT;
+      vis.burst.scale.set(0.5 + e*2.6, 0.4 + e*1.4, 0.5 + e*2.6);
+      vis.burst.material.opacity = vis.burstT * 0.75;
+    }
+  }
+}
 function updateCamera(dt) {
   if (_camMode === 'free') { updateFreeCam(dt); return; }
   if (!track) return;
@@ -1525,36 +2036,47 @@ function updateCamera(dt) {
     lookAt.lerp(mv.center, 0.06); camera.lookAt(lookAt);
     return;
   }
-  // Follow the target's PROGRESS (a centerline node index), not the ball's jittery
-  // position. The node is smooth, so the camera is smooth.
+  // Follow the ACTUAL ball — its real position and travel direction — so the camera tracks it
+  // around the routes instead of running straight up the dead-center spine through the loop.
   const lead = pickCameraTarget();
-  let idx = camLeadIdx;
-  if (lead != null) {
-    const snap = ZPHYSICS.snapshot()[lead];
-    if (snap) idx = snap.progress != null ? snap.progress : snap.hint;
+  const snap = lead != null ? ZPHYSICS.snapshot()[lead] : null;
+  if (snap && snap.x != null) {
+    const followingBall = (_camMode === 'me' || _camMode === 'player');
+    const back = followingBall ? 13.5 : 18, up = followingBall ? 10.5 : 14.5;
+    // smooth the ball position
+    const targetPos = new THREE.Vector3(snap.x, snap.y, snap.z);
+    if (!_camHasBall) { _camBallPos.copy(targetPos); _camHasBall = true; }
+    else _camBallPos.lerp(targetPos, 0.18);
+    // smooth the travel direction (from velocity; hold last when nearly stopped, e.g. on the grid)
+    const vx = snap.vx || 0, vz = snap.vz || 0, vl = Math.hypot(vx, vz);
+    if (vl > 0.8) _camDir.lerp(new THREE.Vector3(vx / vl, 0, vz / vl), 0.10).normalize();
+    const d = _camDir;
+    const desired = new THREE.Vector3(
+      _camBallPos.x - d.x * back,
+      _camBallPos.y + up,
+      _camBallPos.z - d.z * back
+    );
+    camPos.lerp(desired, 0.06);
+    camera.position.copy(camPos);
+    lookAt.lerp(new THREE.Vector3(_camBallPos.x + d.x * 6, _camBallPos.y - 1, _camBallPos.z + d.z * 6), 0.10);
+    camera.lookAt(lookAt);
+    return;
   }
-  // ease the camera's node index forward (never snaps backward hard)
+  _camHasBall = false;
+  // PRE-RACE / no ball: glide along the centerline so the track is on display.
+  let idx = camLeadIdx;
   camLeadIdx += (idx - camLeadIdx) * 0.05;
   const ci = Math.max(0, Math.min(track.nodes.length - 1, Math.round(camLeadIdx)));
   const node = track.nodes[ci];
   const ahead = track.nodes[Math.min(track.nodes.length - 1, ci + 10)];
-
-  // desired camera: behind & ABOVE the leader node, along the track direction.
-  // Higher and further back than before (was -14 / +9) — the low angle was skimming
-  // the floor and hiding the pack. This reads as a proper marble-race chase cam.
   const dir = node.dir;
-  // closer, more personal framing when locked to one ball (you / a picked player); pull back a
-  // little for the leader cam so the chasing pack stays in frame.
-  const followingBall = (_camMode === 'me' || _camMode === 'player');
-  const back = followingBall ? 13.5 : 18, up = followingBall ? 10.5 : 14.5;
   const desired = new THREE.Vector3(
-    node.pos.x - dir.x * back,
-    node.pos.y + up,
-    node.pos.z - dir.z * back
+    node.pos.x - dir.x * 18,
+    node.pos.y + 14.5,
+    node.pos.z - dir.z * 18
   );
-  camPos.lerp(desired, 0.05);          // smooth position
+  camPos.lerp(desired, 0.05);
   camera.position.copy(camPos);
-  // look at a point ahead down the track (stable target)
   lookAt.lerp(new THREE.Vector3(ahead.pos.x, ahead.pos.y - 1, ahead.pos.z), 0.08);
   camera.lookAt(lookAt);
 }
@@ -1589,11 +2111,27 @@ const MP_HOST = 'zorbs.thatspeedykid.partykit.dev';
 // No param = the shared public game. ?obs=1 = clean overlay/spectator view for OBS browser source.
 const _ZP = new URLSearchParams(location.search);
 const _roomParam = (_ZP.get('room') || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 32);
-const MP_ROOM = _roomParam || 'public';
+const MP_ROOM = _roomParam || 'betatest';
 const _OBS = _ZP.get('obs') === '1';
-const _PRIVATE = MP_ROOM !== 'public';
+// 'betatest' is an isolated room but auto-runs like public (not gated as a streamer lobby)
+const _PRIVATE = MP_ROOM !== 'public' && MP_ROOM !== 'betatest';
 const MP_SLOT_MS = 95000, MP_LOBBY_MS = 9000, MP_FIELD = 8;
 let _myMarble = null, _joinName = null, _mpMode = false, _kickName = null, _isFounder = false;
+let _myPrefs = {};   // skin prefs for the local player — set from session on login
+// FRESH MODE (?fresh=1): every race uses a brand-new RANDOM seed and auto-loops, so it's a new
+// track every single race (no 95s slot lock). Ideal for a solo streamer / testing.
+let _freshMode = new URLSearchParams(location.search).get('fresh') === '1';
+let _freshQueued = false;
+function startFreshRace(){
+  try { if (typeof hideLobby === 'function') hideLobby(); } catch(_){}
+  const seed = (Math.random() * 1e9) >>> 0;
+  if (!_myMarble) _myMarble = 'you';
+  const names = mpBots(seed).map(n => ({ id:n, prefs:{}, isSub:false }));
+  names[0] = { id:_myMarble, prefs:_myPrefs, isSub:!!_myPrefs.skin };
+  _mpMode = false;
+  setStatus('⬡ fresh track every race', true);
+  startRace(seed, names);
+}
 // server-authoritative result: the first client to finish a race reports the order; the server
 // locks it and broadcasts it as official so every screen shows the SAME outcome.
 let _mpSlot = -1, _officialOrder = null, _officialFinished = 0, _officialSlot = -1;
@@ -1664,7 +2202,7 @@ function runMultiplayer(){
   function runMpRace(race){
     const names = []; const used = new Set();
     const cap = _PRIVATE ? 16 : MP_FIELD;   // private lobbies fit more chat (!play) racers
-    for (const p of roster.slice(0, cap)) { if(used.has(p.name)) continue; names.push({ id:p.name, isSub:!!p.isSub, prefs:{}, platform: p.platform || 'guest', founder: !!p.founder }); used.add(p.name); }
+    for (const p of roster.slice(0, cap)) { if(used.has(p.name)) continue; const isMe = p.name === _joinName; names.push({ id:p.name, isSub:!!p.isSub || isMe && !!_myPrefs.skin, prefs: isMe ? _myPrefs : {}, platform: p.platform || 'guest', founder: !!p.founder }); used.add(p.name); }
     const bots = mpBots(race.seed); let bi = 0;
     while (names.length < MP_FIELD) { let bn = bots[bi++ % bots.length]; while(used.has(bn)) bn += '·'; used.add(bn); names.push({ id:bn, isSub:false, prefs:{}, platform:'bot' }); }
     startRace(race.seed, names);
@@ -1799,7 +2337,7 @@ function runMultiplayer(){
     hideLobby();
     const seed = (Math.random()*1e9) >>> 0;
     const names = mpBots(seed).map(n => ({ id:n, prefs:{}, isSub:false }));
-    names[0] = { id:_myMarble, prefs:{}, isSub:false, platform: _kickName ? 'kick' : 'guest', founder: _isFounder };
+    names[0] = { id:_myMarble, prefs:_myPrefs, isSub:!!(_myPrefs && _myPrefs.skin), platform: _kickName ? 'kick' : 'guest', founder: _isFounder };
     setStatus('offline — solo race', false);
     startRace(seed, names);
   }
@@ -1816,6 +2354,9 @@ async function boot() {
   setStatus('⬡ READY · build ' + BUILD, true);
   try { buildEnvMap(); } catch(e){ console.warn('env map skipped', e); }
 
+  // FRESH MODE: brand-new random track every race, auto-looping (no slot lock).
+  if (_freshMode) { startFreshRace(); return; }
+
   // LIVE PUBLIC GAME is the default — connect to the race room. ?demo=1 runs the old local
   // solo field (handy for engine testing without the server).
   if (new URLSearchParams(location.search).get('demo') !== '1') { runMultiplayer(); return; }
@@ -1826,7 +2367,7 @@ async function boot() {
   const seed = await fetchRaceSeed();
   buildCourse(seed);
   // give the physics the track collider
-  ZPHYSICS.setTrack(track.collider, track.nodes, { forks: track.forks, branchColliders: track.branchColliders });
+  ZPHYSICS.setTrack(track.collider, track.nodes, { forks: track.forks, branchColliders: track.branchColliders, obstacles: track.obstacles, spinners: track.spinners });
   // demo: spawn a field of test balls and race. A few are given the premium skins so
   // Galaxy / Lava / Glass / Chrome are actually visible in the demo (they were all
   // Classic before, so the paid skins never showed on screen).
@@ -1996,9 +2537,71 @@ if (_volEl) {
     history.replaceState({}, '', '/v2');
   }
 
+  // ── Kick Skin Picker ─────────────────────────────────────────────────────────
+  // Free skins available to all Kick sign-ins (sub-gated ones unlock via isSub).
+  // This picker is shown ONCE: if `sess.skin` is already set, skip straight to game.
+  const _isAdmin = !!(sess && sess.role === 'admin');
+  // Alpha offer: all 5 special skins unlocked for Kick users during beta.
+  // Post-launch these gate to their respective tiers.
+  const FREE_SKINS = ['marble','crystal','phantom','rainbow','solar'];
+  function buildSkinPickerCanvas(skinKey, size){
+    const s = ZCOSMETICS.ballSkins[skinKey];
+    const c = document.createElement('canvas');
+    c.width = c.height = size;
+    const ctx = c.getContext('2d');
+    const cx2 = size/2, r = size/2 - 2;
+    const col = s.color != null ? '#' + s.color.toString(16).padStart(6,'0') : '#7fe9ff';
+    const g = ctx.createRadialGradient(cx2 - r*0.3, cx2 - r*0.3, r*0.05, cx2, cx2, r);
+    g.addColorStop(0, col === '#7fe9ff' ? '#aff' : shiftColor(col, 60));
+    g.addColorStop(1, col);
+    ctx.beginPath(); ctx.arc(cx2, cx2, r, 0, Math.PI*2);
+    ctx.fillStyle = g; ctx.fill();
+    if (s.emissive > 0.3) {
+      ctx.beginPath(); ctx.arc(cx2, cx2, r, 0, Math.PI*2);
+      ctx.strokeStyle = 'rgba(180,120,255,' + (s.emissive * 0.7) + ')';
+      ctx.lineWidth = 3; ctx.stroke();
+    }
+    return c;
+  }
+  function shiftColor(hex, amt){
+    const n = parseInt(hex.slice(1), 16);
+    const r = Math.min(255, (n>>16) + amt), g2 = Math.min(255, ((n>>8)&0xff) + amt), b = Math.min(255, (n&0xff) + amt);
+    return '#' + ((r<<16)|(g2<<8)|b).toString(16).padStart(6,'0');
+  }
+  function showSkinPicker(onPick){
+    const picker = document.getElementById('skinPicker');
+    const grid = document.getElementById('spGrid');
+    grid.innerHTML = '';
+    let chosen = FREE_SKINS[0];
+    FREE_SKINS.forEach(key => {
+      const s = ZCOSMETICS.ballSkins[key];
+      if (!s) return;
+      const card = document.createElement('div');
+      card.className = 'sp-card' + (key === chosen ? ' selected' : '');
+      card.dataset.skin = key;
+      const cv = buildSkinPickerCanvas(key, 52);
+      card.appendChild(cv);
+      const nm = document.createElement('div'); nm.className = 'sp-name'; nm.textContent = s.name; card.appendChild(nm);
+      const ti = document.createElement('div'); ti.className = 'sp-tier' + (s.tier === 'paid' ? ' paid' : ''); ti.textContent = s.tier === 'free' ? 'FREE' : s.tier === 'sub' ? 'KICK SUB' : 'PREMIUM'; card.appendChild(ti);
+      card.addEventListener('click', () => {
+        grid.querySelectorAll('.sp-card').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+        chosen = key;
+      });
+      grid.appendChild(card);
+    });
+    picker.style.display = 'flex';
+    document.getElementById('spConfirm').onclick = () => {
+      picker.style.display = 'none';
+      onPick(chosen);
+    };
+  }
+
   if (sess && sess.username) {
     // signed in with Kick → race as that account, no nickname needed
     _kickName = sess.username;
+    // Load saved skin prefs from session
+    if (sess.skin) _myPrefs = { skin: sess.skin, owned: ['Rainbow','Solar','Galaxy','Lava','Plasma','Void','Gold'] };
     // am I a beta tester? → render the gold founders ball. Re-send to the room if it
     // resolves after we've already joined, so others see the founders ball too.
     if (sess.kickId) {
@@ -2031,8 +2634,25 @@ if (_volEl) {
     startMusic();   // the click is the user gesture browsers require for audio
     boot();
   }
-  document.getElementById('playbtn').addEventListener('click', go);
-  nickEl.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+  function goWithSkinCheck(){
+    // Kick players who haven't picked a skin yet get the picker shown first.
+    // Non-Kick (guest) players skip straight to game.
+    if (_kickName && !(sess && sess.skin)) {
+      showSkinPicker(skinKey => {
+        _myPrefs = { skin: skinKey, owned: ['Rainbow','Solar','Galaxy','Lava','Plasma','Void','Gold'] };
+        try {
+          const s2 = JSON.parse(localStorage.getItem('zorbs_session') || 'null') || {};
+          s2.skin = skinKey;
+          localStorage.setItem('zorbs_session', JSON.stringify(s2));
+        } catch(_){}
+        go();
+      });
+    } else {
+      go();
+    }
+  }
+  document.getElementById('playbtn').addEventListener('click', goWithSkinCheck);
+  nickEl.addEventListener('keydown', e => { if (e.key === 'Enter') goWithSkinCheck(); });
 
   // OBS / overlay mode: skip the join screen and watch as a clean spectator (no own marble).
   if (_OBS) { document.body.classList.add('obs'); go(); }
