@@ -633,10 +633,13 @@ const ZFORK = (() => {
     const rPlatform = Math.max(LW * 1.3, LW * 0.9 + (N - 1) * (LW * 0.55));   // room for N track exits, spaced apart
     const rThroat = Math.max(2.2, LW * 0.14);    // small, ball-scaled -- the actual narrow point of the funnel
     const rOuter = entryNode.halfW;               // the rim is simply the approach's own width -- no seam, no overshoot
-    // Center sits AT the entry node — no forward offset. The old halfW offset pushed the
-    // cone center a full track-width ahead of where the track ends, disconnecting it visually.
-    const cx = entryNode.pos.x;
-    const cz = entryNode.pos.z;
+    // Push the cone center FORWARD by ~one rim radius so the funnel's NEAR rim lands right at
+    // the track's end node instead of the funnel being centered under the track (which made the
+    // approach overhang the hole — "track too far over"). Now the track ends at the lip and the
+    // funnel opens out ahead of it, exactly where balls roll off.
+    const _fwd = norm(v(entryNode.dir.x, 0, entryNode.dir.z));
+    const cx = entryNode.pos.x + _fwd.x * rOuter * 0.92;
+    const cz = entryNode.pos.z + _fwd.z * rOuter * 0.92;
     const yTop = entryNode.pos.y;
     // CONE_FRAC: how much of the total vertical drop the narrowing cone gets, vs. the
     // platform-widen stage at the bottom. The cone should dominate -- it's "the funnel" --
@@ -689,7 +692,10 @@ const ZFORK = (() => {
 
     // Pre-compute exit angles here so we can cut matching holes in the platform disc below.
     const mainAngForward = Math.atan2(entryNode.dir.z, entryNode.dir.x);
-    const ARC_SPAN = Math.min(2.7, 1.3 + N * 0.30);
+    // Gentler fan: a wide span made the outer branches sweep back across the center and
+    // cross each other into a tangled mess. Keep them closer to the forward direction so
+    // they run roughly parallel and rejoin cleanly.
+    const ARC_SPAN = Math.min(1.3, 0.55 + N * 0.22);
     const angStart = mainAngForward - ARC_SPAN / 2;
     const exitAngles = Array.from({ length: N }, (_, i) => N > 1 ? angStart + (i / (N - 1)) * ARC_SPAN : mainAngForward);
 
@@ -758,7 +764,7 @@ const ZFORK = (() => {
       const tubeEnd = nlist[nlist.length - 1];
       // Each branch targets a DIFFERENT node on the main track (staggered by branch index)
       // so they don't all converge to the exact same point — avoids the piled-up seam.
-      const rejoinOffset = Math.floor((i / N) * 18);   // spread across ~18 main nodes
+      const rejoinOffset = Math.floor((i / N) * 40);   // spread across ~40 main nodes so branches rejoin at distinct points
       const target = mainNodes[Math.min(mainNodes.length - 1, end - rejoinOffset)];
       // DIVERGE 65% of the track length before starting to converge — branches stay clearly
       // separate for most of their run, only pulling back in the last 35%.
