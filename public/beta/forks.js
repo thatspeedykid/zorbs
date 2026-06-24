@@ -952,8 +952,8 @@ const ZFORK = (() => {
         // WELL-FIRST: gravity wells handle balls one at a time (collider disabled during
         // the orbit), so they never cause a pile-up freeze. Sorters pack all balls into a
         // narrow throat simultaneously which can hang the Rapier solver with large fields.
-        // Use wells 85% of the time; keep sorters rare for visual variety.
-        const useWell = USE_DIVERGENT && rng() < 0.85;
+        // Wells handle balls one-at-a-time (collider off during orbit) — always use them.
+        const useWell = USE_DIVERGENT;
         const fork = useWell
           ? makeWellFork(mainNodes, at, rng, 'fork'+n, targetSteps)
           : USE_DIVERGENT
