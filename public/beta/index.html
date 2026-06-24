@@ -347,6 +347,10 @@ const statusEl = document.getElementById('nextrace');
 // commit, the problem is deployment/caching — not the code.
 const BUILD = 'v0.3';
 console.log('[ZORBS] build', BUILD);
+// DEBUG overlays (build badge + seed/lane diagnostic) only show on the /beta path. The
+// live root (playzorbs.xyz) is a clean build with no dev overlays.
+const _DEBUG = /(^|\/)beta(\/|$)/.test(location.pathname);
+if (!_DEBUG) { const _bt = document.getElementById('buildtag'); if (_bt) _bt.remove(); }
 
 // ---- MOBILE UX: mark touch devices, block pinch/double-tap zoom, wire fullscreen button ----
 (function mobileUX(){
@@ -749,7 +753,8 @@ function buildCourse(seed) {
   const trackLen = 760 + lenRng;                                  // 760..959 (longer: room for a wide fan)
   track = ZTRACK.generate(seed, trackLen, _fieldSize || 20);
   // DIAGNOSTIC: show the seed + lane count so it's obvious whether each race is a new track.
-  try {
+  // Beta-only — hidden on the live root build.
+  if (_DEBUG) try {
     let dbg = document.getElementById('seedDbg');
     if (!dbg) { dbg = document.createElement('div'); dbg.id = 'seedDbg';
       dbg.style.cssText = 'position:fixed;top:6px;right:8px;z-index:9999;font:11px monospace;color:#9fd6ff;background:rgba(0,0,0,.45);padding:3px 7px;border-radius:6px;pointer-events:none';
@@ -1325,9 +1330,11 @@ function buildCoreMaterial(skin, baseCol, accent) {
       cx.fillStyle=g2; cx.fillRect(0,0,256,1);
       const t = new THREE.CanvasTexture(c); t.wrapS = THREE.RepeatWrapping; _texCache.rainbow = t;
     }
-    return new THREE.MeshStandardMaterial({ map: _texCache.rainbow, color: 0xffffff,
-      metalness: 0.2, roughness: 0.15, emissive: accent, emissiveIntensity: 0.7,
-      envMap: _envMap || null, envMapIntensity: 1.0 });
+    // per-ball clone so each rainbow ball can scroll its bands independently
+    const rt = _texCache.rainbow.clone(); rt.wrapS = THREE.RepeatWrapping; rt.needsUpdate = true;
+    return new THREE.MeshStandardMaterial({ map: rt, color: 0xffffff,
+      metalness: 0.2, roughness: 0.15, emissive: 0xffffff, emissiveIntensity: 0.45,
+      emissiveMap: rt, envMap: _envMap || null, envMapIntensity: 1.0 });
   }
   if (style === 'solar') {
     if (!_texCache.solar) {
@@ -1845,11 +1852,13 @@ function loop(now) {
     }
     // RAINBOW STROBE: cycle hue with music beat, strobe faster on beats
     if (z.isRainbow && !z.eliminated) {
-      z._rainbowT += dt * (3.5 + sampleBeat() * 8);
-      const hue = (z._rainbowT % (Math.PI * 2)) / (Math.PI * 2);
-      z.mesh.material.emissive.setHSL(hue, 1.0, 0.5);
-      z.mesh.material.emissiveIntensity = 0.6 + sampleBeat() * 1.2;
-      if (z.ring) z.ring.material.color.setHSL(hue, 1.0, 0.55);
+      // scroll the rainbow bands so the whole ball stays multicolored and flows with the beat
+      z._rainbowT += dt * (0.25 + sampleBeat() * 0.6);
+      const off = z._rainbowT % 1;
+      if (z.mesh.material.map) z.mesh.material.map.offset.x = off;
+      if (z.mesh.material.emissiveMap) z.mesh.material.emissiveMap.offset.x = off;
+      z.mesh.material.emissiveIntensity = 0.45 + sampleBeat() * 0.6;
+      if (z.ring) z.ring.material.color.setHSL(off, 1.0, 0.55);
     }
     // SOLAR PULSE: throb emissive with beat
     if (z.isSolar && !z.eliminated) {
