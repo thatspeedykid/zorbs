@@ -71,9 +71,10 @@ const ZPHYSICS = (() => {
     balls.clear();        // stale bodies belong to a previous world — removing them
     trackBody = null;     // from a new world crashes the wasm. Fresh world, fresh refs.
     world.timestep = 1/60;             // FIXED timestep = smooth, no jitter
-    // more solver iterations = stable resting contacts (less micro-bounce)
+    // 4 iterations: enough for stable contacts, avoids the solver hanging when
+    // 20+ balls pack into a narrow sorter throat simultaneously (8 was too slow).
     if (world.integrationParameters) {
-      world.integrationParameters.numSolverIterations = 8;
+      world.integrationParameters.numSolverIterations = 4;
     }
     ready = true;
     return true;
@@ -293,6 +294,7 @@ const ZPHYSICS = (() => {
     let h = 0; for (let k = 0; k < id.length; k++) h = (h * 31 + id.charCodeAt(k)) | 0;
     const rnd = (Math.abs(h % 1000) / 1000);
     balls.set(id, {
+      _id: id,
       body,
       collider,
       hint: 0,
@@ -851,7 +853,15 @@ const ZPHYSICS = (() => {
         b.body.setLinvel({ x: v.x * s, y: v.y, z: v.z * s }, true);
       }
     }
+    // OVERRUN GUARD: skip the solver if the per-ball work already took too long.
+    // The fixedStep loop above is O(n) and fast; it's world.step() (contact resolution)
+    // that goes exponential when 20 balls pack into a narrow sorter throat.
+    const _ws0 = (typeof performance !== 'undefined') ? performance.now() : Date.now();
     world.step();
+    const _wsElapsed = ((typeof performance !== 'undefined') ? performance.now() : Date.now()) - _ws0;
+    if (_wsElapsed > 35 && typeof console !== 'undefined') {
+      console.warn('[ZPHYSICS] world.step slow: ' + _wsElapsed.toFixed(1) + 'ms (' + balls.size + ' balls)');
+    }
   }
 
   // Read all ball states - the REAL current physics position (no interpolation).

@@ -948,10 +948,11 @@ const ZFORK = (() => {
         const at = i + 16;
         const span = zEnd - at - 6;
         const targetSteps = span > 34 ? span : undefined;   // span the entire zone
-        // MIX: roughly a third of splits are the gravity well (the actual coin-funnel
-        // spiral), the rest stay the simpler flat-mouth sorter — variety race to race,
-        // per direction, rather than every split being the (more elaborate) well.
-        const useWell = USE_DIVERGENT && rng() < 0.35;
+        // WELL-FIRST: gravity wells handle balls one at a time (collider disabled during
+        // the orbit), so they never cause a pile-up freeze. Sorters pack all balls into a
+        // narrow throat simultaneously which can hang the Rapier solver with large fields.
+        // Use wells 85% of the time; keep sorters rare for visual variety.
+        const useWell = USE_DIVERGENT && rng() < 0.85;
         const fork = useWell
           ? makeWellFork(mainNodes, at, rng, 'fork'+n, targetSteps)
           : USE_DIVERGENT
