@@ -757,7 +757,7 @@ function buildCourse(seed) {
   // was a flat 1100 which felt too long. Derived from the seed, never Math.random.
   const lenRng = (Math.abs((seed * 2654435761) >>> 0) % 200);   // 0..199
   const trackLen = 760 + lenRng;                                  // 760..959 (longer: room for a wide fan)
-  track = ZTRACK.generate(seed, trackLen, _fieldSize || 20, (_cmap && _cmap.sections) || null);
+  track = ZTRACK.generate(seed, trackLen, _fieldSize || 20, _cmap || null);
   // DIAGNOSTIC: show the seed + lane count so it's obvious whether each race is a new track.
   // Beta-only — hidden on the live root build.
   if (_DEBUG) try {

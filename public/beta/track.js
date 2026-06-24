@@ -118,8 +118,10 @@ const ZTRACK = (() => {
     // so every downstream stage (mesh, physics, forks, obstacles) is untouched. We still ensure a
     // finish funnel + short runout exist so the line + photo-finish behave like a generated course.
     let plan;
-    if (Array.isArray(customPlan) && customPlan.length) {
-      plan = customPlan.map(s => Object.assign({}, s));
+    // customPlan may be a bare sections array OR the full map object {sections, obstacles}
+    const rawSections = Array.isArray(customPlan) ? customPlan : (customPlan && Array.isArray(customPlan.sections) ? customPlan.sections : null);
+    if (rawSections && rawSections.length) {
+      plan = rawSections.map(s => Object.assign({}, s));
       if (!plan.some(s => s.isFinish)) plan.push({ kind: 'funnel', len: 24, min: 0.46, isFinish: true });
       if (plan[plan.length - 1].kind !== 'straight' || plan[plan.length - 1].isFinish) plan.push({ kind: 'straight', len: 18 });
     } else {
@@ -424,8 +426,9 @@ const ZTRACK = (() => {
   // Top-level: given a seed and a target length (seconds-ish), produce everything.
   function generate(seed, lengthNodes = 700, ballCount = 20, customPlan = null) {
     // for custom maps, size the node budget to the authored plan (sum of section lengths + slack)
-    if (Array.isArray(customPlan) && customPlan.length) {
-      const sum = customPlan.reduce((s, sec) => s + (sec.len | 0), 0);
+    const _secs = Array.isArray(customPlan) ? customPlan : (customPlan && Array.isArray(customPlan.sections) ? customPlan.sections : null);
+    if (_secs && _secs.length) {
+      const sum = _secs.reduce((s, sec) => s + (sec.len | 0), 0);
       lengthNodes = Math.max(lengthNodes, sum + 120);
     }
     const nodes = buildCenterline(seed, lengthNodes, ballCount, customPlan);
@@ -776,6 +779,49 @@ const ZTRACK = (() => {
 
     const start = nodes[0];
     const finish = nodes.find(n => n.finishLine) || nodes[nodes.length - 1];
+
+    // CUSTOM MAP OBSTACLES: hand-placed obstacles from the map editor. Each has a t=0..1
+    // position along the non-platform centerline plus an optional lateral side offset (-1..1).
+    // Injected after all seeded/generated obstacles so they don't interfere with fork logic.
+    // custom obstacles — only present when customPlan is the full map object (not a bare sections array)
+    const _cobs = (!Array.isArray(customPlan) && customPlan && Array.isArray(customPlan.obstacles)) ? customPlan.obstacles : [];
+    if (_cobs.length) {
+      const trackNodes = nodes.filter(n => !n.isPlatform);
+      const tLen = trackNodes.length;
+      for (const co of _cobs) {
+        const ni = Math.max(0, Math.min(tLen - 1, Math.round((co.t || 0) * (tLen - 1))));
+        const nd = trackNodes[ni];
+        if (!nd) continue;
+        const sideF = Math.max(-0.85, Math.min(0.85, co.side || 0));
+        const off = sideF * nd.halfW;
+        const px = nd.pos.x + nd.right.x * off, py = nd.pos.y, pz = nd.pos.z + nd.right.z * off;
+        const realIdx = platStart + ni;
+        if (co.kind === 'bumper') {
+          if (!obstacles.some(o => Math.abs(o.pos.x - px) < 0.5 && Math.abs(o.pos.z - pz) < 0.5))
+            obstacles.push({ pos: {x:px, y:py, z:pz}, radius: 0.65, height: 2.8, idx: realIdx });
+        } else if (co.kind === 'spinner') {
+          spinners.push({ pos: {x:px, y:py, z:pz}, armLen: Math.min(nd.halfW * 0.6, 4.5), armHeight: 0.85,
+            rate: 2.5, dir: co.dir || 1, up: nd.up, fwd: nd.dir, idx: realIdx });
+        } else if (co.kind === 'boost') {
+          const bl = 14;
+          let ok = true;
+          for (let k = 0; k < bl && ok; k++) { if (!nodes[realIdx + k] || nodes[realIdx + k].boost) ok = false; }
+          if (ok) {
+            for (let k = 0; k < bl; k++) nodes[realIdx + k].boost = 2;
+            boosts.push({ startIdx: realIdx, endIdx: realIdx + bl - 1, side: 2 });
+          }
+        } else if (co.kind === 'launch') {
+          const ll = 6;
+          let ok = true;
+          for (let k = 0; k < ll && ok; k++) { if (!nodes[realIdx + k] || nodes[realIdx + k].boost || nodes[realIdx + k].launch) ok = false; }
+          if (ok) {
+            for (let k = 0; k < ll; k++) nodes[realIdx + k].launch = { power: 8, fwdBoost: 0.6 };
+            launchPins.push({ startIdx: realIdx, endIdx: realIdx + ll - 1, power: 8, fwdBoost: 0.6 });
+          }
+        }
+      }
+    }
+
     return { seed, nodes, mesh, collider, start, finish, boosts, obstacles, spinners, launchPins,
       platform: { startIdx: 0, endIdx: platStart },
       forks, forkAtIdx, branchMeshes, branchColliders };

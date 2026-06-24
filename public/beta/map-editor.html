@@ -8,90 +8,79 @@
   :root{
     --bg:#0a0e1a; --panel:#121829; --panel2:#0e1322; --line:#23304d;
     --txt:#dfe8ff; --dim:#7f8cad; --accent:#39c8e0; --accent2:#ff8800;
-    --good:#2ec27e; --bad:#ff4d5e;
+    --good:#2ec27e; --bad:#ff4d5e; --split:#ffcc00;
   }
-  *{box-sizing:border-box}
-  html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:var(--bg);color:var(--txt);
     font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;overflow:hidden}
-  a{color:var(--accent)}
-  .app{display:grid;grid-template-columns:240px 1fr 280px;grid-template-rows:52px 1fr;
-    height:100%;width:100%}
-  header{grid-column:1/4;display:flex;align-items:center;gap:14px;padding:0 16px;
+  .app{display:grid;grid-template-columns:220px 1fr 260px;grid-template-rows:50px 1fr;height:100%}
+
+  /* header */
+  header{grid-column:1/4;display:flex;align-items:center;gap:12px;padding:0 14px;
     background:var(--panel);border-bottom:1px solid var(--line)}
-  header h1{font-size:16px;margin:0;letter-spacing:.5px}
-  header .ver{font-size:11px;color:var(--dim);border:1px solid var(--line);
-    border-radius:20px;padding:2px 8px}
+  header h1{font-size:15px;letter-spacing:.4px}
+  header .ver{font-size:10px;color:var(--dim);border:1px solid var(--line);border-radius:20px;padding:2px 7px}
   header .sp{flex:1}
   button{font:inherit;color:var(--txt);background:#1b2540;border:1px solid var(--line);
-    border-radius:8px;padding:8px 12px;cursor:pointer;transition:.12s}
-  button:hover{border-color:var(--accent);background:#22325a}
-  button.primary{background:var(--accent);color:#04121a;border-color:var(--accent);font-weight:700}
-  button.primary:hover{filter:brightness(1.1)}
-  button.warn{background:#2a1320;border-color:#5a2030;color:#ffb3bd}
-  button:disabled{opacity:.4;cursor:not-allowed}
+    border-radius:7px;padding:7px 11px;cursor:pointer;transition:.12s}
+  button:hover:not(:disabled){border-color:var(--accent);background:#22325a}
+  button.pri{background:var(--accent);color:#04121a;border-color:var(--accent);font-weight:700}
+  button.pri:hover{filter:brightness(1.12)}
+  button.warn{background:#200f18;border-color:#5a2030;color:#ffb3bd}
+  button.danger{background:#200f18;border-color:var(--bad);color:var(--bad)}
+  button:disabled{opacity:.35;cursor:not-allowed}
 
-  /* palette */
-  aside.palette{background:var(--panel2);border-right:1px solid var(--line);overflow:auto;padding:12px}
-  aside.palette h2{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);
-    margin:14px 0 8px}
-  aside.palette h2:first-child{margin-top:0}
-  .piece{display:flex;align-items:center;gap:10px;padding:9px 10px;margin-bottom:7px;
-    background:#141b30;border:1px solid var(--line);border-radius:9px;cursor:grab;user-select:none}
-  .piece:hover{border-color:var(--accent);background:#1a2542}
-  .piece:active{cursor:grabbing}
-  .piece .ic{width:30px;height:30px;flex:none;border-radius:6px;display:grid;place-items:center}
-  .piece .nm{font-size:13px;font-weight:600}
-  .piece .ds{font-size:10px;color:var(--dim)}
-  .piece svg{width:30px;height:30px}
+  /* left palette */
+  aside.palette{background:var(--panel2);border-right:1px solid var(--line);overflow-y:auto;padding:10px 8px}
+  .pal-tabs{display:flex;gap:4px;margin-bottom:10px}
+  .pal-tab{flex:1;padding:6px;font-size:10px;letter-spacing:.5px;text-align:center;border-radius:6px;
+    background:#111826;border:1px solid var(--line);cursor:pointer;transition:.12s;color:var(--dim)}
+  .pal-tab.on{background:var(--accent);color:#04121a;border-color:var(--accent);font-weight:700}
+  .pal-section{font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--dim);
+    margin:10px 0 6px 4px}
+  .piece,.obs-item{display:flex;align-items:center;gap:8px;padding:7px 9px;margin-bottom:5px;
+    background:#141b30;border:1px solid var(--line);border-radius:8px;cursor:grab;user-select:none;
+    transition:.12s}
+  .piece:hover,.obs-item:hover{border-color:var(--accent);background:#1a2542}
+  .piece:active,.obs-item:active{cursor:grabbing}
+  .p-ic{width:28px;height:28px;flex:none;border-radius:5px;display:grid;place-items:center}
+  .p-nm{font-size:12px;font-weight:600}
+  .p-ds{font-size:9px;color:var(--dim)}
 
-  /* canvas / stage */
+  /* canvas area */
   main.stage{position:relative;overflow:hidden;background:
-    radial-gradient(1200px 600px at 50% -10%, #142036 0%, #0a0e1a 60%)}
-  canvas{position:absolute;inset:0;width:100%;height:100%}
-  .stagebar{position:absolute;left:12px;top:12px;display:flex;gap:8px;z-index:5}
-  .stagebar button{padding:6px 10px;font-size:12px}
-  .hint{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);
-    background:rgba(10,14,26,.85);border:1px solid var(--line);border-radius:20px;
-    padding:7px 16px;font-size:12px;color:var(--dim);z-index:5}
-  .valid{position:absolute;right:12px;top:12px;z-index:5;font-size:12px;
-    padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:rgba(10,14,26,.85)}
+    radial-gradient(1000px 500px at 50% -5%, #142036 0%, #0a0e1a 70%)}
+  canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+  .stagebar{position:absolute;left:10px;top:10px;display:flex;gap:6px;z-index:5}
+  .stagebar button{padding:5px 9px;font-size:11px}
+  .valid{position:absolute;right:10px;top:10px;z-index:5;font-size:11px;
+    padding:5px 11px;border-radius:7px;border:1px solid var(--line);background:rgba(10,14,26,.9)}
   .valid.ok{color:var(--good);border-color:#1d5a3e}
   .valid.bad{color:var(--bad);border-color:#5a2030}
+  .mode-hint{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);
+    background:rgba(10,14,26,.88);border:1px solid var(--line);border-radius:16px;
+    padding:5px 14px;font-size:11px;color:var(--dim);z-index:5;pointer-events:none}
 
-  /* sequence strip (bottom of stage) */
-  .strip{position:absolute;left:0;right:0;bottom:0;height:84px;background:rgba(10,14,26,.92);
-    border-top:1px solid var(--line);display:flex;gap:6px;align-items:center;padding:8px 12px;
-    overflow-x:auto;z-index:4}
-  .chip{flex:none;width:62px;height:64px;border-radius:9px;background:#141b30;
-    border:1px solid var(--line);display:flex;flex-direction:column;align-items:center;
-    justify-content:center;gap:3px;cursor:pointer;position:relative}
-  .chip.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
-  .chip .lbl{font-size:9px;color:var(--dim);text-align:center;line-height:1.1}
-  .chip svg{width:26px;height:26px}
-  .chip .x{position:absolute;top:-7px;right:-7px;width:18px;height:18px;border-radius:50%;
-    background:var(--bad);color:#fff;font-size:11px;line-height:18px;text-align:center;display:none}
-  .chip:hover .x{display:block}
-  .strip .drop{flex:none;width:8px;height:64px;border-radius:4px}
-  .strip.dragover .drop.active{background:var(--accent)}
-
-  /* properties panel */
-  aside.props{background:var(--panel2);border-left:1px solid var(--line);overflow:auto;padding:14px}
-  aside.props h2{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);margin:0 0 10px}
-  .field{margin-bottom:12px}
-  .field label{display:block;font-size:11px;color:var(--dim);margin-bottom:4px}
+  /* right props */
+  aside.props{background:var(--panel2);border-left:1px solid var(--line);overflow-y:auto;padding:12px}
+  aside.props h2{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);margin:0 0 10px}
+  .field{margin-bottom:10px}
+  .field label{display:block;font-size:10px;color:var(--dim);margin-bottom:4px}
   .field input,.field select,.field textarea{width:100%;background:#0c1120;color:var(--txt);
-    border:1px solid var(--line);border-radius:7px;padding:8px;font:inherit}
-  .field textarea{resize:vertical;min-height:54px}
-  .field .row{display:flex;align-items:center;gap:8px}
-  .field input[type=range]{flex:1}
-  .field .val{font-size:12px;color:var(--accent);min-width:38px;text-align:right}
-  .empty{color:var(--dim);font-size:12px;line-height:1.5;margin-top:10px}
-  .seg{display:flex;gap:6px;margin-bottom:12px}
-  .seg button{flex:1;padding:6px;font-size:12px}
+    border:1px solid var(--line);border-radius:6px;padding:7px;font:inherit}
+  .field textarea{resize:vertical;min-height:50px}
+  .rrow{display:flex;align-items:center;gap:6px}
+  .rrow input[type=range]{flex:1}
+  .rval{font-size:11px;color:var(--accent);min-width:36px;text-align:right}
+  .seg{display:flex;gap:5px}
+  .seg button{flex:1;padding:5px;font-size:11px}
   .seg button.on{background:var(--accent);color:#04121a;border-color:var(--accent);font-weight:700}
-  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#11203a;
-    border:1px solid var(--accent);color:var(--txt);padding:12px 20px;border-radius:10px;
-    z-index:50;opacity:0;transition:.25s;pointer-events:none}
+  .empty{color:var(--dim);font-size:11px;line-height:1.5;margin-top:8px}
+  hr.div{border:none;border-top:1px solid var(--line);margin:12px 0}
+
+  .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);
+    background:#0e1a30;border:1px solid var(--accent);color:var(--txt);
+    padding:10px 18px;border-radius:9px;z-index:99;opacity:0;transition:.22s;pointer-events:none}
   .toast.show{opacity:1}
 </style>
 </head>
@@ -101,12 +90,20 @@
     <h1>🗺️ ZORBS Map Editor</h1>
     <span class="ver">v0.4 beta</span>
     <span class="sp"></span>
-    <button id="btn-clear" class="warn">Clear</button>
-    <button id="btn-test">▶ Test Map</button>
-    <button id="btn-submit" class="primary">Submit for Review</button>
+    <button class="warn" id="btn-clear">Clear</button>
+    <button id="btn-undo">↩ Undo</button>
+    <button id="btn-test">▶ Test</button>
+    <button class="pri" id="btn-submit">Submit for Review</button>
   </header>
 
-  <aside class="palette" id="palette"></aside>
+  <aside class="palette" id="palette">
+    <div class="pal-tabs">
+      <div class="pal-tab on" id="tab-track" onclick="switchTab('track')">TRACK</div>
+      <div class="pal-tab" id="tab-obs" onclick="switchTab('obs')">OBSTACLES</div>
+    </div>
+    <div id="pal-track"></div>
+    <div id="pal-obs" style="display:none"></div>
+  </aside>
 
   <main class="stage">
     <div class="stagebar">
@@ -114,8 +111,7 @@
     </div>
     <div class="valid" id="valid">—</div>
     <canvas id="cv"></canvas>
-    <div class="hint">Drag pieces from the left onto the timeline below — they snap end-to-end into a track.</div>
-    <div class="strip" id="strip"></div>
+    <div class="mode-hint" id="mode-hint">Drag a piece onto the track · drag obstacles to reposition</div>
   </main>
 
   <aside class="props" id="props">
@@ -125,373 +121,702 @@
     <div class="field"><label>Difficulty</label>
       <div class="seg" id="m-diff">
         <button data-d="easy">Easy</button><button data-d="medium" class="on">Medium</button><button data-d="hard">Hard</button>
-      </div>
-    </div>
+      </div></div>
     <div class="field"><label>Theme</label>
       <select id="m-theme">
         <option value="">Random</option><option value="cyberCity">Cyber City</option>
         <option value="volcano">Volcano</option><option value="glacier">Glacier</option>
         <option value="neonJungle">Neon Jungle</option><option value="deepSpace">Deep Space</option>
       </select></div>
-    <hr style="border:none;border-top:1px solid var(--line);margin:16px 0">
-    <h2 id="psel-h">Selected piece</h2>
-    <div id="psel"><div class="empty">Click a piece in the timeline to tune it.</div></div>
+    <hr class="div">
+    <div id="sel-panel"><div class="empty">Click a piece or obstacle on the canvas to edit it.</div></div>
   </aside>
 </div>
 <div class="toast" id="toast"></div>
 
 <script>
 // ============================================================================
-// ZORBS MAP EDITOR — builds the same {kind,len,...} section plan the track
-// generator (public/beta/track.js) consumes. The "track" is an ordered chain
-// of pieces; each piece snaps onto the end of the previous one. A faithful 2D
-// top-down preview is computed by integrating heading yaw exactly like the
-// generator does, so what you build is what races.
+// ZORBS MAP EDITOR v0.4 — canvas-first drag-and-drop builder
+//
+// Track pieces drag from the left palette ONTO THE CANVAS — they snap to the
+// nearest insertion gap between existing sections. Obstacles also drag from
+// the palette onto the canvas and sit freely at any track position. Click any
+// piece or obstacle on the canvas to select + edit its properties on the right.
 // ============================================================================
 
-// ---- piece palette: each defines defaults + which params it exposes ----
-const PALETTE = [
-  { kind:'straight', name:'Straight',  desc:'flat run',        color:'#5b7cff', def:{len:30} },
-  { kind:'sweep',    name:'Turn',      desc:'banked curve',    color:'#39c8e0', def:{len:46,dir:1,sharp:0.06} },
-  { kind:'funnel',   name:'Funnel',    desc:'wide → narrow',   color:'#ffb020', def:{len:22,min:0.45} },
-  { kind:'narrower', name:'Narrower',  desc:'bottleneck',      color:'#ff7a45', def:{len:22,min:0.36} },
-  { kind:'moguls',   name:'Moguls',    desc:'washboard bumps', color:'#b06bff', def:{len:30} },
-  { kind:'drop',     name:'Drop',      desc:'steep descent',   color:'#2ec27e', def:{len:18,drop:1.4} },
-  { kind:'spiral',   name:'Spiral',    desc:'helix descent',   color:'#ff5db0', def:{len:36,dir:1} },
-  { kind:'tunnel',   name:'Tunnel',    desc:'enclosed run',    color:'#7f8cad', def:{len:22,dir:1} },
+// ---- PALETTE DATA ----
+const TRACK_PIECES = [
+  { kind:'straight', name:'Straight',  desc:'flat run',          color:'#5b7cff', def:{len:30} },
+  { kind:'sweep',    name:'Turn',      desc:'banked curve',      color:'#39c8e0', def:{len:40,dir:1,sharp:0.045} },
+  { kind:'funnel',   name:'Funnel',    desc:'wide → narrow',     color:'#ffb020', def:{len:22,min:0.45} },
+  { kind:'narrower', name:'Narrower',  desc:'bottleneck',        color:'#ff7a45', def:{len:20,min:0.38} },
+  { kind:'moguls',   name:'Moguls',    desc:'washboard bumps',   color:'#b06bff', def:{len:28} },
+  { kind:'drop',     name:'Drop',      desc:'steep descent',     color:'#2ec27e', def:{len:16,drop:1.2} },
+  { kind:'spiral',   name:'Spiral',    desc:'helix descent',     color:'#ff5db0', def:{len:32,dir:1} },
+  { kind:'tunnel',   name:'Tunnel',    desc:'enclosed run',      color:'#7f8cad', def:{len:20,dir:1} },
 ];
-const SPLITTABLE = ['straight'];   // pieces that can be flagged as a split-zone (multi-path)
-const byKind = k => PALETTE.find(p => p.kind === k);
+const OBS_ITEMS = [
+  { kind:'bumper',  name:'Bumper Post', desc:'cylinder ball bounces off', color:'#ff4d5e', icon:'⬡' },
+  { kind:'spinner', name:'Spinner',     desc:'rotating arm knockback',    color:'#ff8800', icon:'✳' },
+  { kind:'boost',   name:'Boost Pad',   desc:'speed burst strip',         color:'#2ec27e', icon:'▲' },
+  { kind:'launch',  name:'Launch Pin',  desc:'flings ball airborne',      color:'#aa44ff', icon:'⬆' },
+];
+const byKind = k => TRACK_PIECES.find(p => p.kind === k);
+const obsByKind = k => OBS_ITEMS.find(o => o.kind === k);
 
-// little inline SVG glyph per kind (top-down impression)
-function glyph(kind, c){
-  c = c || '#fff';
-  const s = (p) => `<svg viewBox="0 0 32 32" fill="none" stroke="${c}" stroke-width="3" stroke-linecap="round">${p}</svg>`;
+// ---- STATE ----
+let sections = [];         // {kind, len, ...params}
+let obstacles = [];        // {kind, t, side, dir}  t=0..1 along track, side=-1..1
+let selType = null;        // 'section' | 'obstacle'
+let selIdx = -1;           // index into sections[] or obstacles[]
+let difficulty = 'medium';
+let undoStack = [], redoStack = [];
+const author = (() => { try { const s=JSON.parse(localStorage.getItem('zorbs_session')||'{}'); return s.username||s.name||''; } catch(_){return '';} })();
+
+// ---- CANVAS + VIEW ----
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+let view = { panx:0, pany:0, scale:1 };
+
+// ---- PATH CACHE ---- (rebuilt on any change, used for hit-testing + rendering)
+let _path = null;
+
+const STEP = 1.3, WIDTH = 7.0;
+
+function buildPath(){
+  const pts = [];
+  const sectionStarts = [];  // pts index where each section begins (after platform)
+  let x=0, z=0, ang=0, turn=0;
+  // start platform
+  for(let i=0;i<14;i++){ z+=STEP; pts.push({x,z,w:WIDTH*1.4,kind:'platform',sIdx:-1}); }
+  for(let si=0;si<sections.length;si++){
+    sectionStarts.push(pts.length);
+    const s=sections[si], len=s.len|0;
+    let target=0;
+    if(s.kind==='sweep')  target=(s.dir||1)*(s.sharp||0.045);
+    if(s.kind==='spiral') target=(s.dir||1)*0.048;
+    if(s.kind==='tunnel') target=(s.dir||1)*0.012;
+    for(let i=0;i<len;i++){
+      turn+=(target-turn)*0.12; ang+=turn;
+      x+=Math.sin(ang)*STEP; z+=Math.cos(ang)*STEP;
+      let w=WIDTH;
+      const t=len>1?i/(len-1):0;
+      if(s.kind==='funnel')   w=WIDTH*(1-(1-(s.min||0.45))*t);
+      if(s.kind==='narrower') w=WIDTH*(t<0.5?1-(1-(s.min||0.38))*(t*2):(s.min||0.38));
+      if(s.kind==='tunnel')   w=WIDTH*0.8;
+      pts.push({x,z,w,kind:s.kind,sIdx:si,split:!!s.split});
+    }
+  }
+  // total non-platform pts count (for t mapping)
+  const platEnd = pts.findIndex(p=>p.sIdx>=0);
+  _path = {pts, sectionStarts, platEnd: platEnd<0?pts.length:platEnd};
+  return _path;
+}
+
+// ---- CANVAS COORDINATES ----
+function S2C(sx,sy){ // screen → canvas coords
+  const r=cv.getBoundingClientRect();
+  const px=(sx-r.left)*devicePixelRatio, py=(sy-r.top)*devicePixelRatio;
+  return { x:(px-view.panx)/view.scale, z:(cv.height-py-view.pany)/view.scale };
+}
+function W2S(wx,wz){ // world → screen (canvas pixels)
+  return { x:wx*view.scale+view.panx, y:cv.height-(wz*view.scale+view.pany) };
+}
+
+// ---- HIT TESTING ----
+function nearestPathPoint(wx,wz){
+  if(!_path) return null;
+  let best=-1,bestD=Infinity;
+  _path.pts.forEach((p,i)=>{
+    const d=(p.x-wx)**2+(p.z-wz)**2;
+    if(d<bestD){bestD=d;best=i;}
+  });
+  return best>=0?{idx:best,d:Math.sqrt(bestD)}:null;
+}
+
+// nearest section boundary (gap between sections): returns insert index
+function nearestInsertIdx(wx,wz){
+  if(!_path||!_path.sectionStarts.length) return 0;
+  const ss=_path.sectionStarts;
+  let best=0,bestD=Infinity;
+  // check "before section 0" boundary = end of platform
+  if(ss.length){
+    const p=_path.pts[ss[0]-1]||_path.pts[0];
+    const d=(p.x-wx)**2+(p.z-wz)**2;
+    if(d<bestD){bestD=d;best=0;}
+  }
+  for(let i=0;i<ss.length-1;i++){
+    // midpoint between end of section i and start of section i+1
+    const pa=_path.pts[ss[i+1]-1], pb=_path.pts[ss[i+1]];
+    if(!pa||!pb) continue;
+    const mx=(pa.x+pb.x)/2, mz=(pa.z+pb.z)/2;
+    const d=(mx-wx)**2+(mz-wz)**2;
+    if(d<bestD){bestD=d;best=i+1;}
+  }
+  // after last section
+  const last=_path.pts[_path.pts.length-1];
+  if(last){
+    const d=(last.x-wx)**2+(last.z-wz)**2;
+    if(d<bestD){best=ss.length;}
+  }
+  return best;
+}
+
+// convert path index to t=0..1 along track (non-platform only)
+function pathIdxToT(pi){
+  const {pts,platEnd}=_path;
+  const nonPlat=pts.length-platEnd;
+  if(nonPlat<=1) return 0;
+  return Math.max(0,Math.min(1,(pi-platEnd)/(nonPlat-1)));
+}
+
+// convert t to path index
+function tToPathIdx(t){
+  if(!_path) return 0;
+  const{pts,platEnd}=_path;
+  const nonPlat=pts.length-platEnd;
+  return platEnd+Math.round(t*(nonPlat-1));
+}
+
+// compute side offset from a canvas-space drop relative to track center
+function computeSide(wx,wz,pi){
+  if(!_path) return 0;
+  const pts=_path.pts;
+  const a=pts[pi],b=pts[Math.min(pi+1,pts.length-1)];
+  let dx=b.x-a.x,dz=b.z-a.z;const l=Math.hypot(dx,dz)||1;dx/=l;dz/=l;
+  // right normal = (dz, -dx) in x/z
+  const rx=dz,rz=-dx;
+  const dot=(wx-a.x)*rx+(wz-a.z)*rz;
+  return Math.max(-1,Math.min(1,dot/(a.w||WIDTH)));
+}
+
+// obstacle hit test: returns idx in obstacles[], or -1
+function hitObstacle(wx,wz){
+  for(let i=0;i<obstacles.length;i++){
+    const pi=tToPathIdx(obstacles[i].t);
+    if(!_path||!_path.pts[pi]) continue;
+    const p=_path.pts[pi];
+    const side=obstacles[i].side||0;
+    // rough right vector
+    const pts=_path.pts,b=pts[Math.min(pi+1,pts.length-1)];
+    let dx=b.x-p.x,dz=b.z-p.z;const l=Math.hypot(dx,dz)||1;dx/=l;dz/=l;
+    const ox=p.x+dz*side*p.w, oz=p.z-dx*side*p.w;
+    if((ox-wx)**2+(oz-wz)**2<(3.5)**2) return i;
+  }
+  return -1;
+}
+
+// section hit test: click on a section area → return section index
+function hitSection(wx,wz){
+  if(!_path) return -1;
+  const near=nearestPathPoint(wx,wz);
+  if(!near||near.d>WIDTH*2.5) return -1;
+  return _path.pts[near.idx].sIdx;
+}
+
+// ---- DRAWING ----
+function resize(){ cv.width=cv.clientWidth*devicePixelRatio; cv.height=cv.clientHeight*devicePixelRatio; draw(); }
+addEventListener('resize',resize);
+
+let _dragState=null; // for pan and obstacle drag
+
+// interaction hover state
+let _hoverInsert=-1;   // section insert index to show
+let _hoverT=-1;         // obstacle t to show when dragging from palette
+
+function draw(){
+  ctx.clearRect(0,0,cv.width,cv.height);
+  const{pts,sectionStarts,platEnd}=buildPath();
+  if(pts.length<2) return;
+
+  // compute edge normals
+  const left=[],right=[];
+  for(let i=0;i<pts.length;i++){
+    const a=pts[i],b=pts[Math.min(i+1,pts.length-1)];
+    let dx=b.x-a.x,dz=b.z-a.z;const l=Math.hypot(dx,dz)||1;dx/=l;dz/=l;
+    const nx=-dz,nz=dx;
+    left.push(W2S(a.x+nx*a.w, a.z+nz*a.w));
+    right.push(W2S(a.x-nx*a.w, a.z-nz*a.w));
+  }
+
+  // fill
+  ctx.beginPath();
+  left.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));
+  for(let i=right.length-1;i>=0;i--) ctx.lineTo(right[i].x,right[i].y);
+  ctx.closePath();
+  ctx.fillStyle='rgba(57,200,224,0.08)'; ctx.fill();
+
+  // edges — colored per section kind; split zones = gold dashes
+  function drawEdge(side){
+    for(let i=1;i<pts.length;i++){
+      const p=pts[i];
+      if(p.kind==='platform'){ ctx.strokeStyle='#1e2d4a'; ctx.lineWidth=1.5*devicePixelRatio; ctx.setLineDash([]); }
+      else if(p.split){ ctx.strokeStyle='#ffcc00'; ctx.lineWidth=2.5*devicePixelRatio; ctx.setLineDash([6,4]); }
+      else{
+        const pc=byKind(p.kind);
+        const isSelSec=(selType==='section'&&selIdx===p.sIdx);
+        ctx.strokeStyle=isSelSec?'#fff':(pc?.color||'#39c8e0');
+        ctx.lineWidth=(isSelSec?3:2)*devicePixelRatio;
+        ctx.setLineDash([]);
+      }
+      ctx.beginPath(); ctx.moveTo(side[i-1].x,side[i-1].y); ctx.lineTo(side[i].x,side[i].y); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+  }
+  drawEdge(left); drawEdge(right);
+
+  // centerline
+  ctx.strokeStyle='rgba(200,220,255,.15)'; ctx.lineWidth=devicePixelRatio; ctx.setLineDash([5,6]);
+  ctx.beginPath(); pts.forEach((p,i)=>{const s=W2S(p.x,p.z);i?ctx.lineTo(s.x,s.y):ctx.moveTo(s.x,s.y);}); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // START / FINISH markers
+  mark(W2S(pts[0].x,pts[0].z),'#2ec27e','START');
+  mark(W2S(pts[pts.length-1].x,pts[pts.length-1].z),'#ff8800','FINISH');
+
+  // section boundary tick marks
+  if(sectionStarts.length){
+    ctx.strokeStyle='rgba(255,255,255,.3)'; ctx.lineWidth=devicePixelRatio;
+    sectionStarts.forEach(si=>{
+      const p=pts[si]; if(!p) return;
+      const sl=W2S(left[si].x,left[si].y), sr=W2S(right[si].x,right[si].y);
+      ctx.beginPath(); ctx.moveTo(sl.x,sl.y); ctx.lineTo(sr.x,sr.y); ctx.stroke();
+    });
+  }
+
+  // insertion cursor
+  if(_hoverInsert>=0&&_hoverInsert<=sectionStarts.length){
+    const idx=_hoverInsert<sectionStarts.length?sectionStarts[_hoverInsert]:(pts.length-1);
+    const p=pts[Math.max(0,idx)];
+    if(p){
+      const s=W2S(p.x,p.z);
+      ctx.strokeStyle='#39c8e0'; ctx.lineWidth=2.5*devicePixelRatio;
+      ctx.beginPath(); ctx.arc(s.x,s.y,8*devicePixelRatio,0,7); ctx.stroke();
+      ctx.fillStyle='rgba(57,200,224,.25)'; ctx.fill();
+    }
+  }
+
+  // obstacle hover position (when dragging from palette)
+  if(_hoverT>=0){
+    const pi=tToPathIdx(_hoverT);
+    const p=pts[pi]; if(p){ const s=W2S(p.x,p.z);
+      ctx.strokeStyle='rgba(255,200,0,.7)'; ctx.lineWidth=2*devicePixelRatio;
+      ctx.beginPath(); ctx.arc(s.x,s.y,7*devicePixelRatio,0,7); ctx.stroke(); }
+  }
+
+  // obstacles
+  obstacles.forEach((o,i)=>{
+    const pi=tToPathIdx(o.t);
+    const p=pts[pi]; if(!p) return;
+    // place at lateral offset
+    const b=pts[Math.min(pi+1,pts.length-1)];
+    let dx=b.x-p.x,dz=b.z-p.z;const l=Math.hypot(dx,dz)||1;dx/=l;dz/=l;
+    const rx=dz*p.w*(o.side||0), rz=-dx*p.w*(o.side||0);
+    const s=W2S(p.x+rx,p.z+rz);
+    const ob=obsByKind(o.kind);
+    const r=7*devicePixelRatio;
+    const sel=(selType==='obstacle'&&selIdx===i);
+    ctx.fillStyle=sel?'#fff':(ob?.color||'#ff4d5e');
+    ctx.strokeStyle=sel?ob?.color||'#ff4d5e':'rgba(0,0,0,.5)';
+    ctx.lineWidth=sel?2.5*devicePixelRatio:1*devicePixelRatio;
+    ctx.beginPath(); ctx.arc(s.x,s.y,r,0,7); ctx.fill(); ctx.stroke();
+    ctx.fillStyle='#000'; ctx.font=`bold ${9*devicePixelRatio}px sans-serif`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(ob?.icon||'?',s.x,s.y);
+    if(sel){ ctx.strokeStyle='#fff'; ctx.lineWidth=1.5*devicePixelRatio;
+      ctx.beginPath(); ctx.arc(s.x,s.y,r+3*devicePixelRatio,0,7); ctx.stroke(); }
+  });
+}
+function mark(s,col,txt){
+  const r=5*devicePixelRatio;
+  ctx.fillStyle=col; ctx.beginPath(); ctx.arc(s.x,s.y,r,0,7); ctx.fill();
+  ctx.fillStyle=col; ctx.font=`${10*devicePixelRatio}px system-ui`;
+  ctx.textAlign='left'; ctx.textBaseline='middle';
+  ctx.fillText(txt,s.x+r+3,s.y);
+}
+
+// ---- FIT / ZOOM ----
+function fit(){
+  const pts=buildPath().pts; if(!pts.length) return;
+  let minx=1e9,maxx=-1e9,minz=1e9,maxz=-1e9;
+  pts.forEach(p=>{minx=Math.min(minx,p.x);maxx=Math.max(maxx,p.x);minz=Math.min(minz,p.z);maxz=Math.max(maxz,p.z);});
+  const pad=64*devicePixelRatio, W=cv.width, H=cv.height;
+  const sx=(W-pad*2)/Math.max(1,maxx-minx), sy=(H-pad*2)/Math.max(1,maxz-minz);
+  view.scale=Math.min(sx,sy,50*devicePixelRatio);
+  view.panx=W/2-((minx+maxx)/2)*view.scale;
+  view.pany=H/2-((minz+maxz)/2)*view.scale;
+  draw();
+}
+document.getElementById('zin').onclick=()=>{view.scale*=1.2;draw();};
+document.getElementById('zout').onclick=()=>{view.scale*=0.83;draw();};
+document.getElementById('zfit').onclick=fit;
+
+// ---- PALETTE RENDER ----
+function switchTab(t){
+  document.getElementById('tab-track').classList.toggle('on',t==='track');
+  document.getElementById('tab-obs').classList.toggle('on',t==='obs');
+  document.getElementById('pal-track').style.display=t==='track'?'':'none';
+  document.getElementById('pal-obs').style.display=t==='obs'?'':'none';
+}
+
+function glyph(kind,c){
+  c=c||'#fff';
+  const s=p=>`<svg viewBox="0 0 28 28" fill="none" stroke="${c}" stroke-width="2.5" stroke-linecap="round">${p}</svg>`;
   switch(kind){
-    case 'straight': return s('<path d="M16 3v26"/>');
-    case 'sweep':    return s('<path d="M9 4 Q26 12 14 28"/>');
-    case 'funnel':   return s('<path d="M5 4 L14 28 M27 4 L18 28"/>');
-    case 'narrower': return s('<path d="M6 4 L14 16 6 28 M26 4 L18 16 26 28"/>');
-    case 'moguls':   return s('<path d="M4 16 q4 -8 7 0 q4 8 7 0 q4 -8 7 0"/>');
-    case 'drop':     return s('<path d="M16 3v18 M9 16l7 7 7-7"/>');
-    case 'spiral':   return s('<path d="M16 16 m0 -10 a10 10 0 1 1 -7 17" /><circle cx="16" cy="16" r="3"/>');
-    case 'tunnel':   return s('<rect x="6" y="5" width="20" height="22" rx="9"/>');
-    default:         return s('<circle cx="16" cy="16" r="9"/>');
+    case'straight':return s('<path d="M14 3v22"/>');
+    case'sweep':   return s('<path d="M8 3 Q22 10 13 25"/>');
+    case'funnel':  return s('<path d="M4 3 L12 25 M24 3 L16 25"/>');
+    case'narrower':return s('<path d="M5 3 L13 14 5 25 M23 3 L15 14 23 25"/>');
+    case'moguls':  return s('<path d="M3 14 q3-7 6 0 q3 7 6 0 q3-7 6 0"/>');
+    case'drop':    return s('<path d="M14 3v16 M8 14l6 7 6-7"/>');
+    case'spiral':  return s('<path d="M14 14m0-9 a9 9 0 1 1-6 15"/><circle cx="14" cy="14" r="2.5"/>');
+    case'tunnel':  return s('<rect x="5" y="4" width="18" height="20" rx="7"/>');
+    default:       return s('<circle cx="14" cy="14" r="8"/>');
   }
 }
 
-// ---- state ----
-let sections = [];       // the authored plan
-let selIdx = -1;
-let view = { ox:0, oy:0, scale:1, panx:0, pany:0 };
-const author = (() => {
-  try { const s = JSON.parse(localStorage.getItem('zorbs_session')||'{}'); return s.username || s.name || ''; } catch(_) { return ''; }
-})();
-let difficulty = 'medium';
-
-// ---- build palette UI ----
-const paletteEl = document.getElementById('palette');
 function renderPalette(){
-  paletteEl.innerHTML = '<h2>Track pieces</h2>';
-  PALETTE.forEach(p => {
-    const d = document.createElement('div');
-    d.className = 'piece'; d.draggable = true; d.dataset.kind = p.kind;
-    d.innerHTML = `<div class="ic" style="background:${p.color}22;border:1px solid ${p.color}55">${glyph(p.kind,p.color)}</div>
-      <div><div class="nm">${p.name}</div><div class="ds">${p.desc}</div></div>`;
-    d.addEventListener('dragstart', e => { e.dataTransfer.setData('kind', p.kind); e.dataTransfer.effectAllowed='copy'; });
-    d.addEventListener('click', () => addPiece(p.kind));   // click also adds (mobile-friendly)
-    paletteEl.appendChild(d);
+  const tp=document.getElementById('pal-track');
+  tp.innerHTML='<div class="pal-section">Track Pieces</div>';
+  TRACK_PIECES.forEach(p=>{
+    const d=document.createElement('div'); d.className='piece'; d.draggable=true; d.dataset.palkind=p.kind; d.dataset.paltype='track';
+    d.innerHTML=`<div class="p-ic" style="background:${p.color}22;border:1px solid ${p.color}55">${glyph(p.kind,p.color)}</div>
+      <div><div class="p-nm">${p.name}</div><div class="p-ds">${p.desc}</div></div>`;
+    d.addEventListener('dragstart',palDragStart); d.addEventListener('click',()=>addPiece(p.kind));
+    tp.appendChild(d);
+  });
+
+  const op=document.getElementById('pal-obs');
+  op.innerHTML='<div class="pal-section">Drag onto track</div>';
+  OBS_ITEMS.forEach(o=>{
+    const d=document.createElement('div'); d.className='obs-item'; d.draggable=true; d.dataset.palkind=o.kind; d.dataset.paltype='obs';
+    d.innerHTML=`<div class="p-ic" style="background:${o.color}22;border:1px solid ${o.color}55;font-size:16px;color:${o.color}">${o.icon}</div>
+      <div><div class="p-nm">${o.name}</div><div class="p-ds">${o.desc}</div></div>`;
+    d.addEventListener('dragstart',palDragStart);
+    op.appendChild(d);
   });
 }
 renderPalette();
 
-// ---- sequence strip ----
-const stripEl = document.getElementById('strip');
-function renderStrip(){
-  stripEl.innerHTML = '';
-  sections.forEach((s, i) => {
-    const p = byKind(s.kind);
-    const chip = document.createElement('div');
-    chip.className = 'chip' + (i===selIdx ? ' sel':'');
-    chip.draggable = true; chip.dataset.idx = i;
-    chip.innerHTML = `${glyph(s.kind, p.color)}<div class="lbl">${p.name}${s.split?'<br>⑂':''}</div><div class="x">×</div>`;
-    chip.addEventListener('click', e => { if(e.target.classList.contains('x')){ removePiece(i); } else { select(i); } });
-    chip.addEventListener('dragstart', e => { e.dataTransfer.setData('reorder', String(i)); e.dataTransfer.effectAllowed='move'; });
-    stripEl.appendChild(chip);
-  });
-  if(!sections.length){
-    const e = document.createElement('div'); e.className='lbl';
-    e.style.cssText='color:var(--dim);padding:0 8px'; e.textContent='Empty — drag a piece here to start.';
-    stripEl.appendChild(e);
+// ---- DRAG FROM PALETTE → CANVAS ----
+let _palDrag = null; // {paltype, kind}
+
+function palDragStart(e){
+  _palDrag={paltype:e.currentTarget.dataset.paltype, kind:e.currentTarget.dataset.palkind};
+  e.dataTransfer.setData('paltype', _palDrag.paltype);
+  e.dataTransfer.setData('kind', _palDrag.kind);
+  e.dataTransfer.effectAllowed='copy';
+}
+
+cv.addEventListener('dragenter', e=>e.preventDefault());
+cv.addEventListener('dragover', e=>{
+  e.preventDefault();
+  const c=S2C(e.clientX,e.clientY);
+  if(!_path) buildPath();
+  if(_palDrag&&_palDrag.paltype==='track'){
+    _hoverInsert=nearestInsertIdx(c.x,c.z); _hoverT=-1;
+  } else if(_palDrag&&_palDrag.paltype==='obs'){
+    const near=nearestPathPoint(c.x,c.z);
+    _hoverT=near?pathIdxToT(near.idx):-1; _hoverInsert=-1;
+  }
+  draw();
+});
+cv.addEventListener('dragleave',()=>{ _hoverInsert=-1; _hoverT=-1; _palDrag=null; draw(); });
+cv.addEventListener('drop',e=>{
+  e.preventDefault();
+  const paltype=e.dataTransfer.getData('paltype')||(_palDrag&&_palDrag.paltype)||'';
+  const kind=e.dataTransfer.getData('kind')||(_palDrag&&_palDrag.kind)||'';
+  _hoverInsert=-1; _hoverT=-1; _palDrag=null;
+  if(!kind){ draw(); return; }
+  const c=S2C(e.clientX,e.clientY);
+  if(paltype==='track'){
+    const at=nearestInsertIdx(c.x,c.z);
+    addPiece(kind,at);
+  } else if(paltype==='obs'){
+    const near=nearestPathPoint(c.x,c.z);
+    if(near&&near.idx>=(_path.platEnd||0)){
+      const t=pathIdxToT(near.idx);
+      const side=computeSide(c.x,c.z,near.idx);
+      addObstacle(kind,t,side);
+    }
+  }
+  draw();
+});
+
+// ---- CANVAS POINTER EVENTS (pan + click-to-select + obstacle drag) ----
+let _panStart=null, _obsDragIdx=-1, _hasMoved=false;
+
+cv.addEventListener('pointerdown',e=>{
+  cv.setPointerCapture(e.pointerId);
+  _panStart={x:e.clientX,y:e.clientY,px:view.panx,py:view.pany};
+  _hasMoved=false;
+  // check obstacle hit
+  if(!_path) buildPath();
+  const c=S2C(e.clientX,e.clientY);
+  const oi=hitObstacle(c.x,c.z);
+  if(oi>=0){ _obsDragIdx=oi; select('obstacle',oi); e.stopPropagation(); }
+  else { _obsDragIdx=-1; }
+});
+cv.addEventListener('pointermove',e=>{
+  if(!_panStart) return;
+  const dx=e.clientX-_panStart.x, dy=e.clientY-_panStart.y;
+  if(Math.abs(dx)>3||Math.abs(dy)>3) _hasMoved=true;
+  if(_obsDragIdx>=0){
+    // drag obstacle to new position
+    const c=S2C(e.clientX,e.clientY);
+    if(!_path) buildPath();
+    const near=nearestPathPoint(c.x,c.z);
+    if(near&&near.idx>=(_path.platEnd||0)){
+      obstacles[_obsDragIdx].t=pathIdxToT(near.idx);
+      obstacles[_obsDragIdx].side=computeSide(c.x,c.z,near.idx);
+      draw();
+    }
+  } else if(_hasMoved&&!_obsDragIdx){
+    // pan
+    view.panx=_panStart.px+dx*devicePixelRatio;
+    view.pany=_panStart.py-dy*devicePixelRatio;
+    draw();
+  }
+});
+cv.addEventListener('pointerup',e=>{
+  if(!_hasMoved&&_panStart&&_obsDragIdx<0){
+    // click — select section or obstacle
+    if(!_path) buildPath();
+    const c=S2C(e.clientX,e.clientY);
+    const oi=hitObstacle(c.x,c.z);
+    if(oi>=0){ select('obstacle',oi); }
+    else{
+      const si=hitSection(c.x,c.z);
+      if(si>=0) select('section',si); else deselect();
+    }
+  }
+  if(_obsDragIdx>=0){ pushUndo(); _obsDragIdx=-1; }
+  _panStart=null; _hasMoved=false;
+});
+cv.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const f=e.deltaY<0?1.12:0.89;
+  view.scale=Math.max(0.05*devicePixelRatio,view.scale*f);
+  draw();
+},{passive:false});
+
+// ---- MUTATIONS ----
+function addPiece(kind,at){
+  const p=byKind(kind); if(!p) return;
+  const s=Object.assign({kind},JSON.parse(JSON.stringify(p.def)));
+  if(at==null||at>sections.length) at=sections.length;
+  sections.splice(at,0,s);
+  pushUndo(); select('section',at); refresh();
+}
+function removePiece(i){
+  sections.splice(i,1);
+  // remap obstacles t to stay in range
+  if(selType==='section'&&selIdx>=sections.length) selIdx=sections.length-1;
+  pushUndo(); if(selType==='section'&&selIdx>=sections.length) deselect(); else refresh();
+}
+function addObstacle(kind,t,side){
+  side=Math.max(-0.85,Math.min(0.85,side||0));
+  obstacles.push({kind,t,side,dir:1});
+  pushUndo(); select('obstacle',obstacles.length-1); refresh();
+}
+function removeObstacle(i){
+  obstacles.splice(i,1);
+  deselect(); pushUndo(); refresh();
+}
+
+function select(type,idx){ selType=type; selIdx=idx; renderSelPanel(); draw(); }
+function deselect(){ selType=null; selIdx=-1; renderSelPanel(); draw(); }
+
+// ---- UNDO / REDO ----
+function state(){ return JSON.stringify({sections,obstacles}); }
+function restoreState(s){ const d=JSON.parse(s); sections=d.sections; obstacles=d.obstacles; }
+function pushUndo(){ undoStack.push(state()); if(undoStack.length>60)undoStack.shift(); redoStack=[]; }
+function undo(){ if(!undoStack.length)return; redoStack.push(state()); restoreState(undoStack.pop()); deselect(); refresh(); }
+function redo(){ if(!redoStack.length)return; undoStack.push(state()); restoreState(redoStack.pop()); deselect(); refresh(); }
+document.getElementById('btn-undo').onclick=undo;
+addEventListener('keydown',e=>{
+  if((e.ctrlKey||e.metaKey)&&!e.shiftKey&&e.key==='z'){e.preventDefault();undo();}
+  if((e.ctrlKey||e.metaKey)&&(e.shiftKey&&e.key==='z'||e.key==='y')){e.preventDefault();redo();}
+  if((e.key==='Delete'||e.key==='Backspace')&&document.activeElement.tagName!=='INPUT'&&document.activeElement.tagName!=='TEXTAREA'){
+    if(selType==='section'&&selIdx>=0) removePiece(selIdx);
+    else if(selType==='obstacle'&&selIdx>=0) removeObstacle(selIdx);
+  }
+});
+
+// ---- SELECTED PIECE PROPERTIES PANEL ----
+const selPanel=document.getElementById('sel-panel');
+function renderSelPanel(){
+  if(!selType||selIdx<0){
+    selPanel.innerHTML='<div class="empty">Click a piece or obstacle on the canvas to edit it.</div>';
+    return;
+  }
+  if(selType==='section'){
+    const s=sections[selIdx]; if(!s){selPanel.innerHTML='';return;}
+    const p=byKind(s.kind);
+    let h=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <div class="p-ic" style="width:30px;height:30px;background:${p.color}22;border:1px solid ${p.color}55">${glyph(s.kind,p.color)}</div>
+      <div><div style="font-weight:700">${p.name}</div><div style="font-size:10px;color:var(--dim)">piece ${selIdx+1}/${sections.length}</div></div></div>`;
+    h+=slider('Length','len',s.len,6,120,1);
+    if('sharp' in s) h+=slider('Sharpness','sharp',s.sharp,0.02,0.10,0.005);
+    if('min'   in s) h+=slider('Throat width','min',s.min,0.25,0.85,0.01);
+    if('drop'  in s) h+=slider('Steepness','drop',s.drop,0.4,3,0.1);
+    if('dir'   in s) h+=dirseg(s.dir);
+    if(s.kind==='straight') h+=splitseg(!!s.split);
+    h+=`<button class="danger" style="width:100%;margin-top:8px" onclick="removePiece(${selIdx})">Delete piece</button>`;
+    selPanel.innerHTML=h;
+    selPanel.querySelectorAll('input[type=range]').forEach(r=>{
+      r.addEventListener('input',()=>{
+        sections[selIdx][r.dataset.k]=parseFloat(r.value);
+        r.parentElement.querySelector('.rval').textContent=fmt(r.dataset.k,r.value);
+        draw(); validate();
+      });
+      r.addEventListener('change',pushUndo);
+    });
+    const ds=selPanel.querySelector('#dirseg');
+    if(ds) ds.querySelectorAll('button').forEach(b=>b.onclick=()=>{ sections[selIdx].dir=+b.dataset.v; pushUndo(); refresh(); });
+    const ss=selPanel.querySelector('#splitseg');
+    if(ss) ss.querySelectorAll('button').forEach(b=>b.onclick=()=>{
+      if(+b.dataset.v) sections[selIdx].split=true; else delete sections[selIdx].split;
+      pushUndo(); refresh();
+    });
+  } else if(selType==='obstacle'){
+    const o=obstacles[selIdx]; if(!o){selPanel.innerHTML='';return;}
+    const ob=obsByKind(o.kind);
+    let h=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <div class="p-ic" style="width:30px;height:30px;background:${ob.color}22;border:1px solid ${ob.color}55;font-size:16px;color:${ob.color};display:grid;place-items:center">${ob.icon}</div>
+      <div><div style="font-weight:700">${ob.name}</div><div style="font-size:10px;color:var(--dim)">obstacle ${selIdx+1}/${obstacles.length}</div></div></div>`;
+    h+=slider('Track position','t',o.t,0,1,0.01);
+    h+=slider('Side offset','side',o.side||0,-1,1,0.05);
+    if(o.kind==='spinner') h+=`<div class="field"><label>Spin direction</label><div class="seg" id="obsdirseg">
+      <button data-v="-1" class="${(o.dir||1)<0?'on':''}">◀ Left</button><button data-v="1" class="${(o.dir||1)>0?'on':''}">Right ▶</button></div></div>`;
+    h+=`<button class="danger" style="width:100%;margin-top:8px" onclick="removeObstacle(${selIdx})">Delete obstacle</button>`;
+    selPanel.innerHTML=h;
+    selPanel.querySelectorAll('input[type=range]').forEach(r=>{
+      r.addEventListener('input',()=>{
+        obstacles[selIdx][r.dataset.k]=parseFloat(r.value);
+        r.parentElement.querySelector('.rval').textContent=fmt(r.dataset.k,r.value);
+        draw(); validate();
+      });
+      r.addEventListener('change',pushUndo);
+    });
+    const ds=selPanel.querySelector('#obsdirseg');
+    if(ds) ds.querySelectorAll('button').forEach(b=>b.onclick=()=>{ obstacles[selIdx].dir=+b.dataset.v; pushUndo(); refresh(); });
   }
 }
-// strip is a drop target for both new pieces and reorders
-stripEl.addEventListener('dragover', e => { e.preventDefault(); stripEl.classList.add('dragover'); });
-stripEl.addEventListener('dragleave', () => stripEl.classList.remove('dragover'));
-stripEl.addEventListener('drop', e => {
-  e.preventDefault(); stripEl.classList.remove('dragover');
-  const kind = e.dataTransfer.getData('kind');
-  const reorder = e.dataTransfer.getData('reorder');
-  const at = dropIndex(e.clientX);
-  if(kind){ addPiece(kind, at); }
-  else if(reorder!==''){ movePiece(+reorder, at); }
-});
-function dropIndex(clientX){
-  const chips = [...stripEl.querySelectorAll('.chip')];
-  for(let i=0;i<chips.length;i++){ const r=chips[i].getBoundingClientRect(); if(clientX < r.left+r.width/2) return i; }
-  return chips.length;
-}
-
-// ---- mutations ----
-function addPiece(kind, at){
-  const p = byKind(kind); if(!p) return;
-  const s = Object.assign({kind}, JSON.parse(JSON.stringify(p.def)));
-  if(at==null||at>sections.length) at = sections.length;
-  sections.splice(at, 0, s);
-  pushUndo(); selIdx = at; refresh();
-}
-function removePiece(i){ sections.splice(i,1); if(selIdx>=sections.length) selIdx=sections.length-1; pushUndo(); refresh(); }
-function movePiece(from, to){
-  const [s] = sections.splice(from,1);
-  if(from < to) to--;
-  sections.splice(to,0,s); selIdx = to; pushUndo(); refresh();
-}
-function select(i){ selIdx = i; renderStrip(); renderProps(); }
-
-// ---- undo/redo ----
-let undoStack=[], redoStack=[];
-function pushUndo(){ undoStack.push(JSON.stringify(sections)); if(undoStack.length>50)undoStack.shift(); redoStack=[]; }
-function undo(){ if(!undoStack.length)return; redoStack.push(JSON.stringify(sections)); sections=JSON.parse(undoStack.pop()); selIdx=Math.min(selIdx,sections.length-1); refresh(); }
-function redo(){ if(!redoStack.length)return; undoStack.push(JSON.stringify(sections)); sections=JSON.parse(redoStack.pop()); refresh(); }
-addEventListener('keydown', e => {
-  if((e.ctrlKey||e.metaKey)&&e.key==='z'){ e.preventDefault(); e.shiftKey?redo():undo(); }
-  if((e.ctrlKey||e.metaKey)&&e.key==='y'){ e.preventDefault(); redo(); }
-  if((e.key==='Delete'||e.key==='Backspace')&&selIdx>=0&&document.activeElement.tagName!=='INPUT'&&document.activeElement.tagName!=='TEXTAREA'){ removePiece(selIdx); }
-});
-
-// ---- properties panel ----
-const pselEl = document.getElementById('psel');
-function renderProps(){
-  if(selIdx<0||!sections[selIdx]){ pselEl.innerHTML='<div class="empty">Click a piece in the timeline to tune it.</div>'; return; }
-  const s = sections[selIdx], p = byKind(s.kind);
-  let h = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-    <div class="ic" style="width:34px;height:34px;border-radius:7px;background:${p.color}22;border:1px solid ${p.color}55;display:grid;place-items:center">${glyph(s.kind,p.color)}</div>
-    <div><div style="font-weight:700">${p.name}</div><div style="font-size:11px;color:var(--dim)">piece ${selIdx+1} of ${sections.length}</div></div></div>`;
-  h += slider('Length', 'len', s.len, 6, 120, 1);
-  if('sharp' in s) h += slider('Sharpness', 'sharp', s.sharp, 0.02, 0.12, 0.005);
-  if('min'   in s) h += slider('Throat width', 'min', s.min, 0.25, 0.85, 0.01);
-  if('drop'  in s) h += slider('Steepness', 'drop', s.drop, 0.5, 3, 0.1);
-  if('dir'   in s) h += `<div class="field"><label>Direction</label><div class="seg" id="dirseg">
-      <button data-v="-1" class="${s.dir<0?'on':''}">◀ Left</button><button data-v="1" class="${s.dir>0?'on':''}">Right ▶</button></div></div>`;
-  if(SPLITTABLE.includes(s.kind))
-    h += `<div class="field"><label>Split zone (multiple paths)</label><div class="seg" id="splitseg">
-      <button data-v="0" class="${!s.split?'on':''}">Single</button><button data-v="1" class="${s.split?'on':''}">⑂ Split</button></div></div>`;
-  h += `<button class="warn" style="width:100%;margin-top:6px" onclick="removePiece(${selIdx})">Delete piece</button>`;
-  pselEl.innerHTML = h;
-  pselEl.querySelectorAll('input[type=range]').forEach(inp => {
-    inp.addEventListener('input', () => {
-      sections[selIdx][inp.dataset.k] = parseFloat(inp.value);
-      inp.parentElement.querySelector('.val').textContent = fmt(inp.dataset.k, inp.value);
-      draw(); validate();
-    });
-    inp.addEventListener('change', pushUndo);
-  });
-  const dseg = pselEl.querySelector('#dirseg');
-  if(dseg) dseg.querySelectorAll('button').forEach(b=>b.onclick=()=>{ sections[selIdx].dir=+b.dataset.v; pushUndo(); refresh(); });
-  const sseg = pselEl.querySelector('#splitseg');
-  if(sseg) sseg.querySelectorAll('button').forEach(b=>b.onclick=()=>{ if(+b.dataset.v) sections[selIdx].split=true; else delete sections[selIdx].split; pushUndo(); refresh(); });
-}
-function fmt(k,v){ return (k==='len')? (v|0) : (+v).toFixed(2); }
 function slider(label,key,val,min,max,step){
-  return `<div class="field"><label>${label}</label><div class="row">
+  return `<div class="field"><label>${label}</label><div class="rrow">
     <input type="range" data-k="${key}" min="${min}" max="${max}" step="${step}" value="${val}">
-    <span class="val">${fmt(key,val)}</span></div></div>`;
+    <span class="rval">${fmt(key,val)}</span></div></div>`;
+}
+function fmt(k,v){ return k==='len'?String(v|0):(+v).toFixed(k==='t'||k==='side'||k==='min'||k==='sharp'?2:1); }
+function dirseg(dir){
+  return `<div class="field"><label>Direction</label><div class="seg" id="dirseg">
+    <button data-v="-1" class="${dir<0?'on':''}">◀ Left</button>
+    <button data-v="1" class="${dir>0?'on':''}">Right ▶</button></div></div>`;
+}
+function splitseg(split){
+  return `<div class="field"><label>Split zone (two paths rejoin)</label><div class="seg" id="splitseg">
+    <button data-v="0" class="${!split?'on':''}">Single path</button>
+    <button data-v="1" class="${split?'on':''}">⑂ Split</button></div></div>`;
 }
 
-// difficulty seg
+// difficulty buttons
 document.getElementById('m-diff').querySelectorAll('button').forEach(b=>b.onclick=()=>{
   difficulty=b.dataset.d;
   document.getElementById('m-diff').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));
 });
 
-// ============================================================================
-// 2D PREVIEW — integrate the centerline top-down, mirroring track.js heading
-// math: each section sets a target yaw rate + width behaviour; we step it.
-// ============================================================================
-const STEP = 1.3, WIDTH = 7.0;
-function buildPath(){
-  const pts = [];
-  let x=0, z=0, ang=0;          // ang = heading yaw (0 = +z / up-screen)
-  let turn=0;
-  // start platform
-  for(let i=0;i<14;i++){ z+=STEP; pts.push({x,z,w:WIDTH*1.4,kind:'platform'}); }
-  for(const s of sections){
-    let target=0, len=s.len|0;
-    if(s.kind==='sweep')   target = (s.dir||1) * (s.sharp||0.05);
-    if(s.kind==='spiral')  target = (s.dir||1) * 0.05;
-    if(s.kind==='tunnel')  target = (s.dir||1) * 0.012;
-    for(let i=0;i<len;i++){
-      turn += (target - turn)*0.12;
-      ang += turn;
-      x += Math.sin(ang)*STEP; z += Math.cos(ang)*STEP;
-      let w = WIDTH;
-      const t = len>1? i/(len-1):0;
-      if(s.kind==='funnel')   w = WIDTH*(1 - (1-(s.min||0.45))*t);
-      if(s.kind==='narrower') w = WIDTH*( t<0.5 ? 1-(1-(s.min||0.36))*(t*2) : (s.min||0.36) );
-      if(s.kind==='tunnel')   w = WIDTH*0.8;
-      pts.push({x,z,w,kind:s.kind,split:s.split});
-    }
-  }
-  return pts;
-}
-
-const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
-function resize(){ cv.width = cv.clientWidth*devicePixelRatio; cv.height = cv.clientHeight*devicePixelRatio; draw(); }
-addEventListener('resize', resize);
-
-function fit(){
-  const pts = buildPath(); if(!pts.length) return;
-  let minx=1e9,maxx=-1e9,minz=1e9,maxz=-1e9;
-  pts.forEach(p=>{ minx=Math.min(minx,p.x);maxx=Math.max(maxx,p.x);minz=Math.min(minz,p.z);maxz=Math.max(maxz,p.z); });
-  const pad=60, W=cv.width, H=cv.height-84*devicePixelRatio;
-  const sx=(W-pad*2)/Math.max(1,(maxx-minx)), sy=(H-pad*2)/Math.max(1,(maxz-minz));
-  view.scale = Math.min(sx,sy,40*devicePixelRatio);
-  view.panx = W/2 - ((minx+maxx)/2)*view.scale;
-  view.pany = (H/2 + 20) - ((minz+maxz)/2)*view.scale;
-  draw();
-}
-function W2S(p){ return { x: p.x*view.scale + view.panx, y: cv.height - (p.z*view.scale + view.pany) }; }
-
-function draw(){
-  ctx.clearRect(0,0,cv.width,cv.height);
-  // grid
-  ctx.strokeStyle='#16203a'; ctx.lineWidth=1;
-  const g=40*view.scale/ (40*devicePixelRatio) * devicePixelRatio;
-  // (simple faint grid)
-  const pts = buildPath();
-  if(pts.length<2){ return; }
-  // track ribbon
-  const left=[], right=[];
-  for(let i=0;i<pts.length;i++){
-    const a=pts[i], b=pts[Math.min(i+1,pts.length-1)];
-    let dx=b.x-a.x, dz=b.z-a.z; const l=Math.hypot(dx,dz)||1; dx/=l; dz/=l;
-    const nx=-dz, nz=dx;       // left normal
-    left.push(W2S({x:a.x+nx*a.w, z:a.z+nz*a.w}));
-    right.push(W2S({x:a.x-nx*a.w, z:a.z-nz*a.w}));
-  }
-  ctx.beginPath();
-  left.forEach((p,i)=> i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));
-  for(let i=right.length-1;i>=0;i--) ctx.lineTo(right[i].x,right[i].y);
-  ctx.closePath();
-  ctx.fillStyle='rgba(57,200,224,0.10)'; ctx.fill();
-  // edges colored per piece
-  function edge(side){
-    for(let i=1;i<pts.length;i++){
-      const p = pts[i]; const col = p.kind==='platform' ? '#2a3a5e' : (byKind(p.kind)?.color || '#39c8e0');
-      ctx.strokeStyle = col; ctx.lineWidth = (p.split?3:2)*devicePixelRatio;
-      ctx.beginPath(); ctx.moveTo(side[i-1].x,side[i-1].y); ctx.lineTo(side[i].x,side[i].y); ctx.stroke();
-    }
-  }
-  edge(left); edge(right);
-  // centerline
-  ctx.strokeStyle='rgba(223,232,255,.25)'; ctx.lineWidth=1*devicePixelRatio; ctx.setLineDash([6,6]);
-  ctx.beginPath(); pts.forEach((p,i)=>{ const s=W2S(p); i?ctx.lineTo(s.x,s.y):ctx.moveTo(s.x,s.y); }); ctx.stroke();
-  ctx.setLineDash([]);
-  // start (green) + finish (orange) markers
-  mark(W2S(pts[0]), '#2ec27e', 'START');
-  mark(W2S(pts[pts.length-1]), '#ff8800', 'FINISH');
-}
-function mark(s,col,txt){
-  ctx.fillStyle=col; ctx.beginPath(); ctx.arc(s.x,s.y,6*devicePixelRatio,0,7); ctx.fill();
-  ctx.fillStyle=col; ctx.font=`${11*devicePixelRatio}px system-ui`; ctx.fillText(txt, s.x+9*devicePixelRatio, s.y+4*devicePixelRatio);
-}
-
-// pan + zoom
-let drag=null;
-cv.addEventListener('pointerdown', e=>{ drag={x:e.clientX,y:e.clientY,px:view.panx,py:view.pany}; });
-addEventListener('pointermove', e=>{ if(!drag)return; view.panx=drag.px+(e.clientX-drag.x)*devicePixelRatio; view.pany=drag.py-(e.clientY-drag.y)*devicePixelRatio; draw(); });
-addEventListener('pointerup', ()=>drag=null);
-cv.addEventListener('wheel', e=>{ e.preventDefault(); const f=e.deltaY<0?1.1:0.9; view.scale*=f; draw(); }, {passive:false});
-document.getElementById('zin').onclick =()=>{ view.scale*=1.2; draw(); };
-document.getElementById('zout').onclick=()=>{ view.scale*=0.83; draw(); };
-document.getElementById('zfit').onclick = fit;
-
-// ---- validation ----
+// ---- VALIDATION ----
 function validate(){
-  const v = document.getElementById('valid');
-  const total = sections.reduce((a,s)=>a+(s.len|0),0);
-  const probs = [];
+  const el=document.getElementById('valid');
+  const total=sections.reduce((a,s)=>a+(s.len|0),0);
+  const probs=[];
   if(sections.length<3) probs.push('add at least 3 pieces');
   if(total<120) probs.push('track too short');
-  if(total>1600) probs.push('track too long');
-  // no two heavy bottlenecks back to back
+  if(total>2000) probs.push('track too long');
+  const splits=sections.filter(s=>s.split);
+  if(splits.length>1) probs.push('only one split zone allowed');
+  if(splits.length&&splits[0].len<60) probs.push('split zone must be length ≥60');
   for(let i=1;i<sections.length;i++){
     const heavy=k=>['funnel','narrower','drop'].includes(k);
-    if(heavy(sections[i].kind)&&heavy(sections[i-1].kind)) { probs.push('two bottlenecks in a row'); break; }
+    if(heavy(sections[i].kind)&&heavy(sections[i-1].kind)){probs.push('two bottlenecks in a row');break;}
   }
-  const ok = probs.length===0;
-  v.className = 'valid ' + (ok?'ok':'bad');
-  v.textContent = ok ? `✓ Ready · ${sections.length} pieces · ~${(total*1.3/10|0)}s` : '⚠ ' + probs[0];
-  document.getElementById('btn-submit').disabled = !ok;
-  document.getElementById('btn-test').disabled = sections.length<2;
+  const ok=probs.length===0;
+  el.className='valid '+(ok?'ok':'bad');
+  el.textContent=ok?`✓ ${sections.length} pieces · ~${Math.round(total*1.3/10)}s`:'⚠ '+probs[0];
+  document.getElementById('btn-submit').disabled=!ok;
+  document.getElementById('btn-test').disabled=sections.length<2;
   return ok;
 }
 
-function refresh(){ renderStrip(); renderProps(); draw(); validate(); }
+// ---- REFRESH ----
+function refresh(){ validate(); renderSelPanel(); draw(); }
 
-// ---- toast ----
-let toastT;
-function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),2600); }
+// ---- TOAST ----
+let _toastT;
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(_toastT); _toastT=setTimeout(()=>t.classList.remove('show'),2800); }
 
-// ---- current map object ----
+// ---- MAP DATA ----
 function currentMap(){
   return {
-    name: document.getElementById('m-name').value.trim() || 'Untitled Track',
-    description: document.getElementById('m-desc').value.trim(),
-    difficulty, theme: document.getElementById('m-theme').value,
-    author: author || 'anon',
-    sections: JSON.parse(JSON.stringify(sections)),
+    name:document.getElementById('m-name').value.trim()||'Untitled Track',
+    description:document.getElementById('m-desc').value.trim(),
+    difficulty, theme:document.getElementById('m-theme').value,
+    author:author||'anon',
+    sections:JSON.parse(JSON.stringify(sections)),
+    obstacles:JSON.parse(JSON.stringify(obstacles)),
   };
 }
 
-// ---- TEST: stash the plan and open the game in custom-map preview mode ----
-document.getElementById('btn-test').onclick = ()=>{
+// ---- TEST ----
+document.getElementById('btn-test').onclick=()=>{
   if(sections.length<2) return;
-  try { sessionStorage.setItem('zorbs_testmap', JSON.stringify(currentMap())); } catch(_){}
-  window.open('/beta/?map=test', '_blank');
+  try{sessionStorage.setItem('zorbs_testmap',JSON.stringify(currentMap()));}catch(_){}
+  window.open('/beta/?map=test','_blank');
 };
 
 // ---- SUBMIT ----
-document.getElementById('btn-submit').onclick = async ()=>{
+document.getElementById('btn-submit').onclick=async()=>{
   if(!validate()) return;
-  if(!author){ toast('Sign in on the dashboard first so we can credit your track.'); }
-  const btn = document.getElementById('btn-submit'); btn.disabled=true; btn.textContent='Submitting…';
-  try {
-    const r = await fetch('/api/maps', { method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ action:'submit', map: currentMap() }) });
-    const j = await r.json().catch(()=>({}));
-    if(j && j.ok){ toast('✓ Submitted! An admin will review it soon.'); }
-    else toast('Submit failed: ' + (j&&j.error||'try again'));
-  } catch(e){ toast('Network error — try again.'); }
+  if(!author){toast('Sign in on the dashboard first so we can credit your track.');return;}
+  const btn=document.getElementById('btn-submit'); btn.disabled=true; btn.textContent='Submitting…';
+  try{
+    const r=await fetch('/api/maps',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'submit',map:currentMap()})});
+    const j=await r.json().catch(()=>({}));
+    if(j&&j.ok) toast('✓ Submitted! An admin will review it soon.');
+    else toast('Submit failed: '+(j&&j.error||'try again'));
+  }catch(e){toast('Network error — try again.');}
   btn.textContent='Submit for Review'; btn.disabled=false; validate();
 };
 
-document.getElementById('btn-clear').onclick = ()=>{ if(confirm('Clear the whole track?')){ sections=[]; selIdx=-1; pushUndo(); refresh(); fit(); } };
+// ---- CLEAR ----
+document.getElementById('btn-clear').onclick=()=>{
+  if(!sections.length&&!obstacles.length) return;
+  if(confirm('Clear the whole track?')){sections=[];obstacles=[];deselect();pushUndo();fit();refresh();}
+};
 
-// ---- seed a starter track so the canvas isn't empty ----
+// ---- STARTER TRACK ---- (gentle S-curve track, no spirals, so default state is clean)
 function seedStarter(){
-  sections = [
-    {kind:'straight',len:26},
-    {kind:'sweep',len:46,dir:1,sharp:0.06},
-    {kind:'funnel',len:22,min:0.45},
-    {kind:'straight',len:30,split:true},
-    {kind:'moguls',len:28},
-    {kind:'sweep',len:44,dir:-1,sharp:0.07},
-    {kind:'narrower',len:20,min:0.4},
+  sections=[
+    {kind:'straight',  len:28},
+    {kind:'sweep',     len:38, dir:1,  sharp:0.038},
+    {kind:'funnel',    len:20, min:0.48},
+    {kind:'straight',  len:80, split:true},
+    {kind:'sweep',     len:36, dir:-1, sharp:0.035},
+    {kind:'moguls',    len:26},
+    {kind:'narrower',  len:20, min:0.40},
+    {kind:'sweep',     len:34, dir:1,  sharp:0.042},
+    {kind:'drop',      len:16, drop:1.1},
+  ];
+  obstacles=[
+    {kind:'bumper', t:0.38, side:0.5,  dir:1},
+    {kind:'bumper', t:0.38, side:-0.5, dir:1},
+    {kind:'spinner',t:0.62, side:0,    dir:1},
+    {kind:'boost',  t:0.78, side:0,    dir:1},
   ];
 }
 seedStarter();
-resize(); fit(); refresh();
+resize(); setTimeout(fit,50); refresh();
 </script>
 </body>
 </html>

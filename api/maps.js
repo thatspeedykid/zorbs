@@ -83,11 +83,25 @@ function sanitizeSection(s) {
   return out;
 }
 
+const OBSTACLE_KINDS = ['bumper', 'spinner', 'boost', 'launch'];
+function sanitizeObstacle(o) {
+  if (!o || typeof o !== 'object') return null;
+  if (!OBSTACLE_KINDS.includes(o.kind)) return null;
+  return {
+    kind: o.kind,
+    t: Math.max(0, Math.min(1, +o.t || 0)),
+    side: Math.max(-1, Math.min(1, +o.side || 0)),
+    dir: o.dir < 0 ? -1 : 1,
+  };
+}
+
 function sanitizeMap(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const sections = Array.isArray(raw.sections)
     ? raw.sections.map(sanitizeSection).filter(Boolean).slice(0, 80) : [];
   if (sections.length < 2) return null;   // too short to be a real course
+  const obstacles = Array.isArray(raw.obstacles)
+    ? raw.obstacles.map(sanitizeObstacle).filter(Boolean).slice(0, 60) : [];
   return {
     name: clean(raw.name, 40) || 'Untitled Track',
     author: clean(raw.author, 24) || 'anon',
@@ -95,7 +109,7 @@ function sanitizeMap(raw) {
     description: clean(raw.description, 140),
     theme: clean(raw.theme, 20),
     tags: Array.isArray(raw.tags) ? raw.tags.slice(0, 6).map(t => clean(t, 16)) : [],
-    sections,
+    sections, obstacles,
   };
 }
 
