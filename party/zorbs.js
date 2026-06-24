@@ -46,7 +46,7 @@ export default class ZorbsRoom {
     const chat = [];
     for (const c of this.chatPlayers.values()) {
       if (seen.has(c.name.toLowerCase())) continue;
-      chat.push({ id: 'chat:' + c.name, name: c.name, platform: 'kick', founder: false, isSub: !!c.isSub });
+      chat.push({ id: 'chat:' + c.name, name: c.name, platform: 'kick', founder: false, isSub: !!c.isSub, skin: c.skin || null });
     }
     return browser.concat(chat);
   }
@@ -79,7 +79,9 @@ export default class ZorbsRoom {
       }
       const prev = this.players.get(sender.id);
       const founder = !!m.founder || !!(prev && prev.founder);
-      this.players.set(sender.id, { id: sender.id, name, platform, founder });
+      // ball skin — sanitized to a short key so every client renders this player the same way.
+      const skin = (typeof m.skin === 'string') ? m.skin.slice(0, 16).replace(/[^a-z0-9_-]/gi, '') : ((prev && prev.skin) || null);
+      this.players.set(sender.id, { id: sender.id, name, platform, founder, skin });
       this.broadcastPlayers();
 
     } else if (m.type === 'boost') {

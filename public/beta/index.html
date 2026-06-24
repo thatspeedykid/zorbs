@@ -2166,6 +2166,9 @@ function mpBots(seed){ const a=[]; let s=seed>>>0; for(let i=0;i<MP_FIELD;i++){ 
 const BOT_SKINS = ['chrome','galaxy','lava','glass','marble','crystal','phantom','rainbow','solar'];
 const ALL_OWNED = ['Rainbow','Solar','Galaxy','Lava','Chrome','Glass','Crystal','Phantom','Marble'];
 function botPrefs(name){ let h=0; for(let i=0;i<name.length;i++) h=(Math.imul(h,31)+name.charCodeAt(i))>>>0; return { skin: BOT_SKINS[h % BOT_SKINS.length], owned: ALL_OWNED }; }
+// Build render prefs from a skin key the server relayed for another player. owned=ALL_OWNED so
+// the chosen skin always resolves (entitlement was already enforced when they picked it).
+function prefsFromSkin(skin){ return (skin && typeof skin === 'string') ? { skin, owned: ALL_OWNED } : {}; }
 
 function runMultiplayer(){
   const params = new URLSearchParams(location.search);
@@ -2218,7 +2221,7 @@ function runMultiplayer(){
   function runMpRace(race){
     const names = []; const used = new Set();
     const cap = _PRIVATE ? 16 : MP_FIELD;   // private lobbies fit more chat (!play) racers
-    for (const p of roster.slice(0, cap)) { if(used.has(p.name)) continue; const isMe = p.name === _joinName; names.push({ id:p.name, isSub:!!p.isSub || isMe && !!_myPrefs.skin, prefs: isMe ? _myPrefs : {}, platform: p.platform || 'guest', founder: !!p.founder }); used.add(p.name); }
+    for (const p of roster.slice(0, cap)) { if(used.has(p.name)) continue; const isMe = p.name === _joinName; const prefs = isMe ? _myPrefs : prefsFromSkin(p.skin); names.push({ id:p.name, isSub:!!p.isSub || !!prefs.skin, prefs, platform: p.platform || 'guest', founder: !!p.founder }); used.add(p.name); }
     const bots = mpBots(race.seed); let bi = 0;
     while (names.length < MP_FIELD) { let bn = bots[bi++ % bots.length]; while(used.has(bn)) bn += '·'; used.add(bn); names.push({ id:bn, isSub:true, prefs:botPrefs(bn), platform:'bot' }); }
     startRace(race.seed, names);
@@ -2269,7 +2272,7 @@ function runMultiplayer(){
     } else {
       // host-started normal race: live roster + bots to fill the field
       const cap = _PRIVATE ? 16 : MP_FIELD;
-      for (const p of roster.slice(0, cap)){ if(used.has(p.name)) continue; names.push({ id:p.name, isSub:!!p.isSub, prefs:{}, platform:p.platform||'guest', founder:!!p.founder }); used.add(p.name); }
+      for (const p of roster.slice(0, cap)){ if(used.has(p.name)) continue; const isMe = p.name === _joinName; const prefs = isMe ? _myPrefs : prefsFromSkin(p.skin); names.push({ id:p.name, isSub:!!p.isSub || !!prefs.skin, prefs, platform:p.platform||'guest', founder:!!p.founder }); used.add(p.name); }
       const bots = mpBots(seed); let bi=0;
       while (names.length < MP_FIELD){ let bn=bots[bi++%bots.length]; while(used.has(bn)) bn+='·'; used.add(bn); names.push({ id:bn, isSub:true, prefs:botPrefs(bn), platform:'bot' }); }
     }
@@ -2308,7 +2311,7 @@ function runMultiplayer(){
   function connect(){
     try { ws = new WebSocket('wss://' + MP_HOST + '/parties/main/' + MP_ROOM); _mpWS = ws; }
     catch(e){ ZLOG.report('manual','mp ws ctor failed: '+(e&&e.message)); setTimeout(connect, 3000); return; }
-    ws.onopen = () => { if (!_OBS) ws.send(JSON.stringify({ type:'join', name: myName, platform: _kickName ? 'kick' : 'guest', founder: _isFounder })); };
+    ws.onopen = () => { if (!_OBS) ws.send(JSON.stringify({ type:'join', name: myName, platform: _kickName ? 'kick' : 'guest', founder: _isFounder, skin: (_myPrefs && _myPrefs.skin) || null })); };
     ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch(_){ return; }
       if (m.type === 'welcome') { gotWelcome = true; offset = m.serverTime - Date.now(); _mpOffset = offset; roster = m.players || [];
         if (m.official) { _officialSlot = m.official.slot; _officialOrder = m.official.order; _officialFinished = m.official.finished || 0; }
@@ -2627,7 +2630,7 @@ if (_volEl) {
       fetch('/api/leaderboard?user=' + encodeURIComponent(sess.kickId)).then(r => r.json()).then(d => {
         if (d && d.you && d.you.beta) {
           _isFounder = true;
-          if (!_OBS && _mpWS && _mpWS.readyState === 1) _mpWS.send(JSON.stringify({ type:'join', name: _kickName, platform:'kick', founder:true }));
+          if (!_OBS && _mpWS && _mpWS.readyState === 1) _mpWS.send(JSON.stringify({ type:'join', name: _kickName, platform:'kick', founder:true, skin: (_myPrefs && _myPrefs.skin) || null }));
         }
       }).catch(()=>{});
     }
