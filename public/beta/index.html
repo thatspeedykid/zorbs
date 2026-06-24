@@ -1156,13 +1156,18 @@ function makeLabel(text, isMe){
 
 function makeZorb(id, prefs, isSub, platform, founder) {
   const cos = ZCOSMETICS.resolveForPlayer(prefs, isSub, prefs.owned || []);
+  // A player who has explicitly picked (and is entitled to) a non-Classic skin gets that
+  // skin, even if they're a beta tester. The gold founders ball is only the default for
+  // testers who haven't chosen a skin of their own.
+  const chosenSkin = cos.skin !== ZCOSMETICS.ballSkins.classic;
+  const useFounder = founder && !chosenSkin;
   let color = (cos.skin.color != null) ? cos.skin.color : PALETTE[(colorIdx++) % PALETTE.length];
-  if (founder) color = 0xFFC83A;   // FOUNDERS BALL — shared gold skin for all beta testers
+  if (useFounder) color = 0xFFC83A;   // FOUNDERS BALL — shared gold skin for all beta testers
   const accent = new THREE.Color(color);
   const baseCol = new THREE.Color(color);
 
   // ---- skin material builder (procedural textures, no external assets) ----
-  const core = new THREE.Mesh(SPHERE_GEO, founder ? buildFounderMaterial() : buildCoreMaterial(cos.skin, baseCol, accent));
+  const core = new THREE.Mesh(SPHERE_GEO, useFounder ? buildFounderMaterial() : buildCoreMaterial(cos.skin, baseCol, accent));
   scene.add(core);
 
   // DARK OUTLINE: a slightly larger back-face black shell behind the ball gives a thin
@@ -1230,9 +1235,9 @@ function makeZorb(id, prefs, isSub, platform, founder) {
   zorbs.set(id, {
     mesh: core, ring, ringGlow, band, color, trail, trailPos, trailLen: TRAIL_LEN, streak, label,
     platform: platform || 'guest',
-    founder: !!founder,
-    isRainbow: !founder && cos.skin.style === 'rainbow',
-    isSolar: !founder && cos.skin.style === 'solar',
+    founder: !!useFounder,
+    isRainbow: cos.skin.style === 'rainbow',
+    isSolar: cos.skin.style === 'solar',
     spawnT: 0, spawnAnim: cos.spawn, ringSpin: cos.ring.spin || 2.0,
     ringBob: Math.random()*Math.PI*2, eliminated:false, fallT:0,
     rollQ: new THREE.Quaternion(),
