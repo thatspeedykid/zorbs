@@ -2617,13 +2617,13 @@ if (_volEl) {
   }
 
   // Load saved skin from the dashboard — applies to ALL players (Kick or guest).
-  if (sess && sess.skin) _myPrefs = { skin: sess.skin, owned: ['Rainbow','Solar','Galaxy','Lava','Plasma','Void','Gold'] };
+  if (sess && sess.skin) _myPrefs = { skin: sess.skin, owned: ALL_OWNED };
 
   if (sess && sess.username) {
     // signed in with Kick → race as that account, no nickname needed
     _kickName = sess.username;
     // Skin already loaded above; re-apply here in case session has both username + skin.
-    if (sess.skin) _myPrefs = { skin: sess.skin, owned: ['Rainbow','Solar','Galaxy','Lava','Plasma','Void','Gold'] };
+    if (sess.skin) _myPrefs = { skin: sess.skin, owned: ALL_OWNED };
     // am I a beta tester? → render the gold founders ball. Re-send to the room if it
     // resolves after we've already joined, so others see the founders ball too.
     if (sess.kickId) {
@@ -2655,7 +2655,7 @@ if (_volEl) {
     // in the dashboard after this game tab had already loaded (stale _myPrefs otherwise).
     try {
       const fresh = JSON.parse(localStorage.getItem('zorbs_session') || 'null');
-      if (fresh && fresh.skin) _myPrefs = { skin: fresh.skin, owned: ['Rainbow','Solar','Galaxy','Lava','Plasma','Void','Gold'] };
+      if (fresh && fresh.skin) _myPrefs = { skin: fresh.skin, owned: ALL_OWNED };
     } catch(_){}
     _joinName = (_kickName || nickEl.value || '').trim().slice(0,16) || ('guest'+Math.floor(1000+Math.random()*9000));
     armEl.remove();
@@ -2663,11 +2663,10 @@ if (_volEl) {
     boot();
   }
   function goWithSkinCheck(){
-    // Kick players who haven't picked a skin yet get the picker shown first.
-    // Non-Kick (guest) players skip straight to game.
-    if (_kickName && !(sess && sess.skin)) {
+    // ALL players who haven't saved a skin get the picker first — Kick or guest.
+    if (!(sess && sess.skin)) {
       showSkinPicker(skinKey => {
-        _myPrefs = { skin: skinKey, owned: ['Rainbow','Solar','Galaxy','Lava','Plasma','Void','Gold'] };
+        _myPrefs = { skin: skinKey, owned: ALL_OWNED };
         try {
           const s2 = JSON.parse(localStorage.getItem('zorbs_session') || 'null') || {};
           s2.skin = skinKey;
