@@ -229,7 +229,7 @@
   // never flash, regardless of how the rest of the page loads.
   try { if (new URLSearchParams(location.search).get('obs') === '1') document.documentElement.classList.add('obsmode'); } catch(_){}
 </script>
-<div id="buildtag" style="position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:99999;background:#0a0;color:#fff;font:bold 11px monospace;padding:2px 10px;border-radius:0 0 6px 6px;letter-spacing:1px;">PLAY5</div>
+<div id="buildtag" style="position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:99999;background:#0a0;color:#fff;font:bold 11px monospace;padding:2px 10px;border-radius:0 0 6px 6px;letter-spacing:1px;">PLAY6</div>
 <canvas id="c"></canvas>
 <div id="hud">
   <div class="brand">
@@ -325,11 +325,11 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/beta/forks.js?v=b5"></script>
-<script src="/beta/track.js?v=b5"></script>
-<script src="/beta/physics.js?v=b5"></script>
-<script src="/beta/cosmetics.js?v=b5"></script>
-<script src="/beta/maps.js?v=b5"></script>
+<script src="/beta/forks.js?v=b6"></script>
+<script src="/beta/track.js?v=b6"></script>
+<script src="/beta/physics.js?v=b6"></script>
+<script src="/beta/cosmetics.js?v=b6"></script>
+<script src="/beta/maps.js?v=b6"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -1231,9 +1231,12 @@ function makeZorb(id, prefs, isSub, platform, founder) {
     mesh: core, ring, ringGlow, band, color, trail, trailPos, trailLen: TRAIL_LEN, streak, label,
     platform: platform || 'guest',
     founder: !!founder,
+    isRainbow: !founder && cos.skin.style === 'rainbow',
+    isSolar: !founder && cos.skin.style === 'solar',
     spawnT: 0, spawnAnim: cos.spawn, ringSpin: cos.ring.spin || 2.0,
     ringBob: Math.random()*Math.PI*2, eliminated:false, fallT:0,
     rollQ: new THREE.Quaternion(),
+    _rainbowT: Math.random() * Math.PI * 2,
   });
 }
 
@@ -1834,6 +1837,18 @@ function loop(now) {
         z.ringGlow.visible = !z.eliminated;
       }
     }
+    // RAINBOW STROBE: cycle hue with music beat, strobe faster on beats
+    if (z.isRainbow && !z.eliminated) {
+      z._rainbowT += dt * (3.5 + sampleBeat() * 8);
+      const hue = (z._rainbowT % (Math.PI * 2)) / (Math.PI * 2);
+      z.mesh.material.emissive.setHSL(hue, 1.0, 0.5);
+      z.mesh.material.emissiveIntensity = 0.6 + sampleBeat() * 1.2;
+      if (z.ring) z.ring.material.color.setHSL(hue, 1.0, 0.55);
+    }
+    // SOLAR PULSE: throb emissive with beat
+    if (z.isSolar && !z.eliminated) {
+      z.mesh.material.emissiveIntensity = 0.8 + sampleBeat() * 1.5;
+    }
     // elimination: drop and fade
     if (z.eliminated) {
       z.fallT += dt;
@@ -2311,7 +2326,7 @@ function runMultiplayer(){
     hideLobby();
     const seed = (Math.random()*1e9) >>> 0;
     const names = mpBots(seed).map(n => ({ id:n, prefs:{}, isSub:false }));
-    names[0] = { id:_myMarble, prefs:{}, isSub:false, platform: _kickName ? 'kick' : 'guest', founder: _isFounder };
+    names[0] = { id:_myMarble, prefs:_myPrefs, isSub:!!(_myPrefs && _myPrefs.skin), platform: _kickName ? 'kick' : 'guest', founder: _isFounder };
     setStatus('offline — solo race', false);
     startRace(seed, names);
   }
@@ -2514,7 +2529,10 @@ if (_volEl) {
   // ── Kick Skin Picker ─────────────────────────────────────────────────────────
   // Free skins available to all Kick sign-ins (sub-gated ones unlock via isSub).
   // This picker is shown ONCE: if `sess.skin` is already set, skip straight to game.
-  const FREE_SKINS = ['classic','marble','chrome','glass','crystal','phantom'];
+  const _isAdmin = !!(sess && sess.role === 'admin');
+  // Alpha offer: all 5 special skins unlocked for Kick users during beta.
+  // Post-launch these gate to their respective tiers.
+  const FREE_SKINS = ['marble','crystal','phantom','rainbow','solar'];
   function buildSkinPickerCanvas(skinKey, size){
     const s = ZCOSMETICS.ballSkins[skinKey];
     const c = document.createElement('canvas');
@@ -2572,7 +2590,7 @@ if (_volEl) {
     // signed in with Kick → race as that account, no nickname needed
     _kickName = sess.username;
     // Load saved skin prefs from session
-    if (sess.skin) _myPrefs = { skin: sess.skin };
+    if (sess.skin) _myPrefs = { skin: sess.skin, owned: ['Rainbow','Solar','Galaxy','Lava','Plasma','Void','Gold'] };
     // am I a beta tester? → render the gold founders ball. Re-send to the room if it
     // resolves after we've already joined, so others see the founders ball too.
     if (sess.kickId) {

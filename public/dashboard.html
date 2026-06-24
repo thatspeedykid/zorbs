@@ -95,6 +95,15 @@ body{background:#05050f;color:#fff;font-family:'Courier New',monospace;min-heigh
 .toggle input:checked+.tslider{background:var(--c);}
 .toggle input:checked+.tslider::before{transform:translateX(17px);background:#fff;}
 
+/* SKIN CARDS */
+.skin-card{border:2px solid rgba(80,180,255,.18);border-radius:10px;padding:10px 6px 8px;cursor:pointer;transition:border-color .15s,box-shadow .15s;text-align:center;}
+.skin-card:hover{border-color:rgba(0,220,255,.55);}
+.skin-card.selected{border-color:#00e5ff;box-shadow:0 0 14px rgba(0,229,255,.4);}
+.skin-card canvas{width:44px;height:44px;border-radius:50%;display:block;margin:0 auto 5px;}
+.skin-card .sk-name{font-size:10px;letter-spacing:1px;color:#cce8ff;}
+.skin-card .sk-tier{font-size:8px;color:#53fc18;letter-spacing:1px;margin-top:2px;}
+.skin-card .sk-tier.paid{color:#ffaa44;}
+
 /* KICK STATUS */
 .kick-block{background:rgba(83,252,24,0.04);border:1px solid rgba(83,252,24,0.15);border-radius:8px;padding:14px 16px;display:flex;align-items:center;gap:12px;margin-bottom:12px;}
 .kick-block .k-icon{flex-shrink:0;}
@@ -379,6 +388,14 @@ body{background:#05050f;color:#fff;font-family:'Courier New',monospace;min-heigh
       <!-- SETTINGS -->
       <div class="page" id="page-settings">
         <div class="page-title">ACCOUNT SETTINGS</div>
+        <!-- BALL SKIN SELECTOR -->
+        <div class="card" style="margin-bottom:16px;">
+          <h3>BALL SKIN</h3>
+          <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-bottom:14px;letter-spacing:1px;">Alpha: all skins unlocked. Post-launch some require sub or purchase.</div>
+          <div id="dash-skin-grid" style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px;"></div>
+          <button class="btn btn-cyan" id="btn-save-skin">SAVE SKIN</button>
+          <span id="skin-saved-msg" style="display:none;font-size:10px;color:#53fc18;margin-left:12px;letter-spacing:1px;">✓ SAVED</span>
+        </div>
         <div class="grid grid-2">
           <div class="card">
             <h3>KICK ACCOUNT</h3>
@@ -611,6 +628,7 @@ function showPage(id){
   if(nav)  nav.classList.add('active');
   if(id === 'leaderboard') loadGlobalLeaderboard();
   if(id === 'obs') { fillLobbyLinks(); initCustom(); connectLobby(); }
+  if(id === 'settings') buildDashSkinGrid();
 }
 
 // ── MY LOBBY · live host controls (WebSocket to the room) ──────────────────
@@ -945,6 +963,68 @@ function reRegisterWebhook(){
     out.textContent = d.ok ? 'Registered! Response:\n'+JSON.stringify(d.data,null,1) : 'Failed: '+JSON.stringify(d);
     if(d.ok) localStorage.setItem('zorbs_webhook_registered','1');
   }).catch(e=> out.textContent = 'Error: '+e.message);
+}
+
+// ── BALL SKIN PICKER (dashboard) ───────────────────────
+const DASH_SKINS = [
+  { id:'classic',  name:'Classic',  tier:'free',  color:'#7fe9ff', emissive:0.25 },
+  { id:'marble',   name:'Marble',   tier:'free',  color:'#f5ede0', emissive:0.0 },
+  { id:'crystal',  name:'Crystal',  tier:'sub',   color:'#88ffee', emissive:0.4 },
+  { id:'phantom',  name:'Phantom',  tier:'sub',   color:'#8844cc', emissive:0.7 },
+  { id:'rainbow',  name:'Rainbow',  tier:'paid',  color:null,       emissive:0.7 },
+  { id:'solar',    name:'Solar',    tier:'paid',  color:'#ffcc00', emissive:1.0 },
+  { id:'chrome',   name:'Chrome',   tier:'sub',   color:'#eef2ff', emissive:0.0 },
+  { id:'galaxy',   name:'Galaxy',   tier:'paid',  color:'#2a1b4a', emissive:0.5 },
+  { id:'lava',     name:'Lava',     tier:'paid',  color:'#ff4400', emissive:0.9 },
+  { id:'glass',    name:'Glass',    tier:'sub',   color:'#bfe9ff', emissive:0.05 },
+];
+let _dashSkinChoice = null;
+function buildDashSkinGrid(){
+  const grid = document.getElementById('dash-skin-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  const saved = (() => { try { return JSON.parse(localStorage.getItem('zorbs_session')||'{}').skin || 'classic'; } catch(_){ return 'classic'; }})();
+  _dashSkinChoice = saved;
+  const isAdmin = session && session.role === 'admin';
+  DASH_SKINS.forEach(sk => {
+    const card = document.createElement('div');
+    card.className = 'skin-card' + (sk.id === saved ? ' selected' : '');
+    card.dataset.skin = sk.id;
+    // preview canvas
+    const c = document.createElement('canvas'); c.width = c.height = 44;
+    const ctx = c.getContext('2d'), r = 20;
+    if (sk.id === 'rainbow') {
+      const g = ctx.createLinearGradient(0,0,44,44);
+      ['#ff0000','#ff8800','#ffff00','#00ff88','#00ffff','#8800ff','#ff0088'].forEach((col,i,a)=>g.addColorStop(i/(a.length-1),col));
+      ctx.beginPath(); ctx.arc(22,22,r,0,Math.PI*2); ctx.fillStyle=g; ctx.fill();
+    } else {
+      const col = sk.color || '#7fe9ff';
+      const gr = ctx.createRadialGradient(16,16,2,22,22,r);
+      gr.addColorStop(0,'#fff'); gr.addColorStop(0.3, col); gr.addColorStop(1, col);
+      ctx.beginPath(); ctx.arc(22,22,r,0,Math.PI*2); ctx.fillStyle=gr; ctx.fill();
+      if (sk.emissive > 0.4) { ctx.beginPath(); ctx.arc(22,22,r,0,Math.PI*2); ctx.strokeStyle='rgba(180,120,255,'+sk.emissive*0.6+')'; ctx.lineWidth=3; ctx.stroke(); }
+    }
+    card.appendChild(c);
+    const nm = document.createElement('div'); nm.className='sk-name'; nm.textContent=sk.name; card.appendChild(nm);
+    const ti = document.createElement('div'); ti.className='sk-tier'+(sk.tier==='paid'?' paid':''); ti.textContent=isAdmin?'ADMIN':sk.tier==='free'?'FREE':sk.tier==='sub'?'SUB':'PREMIUM'; card.appendChild(ti);
+    card.addEventListener('click', () => {
+      grid.querySelectorAll('.skin-card').forEach(c=>c.classList.remove('selected'));
+      card.classList.add('selected'); _dashSkinChoice = sk.id;
+    });
+    grid.appendChild(card);
+  });
+  const btn = document.getElementById('btn-save-skin');
+  const msg = document.getElementById('skin-saved-msg');
+  if (btn) btn.onclick = () => {
+    if (!_dashSkinChoice) return;
+    try {
+      const s = JSON.parse(localStorage.getItem('zorbs_session')||'{}');
+      s.skin = _dashSkinChoice;
+      s.owned = ['Rainbow','Solar','Galaxy','Lava','Plasma','Void','Gold'];
+      localStorage.setItem('zorbs_session', JSON.stringify(s));
+    } catch(_){}
+    if (msg) { msg.style.display='inline'; setTimeout(()=>{ msg.style.display='none'; }, 2000); }
+  };
 }
 
 // ── SETTINGS ───────────────────────────────────────────
