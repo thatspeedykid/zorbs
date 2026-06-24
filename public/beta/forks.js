@@ -727,69 +727,83 @@ const ZFORK = (() => {
     }
     const wellPlatformMesh = { positions: new Float32Array(platMeshPos), indices: new Uint32Array(platMeshIdx) };
 
-    // ---- N PARALLEL STACKED RAMPS ----
-    // All branches run in the SAME forward direction as the main track — no lateral fan.
-    // They are offset slightly sideways (like lanes on a road) and at different heights so
-    // they visually stack as descending levels. Each one homes onto the main track at a
-    // staggered depth so they merge one at a time: the highest layer joins last (furthest
-    // along the main track), the lowest layer joins first, creating the visual of a highway
-    // interchange where upper decks peel off down onto the level below.
+    // ---- N CURVING DIVERGENT BRANCHES (restored), finishing as STACKED LAYERS ----
+    // The branches keep their original organic shape: each exits the platform at its own
+    // fan angle, curves outward and stays separated for most of its run, then curves back
+    // toward the main track. The ONLY change vs. the original is the FINISH — each branch
+    // ends ELEVATED at its own deck height above the main track (stepped per branch), and
+    // rejoins at a staggered point, so the tracks finish layered one above the other (the
+    // user's sketch) instead of all flattening onto one seam.
     const branches = {}, branchOrder = [];
-    const TRACK_LEN   = Math.max(70, lenF - APPROACH_NODES - 6);
-    const STACK_GAP   = 3.2;     // vertical separation between each deck
-    const LANE_OFF    = LW * 0.8; // small sideways offset per branch so they don't z-fight
-    // Each branch i ends LAYER_STEP further back on the main track than branch i-1,
-    // AND at height STACK_GAP*(N-1-i) above it — top deck joins last, bottom first.
-    const LAYER_STEP  = 35;
-
+    const TRACK_LEN = Math.max(60, lenF - APPROACH_NODES - 6);
+    const TUBE_NODES = 14;
+    const tubeHW = Math.max(3.5, LW * 0.22);
+    const mainFwd = norm(v(entryNode.dir.x, 0, entryNode.dir.z));
+    const STACK_GAP = 3.0;   // vertical spacing between the finishing decks
     for (let i = 0; i < N; i++) {
       const bid = forkId + '_' + i; branchOrder.push(bid);
-
-      // Height above main track at the rejoin point for this deck
-      const deckLift   = STACK_GAP * (N - 1 - i);  // deck 0 = lowest, deck N-1 = highest
-      // The rejoin node on the main track (furthest back = first deck, shallowest = last)
-      const rejoinNodeIdx = Math.min(mainNodes.length - 1, Math.max(0, end - i * LAYER_STEP));
-      const target = mainNodes[rejoinNodeIdx];
-
-      // Side offset so the decks sit next to each other (alternating left/right of centre)
-      const side = (i % 2 === 0 ? 1 : -1) * Math.ceil(i / 2) * LANE_OFF;
-
-      // Start position: on the platform at yBottom, offset sideways, exactly at the entry
-      // angle so the initial heading is just the main forward direction (no lateral lean).
-      const startX = cx + entryNode.right.x * side;
-      const startZ = cz + entryNode.right.z * side;
-      const startY = yBottom;
-
-      // Build the branch as a direct smooth arc from (startX,startY,startZ) toward the
-      // stacked target position. No tube / outward phase needed — the well platform gives
-      // a natural start; we just want the ramp to glide forward and converge.
+      const trackAng = exitAngles[i];
+      // Start from the platform edge (not inside it) so the tube clearly exits the disc.
+      const tubeStartR = rPlatform * 0.72;
+      const hx = cx + Math.cos(trackAng) * tubeStartR, hz = cz + Math.sin(trackAng) * tubeStartR;
+      // Tubes drop steeply from the platform, giving them clear separation before levelling.
+      const outDir = norm(v(Math.cos(trackAng), -0.90, Math.sin(trackAng)));
       const nlist = [];
+      let pos = v(hx, yBottom - 0.5, hz);
+      let heading = v(outDir.x, outDir.y, outDir.z);
+      for (let k = 0; k < TUBE_NODES; k++) {
+        const t = k / TUBE_NODES;
+        heading.y += (-0.25 - heading.y) * 0.18;
+        heading = norm(heading);
+        pos = add(pos, scale(heading, STEPH * 1.1));
+        const right = norm(cross(heading, worldUp));
+        const up = norm(cross(right, heading));
+        const hw = tubeHW + (LW - tubeHW) * sstepW2(0.3, 1, t);
+        nlist.push({ pos: v(pos.x, pos.y, pos.z), dir: v(heading.x, heading.y, heading.z), right, up,
+          halfW: hw, bank: 0, kind: 'tube', tunnel: false, branchId: bid });
+      }
+      const tubeEnd = nlist[nlist.length - 1];
+      // Staggered rejoin point so branches curve back at DIFFERENT spots (not the same x/z —
+      // that's what made them look like crossing). Each branch finishes at its own deck height.
+      const rejoinOffset = Math.floor((i / N) * 40);
+      const target = mainNodes[Math.min(mainNodes.length - 1, Math.max(0, end - rejoinOffset))];
+      const deckLift = STACK_GAP * (i + 1);   // branch 0 lowest deck, higher branches stacked above
+      // Curve out for ~60% of the run, then home back toward the staggered target at deck height.
+      const CONVERGE_FRAC = 0.58 + rng() * 0.08;
+      const convergeStartK = Math.floor(CONVERGE_FRAC * TRACK_LEN);
+      const gapAtHomingStart = Math.hypot(tubeEnd.pos.x - target.pos.x, tubeEnd.pos.y - (target.pos.y + deckLift), tubeEnd.pos.z - target.pos.z) || 1;
+      const stepsAvailable = Math.max(1, TRACK_LEN - convergeStartK);
+      const targetFinalGap = 0.6;
+      const closeFrac = 1 - Math.pow(Math.min(1, targetFinalGap / gapAtHomingStart), 1 / stepsAvailable);
+      let bpos = v(tubeEnd.pos.x, tubeEnd.pos.y, tubeEnd.pos.z);
+      let bheading = v(tubeEnd.dir.x, tubeEnd.dir.y, tubeEnd.dir.z);
       for (let k = 0; k < TRACK_LEN; k++) {
-        const t  = k / (TRACK_LEN - 1);
-        const st = t * t * (3 - 2 * t);   // smoothstep: slow start, slow end
-
-        // X/Z: lerp from start to target (same horizontal line as the main track)
-        const px = startX + (target.pos.x + entryNode.right.x * side * (1 - st) - startX) * st;
-        const pz = startZ + (target.pos.z + entryNode.right.z * side * (1 - st) - startZ) * st;
-
-        // Y: start at yBottom, end at target.pos.y + deckLift — smooth descent
-        const py = startY + (target.pos.y + deckLift - startY) * st;
-
-        const nextT = Math.min(1, (k + 1) / (TRACK_LEN - 1));
-        const nextSt = nextT * nextT * (3 - 2 * nextT);
-        const nxt_px = startX + (target.pos.x + entryNode.right.x * side * (1 - nextSt) - startX) * nextSt;
-        const nxt_pz = startZ + (target.pos.z + entryNode.right.z * side * (1 - nextSt) - startZ) * nextSt;
-        const nxt_py = startY + (target.pos.y + deckLift - startY) * nextSt;
-
-        const dv  = norm(v(nxt_px - px, nxt_py - py, nxt_pz - pz));
-        const right = norm(cross(dv, worldUp));
-        const up  = norm(cross(right, dv));
-
-        // Drop walls and floor near the tip so the edge is an open lip, not a cliff
+        if (k < convergeStartK) {
+          // outward phase: continue in exit direction, gently level out (organic curve)
+          const targetDir = norm(v(mainFwd.x, -0.20, mainFwd.z));
+          const blend = sstepW2(0, 1, k / convergeStartK);
+          bheading.x += (targetDir.x - bheading.x) * 0.06 * blend;
+          bheading.z += (targetDir.z - bheading.z) * 0.06 * blend;
+          bheading.y += (-0.20 - bheading.y) * 0.05;
+          bheading = norm(bheading);
+          bpos = add(bpos, scale(bheading, STEPH));
+        } else {
+          // homing phase: curve back toward the target X/Z, settling at the deck height
+          const newX = bpos.x + (target.pos.x - bpos.x) * closeFrac;
+          const newY = bpos.y + (target.pos.y + deckLift - bpos.y) * closeFrac;
+          const newZ = bpos.z + (target.pos.z - bpos.z) * closeFrac;
+          const moveVec = v(newX - bpos.x, newY - bpos.y, newZ - bpos.z);
+          const moveLen = Math.hypot(moveVec.x, moveVec.y, moveVec.z) || 1;
+          bheading = scale(moveVec, 1 / moveLen);
+          bpos = v(newX, newY, newZ);
+        }
+        const right = norm(cross(bheading, worldUp));
+        const up = norm(cross(right, bheading));
+        // Keep floor solid almost to the tip so the deck overlaps the level below; only the
+        // last few nodes drop their walls so the edge reads as an open lip, not a cliff.
         const nearEnd = k >= TRACK_LEN - 8;
         const meshSkip = k >= TRACK_LEN - 3;
-
-        nlist.push({ pos: v(px, py, pz), dir: v(dv.x, dv.y, dv.z), right, up,
+        nlist.push({ pos: v(bpos.x, bpos.y, bpos.z), dir: v(bheading.x, bheading.y, bheading.z), right, up,
           halfW: LW, bank: 0, kind: 'route', tunnel: false, branchId: bid,
           noWallL: nearEnd, noWallR: nearEnd, meshSkip });
       }
