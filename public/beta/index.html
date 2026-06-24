@@ -737,8 +737,14 @@ function applyMapTheme(t) {
 function buildCourse(seed) {
   trackMeshes.forEach(m => scene.remove(m)); trackMeshes = [];
   _bumperVis = []; _spinnerVis = []; _launchVis = [];
+  // CUSTOM MAP (map editor / community map): when one is loaded, its hand-authored section plan
+  // replaces the seeded course and its chosen theme (if any) overrides the seed theme.
+  const _cmap = window._zorbsCustomMap || null;
   // Apply map theme before building geometry so colors are correct
-  if (typeof ZMAPS !== 'undefined') applyMapTheme(ZMAPS.getThemeForSeed(seed));
+  if (typeof ZMAPS !== 'undefined') {
+    if (_cmap && _cmap.theme) applyMapTheme(ZMAPS.getThemeByName(_cmap.theme));
+    else applyMapTheme(ZMAPS.getThemeForSeed(seed));
+  }
   // EXPERIMENTAL: ?forks=divergent enables the true divergent-route forks (two separate
   // ribbons that bow apart and rejoin). Default is the clean side-by-side lane forks.
   if (typeof ZFORK !== 'undefined' && ZFORK.setDivergent)
@@ -751,7 +757,7 @@ function buildCourse(seed) {
   // was a flat 1100 which felt too long. Derived from the seed, never Math.random.
   const lenRng = (Math.abs((seed * 2654435761) >>> 0) % 200);   // 0..199
   const trackLen = 760 + lenRng;                                  // 760..959 (longer: room for a wide fan)
-  track = ZTRACK.generate(seed, trackLen, _fieldSize || 20);
+  track = ZTRACK.generate(seed, trackLen, _fieldSize || 20, (_cmap && _cmap.sections) || null);
   // DIAGNOSTIC: show the seed + lane count so it's obvious whether each race is a new track.
   // Beta-only — hidden on the live root build.
   if (_DEBUG) try {
@@ -1764,6 +1770,8 @@ function loop(now) {
       phase = 'done'; reportResult(); showEndCard();
       // FRESH MODE: queue the next race on a brand-new random track
       if (_freshMode && !_freshQueued) { _freshQueued = true; setTimeout(() => { _freshQueued = false; startFreshRace(); }, 5000); }
+      // CUSTOM MAP preview: re-run the same authored track so it loops for testing
+      else if (window._zorbsCustomMap && !_freshQueued) { _freshQueued = true; setTimeout(() => { _freshQueued = false; startCustomMapRace(); }, 5000); }
     }
   }
 
@@ -2140,6 +2148,19 @@ function startFreshRace(){
   setStatus('⬡ fresh track every race', true);
   startRace(seed, names);
 }
+// CUSTOM MAP preview race — solo field on the authored course (window._zorbsCustomMap is already
+// set). Auto-loops on a fixed seed so the same hand-built track repeats for testing.
+function startCustomMapRace(){
+  try { if (typeof hideLobby === 'function') hideLobby(); } catch(_){}
+  const seed = 1337;   // fixed: the custom plan defines the track, seed only drives minor jitter
+  if (!_myMarble) _myMarble = 'you';
+  const names = mpBots(seed).map(n => ({ id:n, prefs:botPrefs(n), isSub:true, platform:'bot' }));
+  names[0] = { id:_myMarble, prefs:_myPrefs, isSub:!!_myPrefs.skin };
+  _mpMode = false;
+  const nm = (window._zorbsCustomMap && window._zorbsCustomMap.name) || 'Custom Map';
+  setStatus('⬡ ' + nm + (_ZP.get('map') === 'test' ? ' · TEST' : ''), true);
+  startRace(seed, names);
+}
 // server-authoritative result: the first client to finish a race reports the order; the server
 // locks it and broadcasts it as official so every screen shows the SAME outcome.
 let _mpSlot = -1, _officialOrder = null, _officialFinished = 0, _officialSlot = -1;
@@ -2369,6 +2390,27 @@ async function boot() {
     ZLOG.report('manual', 'physics init failed: ' + ZPHYSICS.getError(), ''); return; }
   setStatus('⬡ READY · build ' + BUILD, true);
   try { buildEnvMap(); } catch(e){ console.warn('env map skipped', e); }
+
+  // CUSTOM MAP MODE (?map=test from the editor, or ?map=<id> for a community map): load the
+  // authored section plan, then run it as a solo preview race so creators can play-test before
+  // submitting and players can preview a community course.
+  const _mapParam = _ZP.get('map');
+  if (_mapParam) {
+    try {
+      if (_mapParam === 'test') {
+        window._zorbsCustomMap = JSON.parse(sessionStorage.getItem('zorbs_testmap') || 'null');
+      } else {
+        const r = await fetch('/api/maps?id=' + encodeURIComponent(_mapParam));
+        const j = await r.json().catch(() => null);
+        window._zorbsCustomMap = (j && j.map) || null;
+      }
+    } catch (_) { window._zorbsCustomMap = null; }
+    if (window._zorbsCustomMap && Array.isArray(window._zorbsCustomMap.sections)) {
+      startCustomMapRace();
+      return;
+    }
+    setStatus('map not found — running normal race', false);
+  }
 
   // FRESH MODE: brand-new random track every race, auto-looping (no slot lock).
   if (_freshMode) { startFreshRace(); return; }

@@ -186,6 +186,10 @@ body{background:#05050f;color:#fff;font-family:'Courier New',monospace;min-heigh
       <div class="nav-item" onclick="showPage('races')" id="ni-races"><span class="icon">🏁</span> MY RACES</div>
       <div class="nav-item" onclick="showPage('leaderboard')" id="ni-leaderboard"><span class="icon">◉</span> LEADERBOARD</div>
 
+      <div class="nav-section">CREATE <span class="nav-badge">v0.4</span></div>
+      <div class="nav-item" onclick="openMapEditor()" id="ni-mapeditor"><span class="icon">🗺️</span> MAP EDITOR</div>
+      <div class="nav-item" onclick="showPage('mymaps')" id="ni-mymaps"><span class="icon">📁</span> MY MAPS</div>
+
       <div class="nav-section">STREAM <span class="coming-soon" style="margin-left:6px">STREAMER TOOLS</span></div>
       <div class="nav-item" onclick="showPage('obs')" id="ni-obs"><span class="icon">◎</span> MY LOBBY</div>
 
@@ -195,6 +199,7 @@ body{background:#05050f;color:#fff;font-family:'Courier New',monospace;min-heigh
 
       <div class="nav-section admin-only" style="display:none">ADMIN</div>
       <div class="nav-item admin-only" style="display:none" onclick="showPage('admin-streamers')" id="ni-admin-streamers"><span class="icon">◈</span> ALL STREAMERS</div>
+      <div class="nav-item admin-only" style="display:none" onclick="showPage('admin-maps')" id="ni-admin-maps"><span class="icon">🗺️</span> MAP REVIEW <span class="nav-badge" id="admin-maps-badge" style="display:none">0</span></div>
       <div class="nav-item admin-only" style="display:none" onclick="showPage('admin-settings')" id="ni-admin-settings"><span class="icon">◧</span> PLATFORM</div>
     </div>
 
@@ -442,6 +447,37 @@ body{background:#05050f;color:#fff;font-family:'Courier New',monospace;min-heigh
         </div>
       </div>
 
+      <!-- MY MAPS -->
+      <div class="page" id="page-mymaps">
+        <div class="page-title">MY MAPS</div>
+        <div style="display:flex;gap:10px;margin-bottom:16px;align-items:center;flex-wrap:wrap;">
+          <button class="btn btn-cyan" onclick="openMapEditor()">+ NEW MAP</button>
+          <span style="font-size:11px;color:rgba(255,255,255,0.4)">Build a track in the editor, then submit it. Admins review before it joins the community rotation.</span>
+        </div>
+        <div class="card">
+          <table class="tbl">
+            <thead><tr><th>NAME</th><th>DIFFICULTY</th><th>PIECES</th><th>STATUS</th><th>PLAYS</th><th></th></tr></thead>
+            <tbody id="mymaps-table">
+              <tr><td colspan="6" style="color:rgba(255,255,255,0.2);padding:20px;text-align:center">No maps yet — hit NEW MAP to build one.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ADMIN: MAP REVIEW -->
+      <div class="page" id="page-admin-maps">
+        <div class="page-title">MAP REVIEW — ADMIN</div>
+        <p style="font-size:11px;color:rgba(255,255,255,0.4);margin:0 0 16px;">Player-submitted tracks awaiting review. Test each one, then approve it into the community rotation or deny it.</p>
+        <div class="card">
+          <table class="tbl">
+            <thead><tr><th>NAME</th><th>AUTHOR</th><th>DIFF</th><th>PIECES</th><th>SUBMITTED</th><th>ACTIONS</th></tr></thead>
+            <tbody id="admin-maps-table">
+              <tr><td colspan="6" style="color:rgba(255,255,255,0.2);padding:20px;text-align:center">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <!-- ADMIN: PLATFORM -->
       <div class="page" id="page-admin-settings">
         <div class="page-title">PLATFORM SETTINGS — ADMIN</div>
@@ -634,7 +670,79 @@ function showPage(id){
   if(id === 'leaderboard') loadGlobalLeaderboard();
   if(id === 'obs') { fillLobbyLinks(); initCustom(); connectLobby(); }
   if(id === 'marketplace') buildDashSkinGrid();
+  if(id === 'mymaps') loadMyMaps();
+  if(id === 'admin-maps') loadAdminMaps();
 }
+
+// ── MAP EDITOR / COMMUNITY MAPS ────────────────────────────────────────────
+function openMapEditor(){ window.open('/beta/map-editor.html', '_blank'); }
+
+// admin key: stored locally once entered (the API verifies it server-side against ZORBS_ADMIN_KEY)
+function adminKey(){
+  let k = localStorage.getItem('zorbs_admin_key') || '';
+  if(!k){ k = prompt('Enter admin key to manage maps:') || ''; if(k) localStorage.setItem('zorbs_admin_key', k); }
+  return k;
+}
+
+function mapStatusBadge(st){
+  const cls = st==='approved'?'live':st==='denied'?'idle':'admin';
+  return `<span class="badge ${cls}">${(st||'pending').toUpperCase()}</span>`;
+}
+
+async function loadMyMaps(){
+  const tb = document.getElementById('mymaps-table');
+  const author = (session && (session.username || session.name) || '').toLowerCase();
+  if(!author){ tb.innerHTML = '<tr><td colspan="6" style="color:rgba(255,255,255,0.3);padding:20px;text-align:center">Sign in with Kick to save and track your maps.</td></tr>'; return; }
+  try {
+    const r = await fetch('/api/maps?list=mine&author=' + encodeURIComponent(author));
+    const j = await r.json().catch(()=>({}));
+    const maps = (j && j.maps) || [];
+    if(!maps.length){ tb.innerHTML = '<tr><td colspan="6" style="color:rgba(255,255,255,0.2);padding:20px;text-align:center">No maps yet — hit NEW MAP to build one.</td></tr>'; return; }
+    tb.innerHTML = maps.map(m => `<tr>
+      <td>${esc(m.name)}</td><td style="text-transform:capitalize">${esc(m.difficulty)}</td>
+      <td>${m.sectionCount}</td><td>${mapStatusBadge(m.status)}</td><td>${m.plays||0}</td>
+      <td><button class="btn btn-cyan" onclick="window.open('/beta/?map=${m.id}','_blank')">PLAY</button></td>
+    </tr>`).join('');
+  } catch(_){ tb.innerHTML = '<tr><td colspan="6" style="color:#ff4060;padding:20px;text-align:center">Could not load maps.</td></tr>'; }
+}
+
+async function loadAdminMaps(){
+  const tb = document.getElementById('admin-maps-table');
+  if(!session || session.role !== 'admin'){ tb.innerHTML='<tr><td colspan="6" style="padding:20px;text-align:center">Admin only.</td></tr>'; return; }
+  const key = adminKey();
+  if(!key){ tb.innerHTML='<tr><td colspan="6" style="padding:20px;text-align:center">Admin key required.</td></tr>'; return; }
+  try {
+    const r = await fetch('/api/maps?list=pending&admin=' + encodeURIComponent(key));
+    if(r.status === 403){ localStorage.removeItem('zorbs_admin_key'); tb.innerHTML='<tr><td colspan="6" style="color:#ff4060;padding:20px;text-align:center">Bad admin key — click MAP REVIEW again to re-enter.</td></tr>'; return; }
+    const j = await r.json().catch(()=>({}));
+    const maps = (j && j.maps) || [];
+    const badge = document.getElementById('admin-maps-badge');
+    if(badge){ badge.textContent = maps.length; badge.style.display = maps.length ? '' : 'none'; }
+    if(!maps.length){ tb.innerHTML='<tr><td colspan="6" style="color:rgba(255,255,255,0.2);padding:20px;text-align:center">Review queue is empty 🎉</td></tr>'; return; }
+    tb.innerHTML = maps.map(m => `<tr>
+      <td>${esc(m.name)}${m.description?`<div style="font-size:9px;color:rgba(255,255,255,0.3)">${esc(m.description)}</div>`:''}</td>
+      <td>${esc(m.author)}</td><td style="text-transform:capitalize">${esc(m.difficulty)}</td>
+      <td>${m.sectionCount}</td><td style="color:rgba(255,255,255,0.3)">${new Date(m.created).toLocaleDateString()}</td>
+      <td style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-cyan" onclick="window.open('/beta/?map=${m.id}','_blank')">TEST</button>
+        <button class="btn btn-green" onclick="reviewMap('${m.id}',true)">APPROVE</button>
+        <button class="btn btn-red" onclick="reviewMap('${m.id}',false)">DENY</button>
+      </td></tr>`).join('');
+  } catch(_){ tb.innerHTML='<tr><td colspan="6" style="color:#ff4060;padding:20px;text-align:center">Could not load review queue.</td></tr>'; }
+}
+
+async function reviewMap(id, approve){
+  const key = adminKey(); if(!key) return;
+  try {
+    const r = await fetch('/api/maps', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ action:'review', id, approve, admin:key }) });
+    const j = await r.json().catch(()=>({}));
+    if(j && j.ok) loadAdminMaps();
+    else alert('Review failed: ' + (j&&j.error||'try again'));
+  } catch(_){ alert('Network error.'); }
+}
+
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 // ── MY LOBBY · live host controls (WebSocket to the room) ──────────────────
 // The dashboard connects to the streamer's PartyKit room and authes as owner (room id = their

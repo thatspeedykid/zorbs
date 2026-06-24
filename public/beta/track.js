@@ -111,9 +111,20 @@ const ZTRACK = (() => {
 
   // Build the centerline as an array of nodes:
   //   { pos, dir, right, up, halfW, bank }  — everything physics & mesh need.
-  function buildCenterline(seed, targetNodes, ballCount) {
+  function buildCenterline(seed, targetNodes, ballCount, customPlan) {
     const rng = mulberry32(seed);
-    const plan = buildPlan(rng, targetNodes);   // course director: deliberate section sequence
+    // CUSTOM MAPS (map editor): when a hand-authored section plan is supplied, lay THAT instead of
+    // the seeded course director. The plan is the same {kind,len,...} section list buildPlan emits,
+    // so every downstream stage (mesh, physics, forks, obstacles) is untouched. We still ensure a
+    // finish funnel + short runout exist so the line + photo-finish behave like a generated course.
+    let plan;
+    if (Array.isArray(customPlan) && customPlan.length) {
+      plan = customPlan.map(s => Object.assign({}, s));
+      if (!plan.some(s => s.isFinish)) plan.push({ kind: 'funnel', len: 24, min: 0.46, isFinish: true });
+      if (plan[plan.length - 1].kind !== 'straight' || plan[plan.length - 1].isFinish) plan.push({ kind: 'straight', len: 18 });
+    } else {
+      plan = buildPlan(rng, targetNodes);   // course director: deliberate section sequence
+    }
     let planIdx = 0;
     const nodes = [];
     ballCount = ballCount || 20;
@@ -411,8 +422,13 @@ const ZTRACK = (() => {
   }
 
   // Top-level: given a seed and a target length (seconds-ish), produce everything.
-  function generate(seed, lengthNodes = 700, ballCount = 20) {
-    const nodes = buildCenterline(seed, lengthNodes, ballCount);
+  function generate(seed, lengthNodes = 700, ballCount = 20, customPlan = null) {
+    // for custom maps, size the node budget to the authored plan (sum of section lengths + slack)
+    if (Array.isArray(customPlan) && customPlan.length) {
+      const sum = customPlan.reduce((s, sec) => s + (sec.len | 0), 0);
+      lengthNodes = Math.max(lengthNodes, sum + 120);
+    }
+    const nodes = buildCenterline(seed, lengthNodes, ballCount, customPlan);
     const platformEnd = nodes.findIndex(n => !n.isPlatform);
     const platStart = platformEnd < 0 ? 0 : platformEnd;
 
