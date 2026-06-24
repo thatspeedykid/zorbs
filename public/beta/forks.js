@@ -805,10 +805,12 @@ const ZFORK = (() => {
         }
         const right = norm(cross(bheading, worldUp));
         const up = norm(cross(right, bheading));
-        const nearRejoin = k >= TRACK_LEN - 30;
-        // meshSkip the final 22 nodes so the branch floor doesn't end in a hard cliff edge —
-        // the ball simply glides off the elevated tip and drops onto the main track.
-        const meshSkip = k >= TRACK_LEN - 22;
+        // Keep the floor SOLID almost to the very end so each stacked layer overlaps the one
+        // below it — the ball rolls along solid track to the tip and drops the stack-gap onto
+        // the layer beneath (no big hole / gap at the junction). Only the last 3 nodes and the
+        // side walls near the tip are dropped so the edge reads as an open lip, not a cliff.
+        const nearRejoin = k >= TRACK_LEN - 8;
+        const meshSkip = k >= TRACK_LEN - 3;
         nlist.push({ pos: v(bpos.x, bpos.y, bpos.z), dir: v(bheading.x, bheading.y, bheading.z), right, up,
           halfW: LW, bank: 0, kind: 'route', tunnel: false, branchId: bid,
           noWallL: nearRejoin, noWallR: nearRejoin, meshSkip });
