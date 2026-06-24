@@ -629,9 +629,10 @@ const ZFORK = (() => {
     const rPlatform = Math.max(LW * 1.3, LW * 0.9 + (N - 1) * (LW * 0.55));   // room for N track exits, spaced apart
     const rThroat = Math.max(2.2, LW * 0.14);    // small, ball-scaled -- the actual narrow point of the funnel
     const rOuter = entryNode.halfW;               // the rim is simply the approach's own width -- no seam, no overshoot
-    const fwdFlat = norm(v(entryNode.dir.x, 0, entryNode.dir.z));
-    const cx = entryNode.pos.x + fwdFlat.x * entryNode.halfW;
-    const cz = entryNode.pos.z + fwdFlat.z * entryNode.halfW;
+    // Center sits AT the entry node — no forward offset. The old halfW offset pushed the
+    // cone center a full track-width ahead of where the track ends, disconnecting it visually.
+    const cx = entryNode.pos.x;
+    const cz = entryNode.pos.z;
     const yTop = entryNode.pos.y;
     // CONE_FRAC: how much of the total vertical drop the narrowing cone gets, vs. the
     // platform-widen stage at the bottom. The cone should dominate -- it's "the funnel" --

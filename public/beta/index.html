@@ -733,9 +733,34 @@ function buildCourse(seed) {
   meshFrom(track.mesh.floor, FLOOR_MAT, true);   // weld = smooth-shaded ramp
   meshFrom(track.mesh.walls, WALL_MAT);
   if (track.mesh.roof && track.mesh.roof.indices.length) meshFrom(track.mesh.roof, ROOF_MAT);
+  // Gravity well funnel material — no UV needed (ShaderMaterial), emissive glow.
+  // Built fresh each race so the theme colors (railLeft = energy color) apply.
+  const wellConeMat = new THREE.MeshStandardMaterial({
+    color: new THREE.Color(_themeRailL).multiplyScalar(0.35),
+    emissive: new THREE.Color(_themeRailL),
+    emissiveIntensity: 0.7,
+    metalness: 0.4, roughness: 0.5,
+    side: THREE.DoubleSide, transparent: true, opacity: 0.88,
+  });
+  const wellPlatMat = new THREE.MeshStandardMaterial({
+    color: new THREE.Color(_themeRailR).multiplyScalar(0.3),
+    emissive: new THREE.Color(_themeRailR),
+    emissiveIntensity: 0.5,
+    metalness: 0.6, roughness: 0.3,
+    side: THREE.DoubleSide, transparent: true, opacity: 0.82,
+  });
   // draw each fork branch ribbon
   if (track.branchMeshes) {
     for (const bm of track.branchMeshes) {
+      // Well cone + platform get their own emissive material (no UVs in those meshes)
+      if (bm.branchId && bm.branchId.endsWith('_wellcone')) {
+        meshFrom(bm.mesh.floor, wellConeMat);
+        continue;
+      }
+      if (bm.branchId && bm.branchId.endsWith('_wellplatform')) {
+        meshFrom(bm.mesh.floor, wellPlatMat);
+        continue;
+      }
       meshFrom(bm.mesh.floor, FLOOR_MAT, true);
       meshFrom(bm.mesh.walls, WALL_MAT);
       if (bm.mesh.roof && bm.mesh.roof.indices.length) meshFrom(bm.mesh.roof, ROOF_MAT);
@@ -783,6 +808,37 @@ function buildCourse(seed) {
   buildRail( 1, _themeRailR,     0.11);          // right edge
   buildRail(-1, _themeRailLHalo, 0.34, 0.16);    // left halo
   buildRail( 1, _themeRailRHalo, 0.34, 0.16);    // right halo
+
+  // GRAVITY WELL RIM RINGS: a glowing torus at the lip of each funnel so it reads clearly.
+  if (track.forks) {
+    for (const f of track.forks) {
+      if (!f.isWell) continue;
+      // outer rim ring at the top
+      const rimGeo = new THREE.TorusGeometry(f.rOuter, 0.28, 10, 48);
+      const rimMat = new THREE.MeshStandardMaterial({ color: 0x001122, metalness: 0.8, roughness: 0.2,
+        emissive: new THREE.Color(_themeRailL), emissiveIntensity: 2.5 });
+      const rim = new THREE.Mesh(rimGeo, rimMat);
+      rim.position.set(f.cx, f.yTop + 0.1, f.cz);
+      rim.rotation.x = Math.PI / 2;
+      scene.add(rim); trackMeshes.push(rim);
+      // throat ring at the narrow point
+      const throatGeo = new THREE.TorusGeometry(f.rThroat + 0.3, 0.18, 8, 32);
+      const throatMat = new THREE.MeshStandardMaterial({ color: 0x001122, metalness: 0.8, roughness: 0.2,
+        emissive: new THREE.Color(_themeRailR), emissiveIntensity: 2.8 });
+      const throatMesh = new THREE.Mesh(throatGeo, throatMat);
+      throatMesh.position.set(f.cx, f.yThroat, f.cz);
+      throatMesh.rotation.x = Math.PI / 2;
+      scene.add(throatMesh); trackMeshes.push(throatMesh);
+      // platform rim ring at the bottom
+      const platGeo = new THREE.TorusGeometry(f.rPlatform, 0.22, 8, 48);
+      const platMat = new THREE.MeshStandardMaterial({ color: 0x001122, metalness: 0.8, roughness: 0.2,
+        emissive: new THREE.Color(_themeRailR), emissiveIntensity: 1.8 });
+      const platMesh = new THREE.Mesh(platGeo, platMat);
+      platMesh.position.set(f.cx, f.yBottom + 0.1, f.cz);
+      platMesh.rotation.x = Math.PI / 2;
+      scene.add(platMesh); trackMeshes.push(platMesh);
+    }
+  }
 
   // CENTER ENERGY LANE + STREAKING PULSE down every path.
   const _pulseLanes = [];

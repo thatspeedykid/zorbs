@@ -544,7 +544,16 @@ const ZPHYSICS = (() => {
         continue;   // skip the rest of this ball's normal step entirely while spiraling
       }
       if (!b.branch && forks) {
-        const well = forks.find(f => f.isWell && b.hint >= f.entryIdx - 3 && b.hint <= f.entryIdx + 3);
+        // DISTANCE-BASED ENTRY: hint-based checks miss fast balls (hint can jump ±40 nodes/frame,
+        // skipping the 6-node window entirely). Instead detect when the ball is physically inside
+        // the funnel rim — no timing sensitivity, works at any speed.
+        const well = forks.find(f => {
+          if (!f.isWell) return false;
+          const dx = t.x - f.cx, dz = t.z - f.cz;
+          const dist2d = Math.hypot(dx, dz);
+          // inside the outer rim AND above the platform (not already past the bottom)
+          return dist2d < f.rOuter * 1.35 && t.y > f.yBottom - 1 && t.y < f.yTop + 4;
+        });
         if (well) {
           startWellOrbit(b, well, t);
           continue;
