@@ -103,6 +103,21 @@ const ZPHYSICS = (() => {
     if (forkData && forkData.branchColliders) {
       for (const bc of forkData.branchColliders) mk(bc.buffers);
     }
+    // WELL PLATFORMS: the platform disc at the bottom of each gravity well is a visual-only
+    // Three.js mesh with no walls/roof, so it's filtered out of branchColliders. Add a flat
+    // cylinder collider for each well so exiting balls land on the platform instead of falling
+    // through. Height 0.3 keeps it thin (just enough to catch a ball at full speed with CCD).
+    if (forkData && forkData.forks) {
+      for (const f of forkData.forks) {
+        if (!f.isWell) continue;
+        const platBd = RAPIER.RigidBodyDesc.fixed().setTranslation(f.cx, f.yBottom - 0.15, f.cz);
+        const platBody = world.createRigidBody(platBd);
+        world.createCollider(
+          RAPIER.ColliderDesc.cylinder(0.15, f.rPlatform + 0.5).setRestitution(0.05).setFriction(0.6),
+          platBody
+        );
+      }
+    }
     // OBSTACLES: bumper pillars that RETRACT into the track and rise back up on a slow
     // cycle — telegraphed, not a permanent wall. Previously these were static colliders
     // baked directly into the fixed trackBody, which meant they could never move after
@@ -522,6 +537,11 @@ const ZPHYSICS = (() => {
       b.branch = well.branchOrder[idx];
       b.branchFork = well;
       b.hint = 0;
+      // Land ball on the platform surface, slightly above so it doesn't start inside the collider.
+      // Scatter placement by current angle so multiple balls don't stack exactly (small radial offset).
+      const landR = Math.min(well.rPlatform * 0.5, well.rPlatform - BALL_R * 2);
+      b.body.setTranslation({ x: well.cx + Math.cos(ang) * landR, y: well.yBottom + BALL_R + 0.35, z: well.cz + Math.sin(ang) * landR }, true);
+      b.body.setLinvel({ x: 0, y: -3, z: 0 }, true);   // gentle downward nudge onto the platform
       b.collider.setEnabled(true);   // back to normal collision now that it's committed
       if (typeof window !== 'undefined' && window.__traceWell) console.log('WELL EXIT id=' + b._id + ' branch=' + b.branch);
       b.inWell = null;
