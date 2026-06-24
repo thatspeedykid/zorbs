@@ -327,8 +327,10 @@ const ZPHYSICS = (() => {
 
   // Fixed-timestep stepping with an accumulator. Call step(realDt) each frame;
   // it runs 0..N fixed sub-steps so physics is deterministic and smooth.
+  let _slowSteps = 0, _skipFrames = 0;
   function step(realDt) {
     if (!ready) return;
+    if (_skipFrames > 0) { _skipFrames--; return; }
     // ONE step per frame at the real frame time (clamped). Simulation time advances
     // exactly with render time => no temporal aliasing => smooth at any refresh rate.
     const dt = Math.max(0.002, Math.min(0.033, realDt));
@@ -552,7 +554,7 @@ const ZPHYSICS = (() => {
           const dx = t.x - f.cx, dz = t.z - f.cz;
           const dist2d = Math.hypot(dx, dz);
           // inside the outer rim AND above the platform (not already past the bottom)
-          return dist2d < f.rOuter * 1.35 && t.y > f.yBottom - 1 && t.y < f.yTop + 4;
+          return dist2d < f.rOuter * 2.0 && t.y > f.yBottom - 1 && t.y < f.yTop + 6;
         });
         if (well) {
           startWellOrbit(b, well, t);
@@ -862,14 +864,29 @@ const ZPHYSICS = (() => {
         b.body.setLinvel({ x: v.x * s, y: v.y, z: v.z * s }, true);
       }
     }
-    // OVERRUN GUARD: skip the solver if the per-ball work already took too long.
-    // The fixedStep loop above is O(n) and fast; it's world.step() (contact resolution)
-    // that goes exponential when 20 balls pack into a narrow sorter throat.
+    // OVERRUN GUARD: track consecutive slow steps and skip world.step() if it keeps hanging.
+    // world.step() contact resolution goes exponential when many balls pack into a throat.
+    // Skipping a few solver frames lets balls spread before resuming full resolution.
     const _ws0 = (typeof performance !== 'undefined') ? performance.now() : Date.now();
     world.step();
     const _wsElapsed = ((typeof performance !== 'undefined') ? performance.now() : Date.now()) - _ws0;
-    if (_wsElapsed > 35 && typeof console !== 'undefined') {
-      console.warn('[ZPHYSICS] world.step slow: ' + _wsElapsed.toFixed(1) + 'ms (' + balls.size + ' balls)');
+    if (_wsElapsed > 35) {
+      _slowSteps = (_slowSteps || 0) + 1;
+      if (_slowSteps >= 3) {
+        // 3 slow steps in a row — give balls a small random nudge to break symmetry,
+        // then skip the next 2 solver frames to let them spread out.
+        for (const [, b] of balls) {
+          if (!b.inWell && b.alive) {
+            const v = b.body.linvel();
+            b.body.setLinvel({ x: v.x + (Math.random() - 0.5) * 2, y: v.y, z: v.z + (Math.random() - 0.5) * 2 }, true);
+          }
+        }
+        _slowSteps = 0;
+        _skipFrames = 2;
+        if (typeof console !== 'undefined') console.warn('[ZPHYSICS] pile-up detected — nudging balls');
+      }
+    } else {
+      _slowSteps = 0;
     }
   }
 

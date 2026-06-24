@@ -44,6 +44,22 @@
   #arm #kickbtn:hover { background:rgba(83,252,24,.18); box-shadow:0 0 18px rgba(83,252,24,.25); }
   #arm #kickbtn .ki { background:#53fc18; color:#000; width:20px; height:20px; border-radius:4px; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:12px; }
   #arm .hint { font-size:11px; color:#6b9; letter-spacing:1px; }
+  /* --- Kick Skin Picker (shown once at first Kick sign-in) --- */
+  #skinPicker { position:fixed; inset:0; background:rgba(0,0,0,.82); z-index:200; display:none; align-items:center; justify-content:center; }
+  #skinPicker .sp-box { background:linear-gradient(160deg,rgba(10,20,50,.95),rgba(4,8,24,.97)); border:1px solid rgba(0,200,255,.4); border-radius:18px; padding:32px 36px; max-width:520px; width:90vw; text-align:center; box-shadow:0 0 60px rgba(20,120,255,.35); }
+  #skinPicker h2 { font-size:18px; letter-spacing:4px; color:#fff; margin:0 0 6px; }
+  #skinPicker .sp-sub { font-size:11px; color:#7fb8e0; letter-spacing:2px; margin-bottom:22px; }
+  #skinPicker .sp-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:22px; }
+  #skinPicker .sp-card { border:2px solid rgba(80,180,255,.25); border-radius:10px; padding:12px 8px 10px; cursor:pointer; transition:border-color .15s,box-shadow .15s; }
+  #skinPicker .sp-card:hover { border-color:rgba(0,220,255,.7); box-shadow:0 0 14px rgba(0,200,255,.35); }
+  #skinPicker .sp-card.selected { border-color:#00e5ff; box-shadow:0 0 18px rgba(0,229,255,.5); }
+  #skinPicker .sp-card canvas { width:52px; height:52px; border-radius:50%; display:block; margin:0 auto 6px; }
+  #skinPicker .sp-card .sp-name { font-size:11px; letter-spacing:1.5px; color:#cce8ff; }
+  #skinPicker .sp-card .sp-tier { font-size:9px; color:#53fc18; letter-spacing:1px; margin-top:2px; }
+  #skinPicker .sp-card .sp-tier.paid { color:#ffaa44; }
+  #skinPicker .sp-confirm { width:200px; padding:12px; border-radius:9px; cursor:pointer; font-family:inherit; font-size:14px; letter-spacing:3px; background:linear-gradient(90deg,rgba(40,140,255,.6),rgba(120,60,255,.6)); color:#fff; border:1px solid rgba(120,200,255,.6); font-weight:bold; }
+  #skinPicker .sp-confirm:hover { background:linear-gradient(90deg,rgba(40,140,255,.9),rgba(120,60,255,.9)); }
+  #skinPicker .sp-note { font-size:10px; color:#7fb8e0; margin-top:14px; opacity:.7; }
   #leader { display:none; }
   #lobby { position:fixed; inset:0; display:none; align-items:center; justify-content:center; z-index:40; pointer-events:none; }
   #lobby .lb { text-align:center; background:rgba(4,12,28,.5); backdrop-filter:blur(2px); border:1px solid rgba(80,180,255,.3);
@@ -260,6 +276,17 @@
   <div class="hint">races run live — you'll drop into the next one</div>
   <a href="/dashboard" style="font-size:11px;color:#7fb8e0;letter-spacing:1px;text-decoration:none;opacity:.85;border-bottom:1px solid rgba(127,184,224,.3);padding-bottom:1px">📊 my stats &amp; leaderboard</a>
 </div></div>
+
+<!-- Kick Skin Picker — shown once at first Kick sign-in, hidden after choice saved -->
+<div id="skinPicker">
+  <div class="sp-box">
+    <h2>CHOOSE YOUR ZORB</h2>
+    <div class="sp-sub">KICK SUBSCRIBERS GET A FREE SKIN FOREVER — PICK ONE</div>
+    <div class="sp-grid" id="spGrid"></div>
+    <button class="sp-confirm" id="spConfirm">LOCK IT IN ▶</button>
+    <div class="sp-note">After 1.0 launch, skins move to the shop. Lock yours in now.</div>
+  </div>
+</div>
 
 <!-- SpeedyGoWild background music: self-hosted playlist (music/playlist.json) when present
      = zero YouTube + zero ad-blocker issues; otherwise falls back to the YouTube embed -->
@@ -735,19 +762,21 @@ function buildCourse(seed) {
   if (track.mesh.roof && track.mesh.roof.indices.length) meshFrom(track.mesh.roof, ROOF_MAT);
   // Gravity well funnel material — no UV needed (ShaderMaterial), emissive glow.
   // Built fresh each race so the theme colors (railLeft = energy color) apply.
+  // Fixed purple+gold — visible in ALL themes (Glacier is all white/blue and
+  // made a theme-tinted funnel invisible against the floor).
   const wellConeMat = new THREE.MeshStandardMaterial({
-    color: new THREE.Color(_themeRailL).multiplyScalar(0.35),
-    emissive: new THREE.Color(_themeRailL),
-    emissiveIntensity: 0.7,
-    metalness: 0.4, roughness: 0.5,
-    side: THREE.DoubleSide, transparent: true, opacity: 0.88,
+    color: 0x1a0830,
+    emissive: new THREE.Color(0xcc44ff),
+    emissiveIntensity: 1.4,
+    metalness: 0.6, roughness: 0.35,
+    side: THREE.DoubleSide, transparent: true, opacity: 0.92,
   });
   const wellPlatMat = new THREE.MeshStandardMaterial({
-    color: new THREE.Color(_themeRailR).multiplyScalar(0.3),
-    emissive: new THREE.Color(_themeRailR),
-    emissiveIntensity: 0.5,
+    color: 0x1a1000,
+    emissive: new THREE.Color(0xffaa00),
+    emissiveIntensity: 1.2,
     metalness: 0.6, roughness: 0.3,
-    side: THREE.DoubleSide, transparent: true, opacity: 0.82,
+    side: THREE.DoubleSide, transparent: true, opacity: 0.88,
   });
   // draw each fork branch ribbon
   if (track.branchMeshes) {
@@ -2056,6 +2085,7 @@ const _OBS = _ZP.get('obs') === '1';
 const _PRIVATE = MP_ROOM !== 'public' && MP_ROOM !== 'betatest';
 const MP_SLOT_MS = 95000, MP_LOBBY_MS = 9000, MP_FIELD = 8;
 let _myMarble = null, _joinName = null, _mpMode = false, _kickName = null, _isFounder = false;
+let _myPrefs = {};   // skin prefs for the local player — set from session on login
 // FRESH MODE (?fresh=1): every race uses a brand-new RANDOM seed and auto-loops, so it's a new
 // track every single race (no 95s slot lock). Ideal for a solo streamer / testing.
 let _freshMode = new URLSearchParams(location.search).get('fresh') === '1';
@@ -2065,7 +2095,7 @@ function startFreshRace(){
   const seed = (Math.random() * 1e9) >>> 0;
   if (!_myMarble) _myMarble = 'you';
   const names = mpBots(seed).map(n => ({ id:n, prefs:{}, isSub:false }));
-  names[0] = { id:_myMarble, prefs:{}, isSub:false };
+  names[0] = { id:_myMarble, prefs:_myPrefs, isSub:!!_myPrefs.skin };
   _mpMode = false;
   setStatus('⬡ fresh track every race', true);
   startRace(seed, names);
@@ -2140,7 +2170,7 @@ function runMultiplayer(){
   function runMpRace(race){
     const names = []; const used = new Set();
     const cap = _PRIVATE ? 16 : MP_FIELD;   // private lobbies fit more chat (!play) racers
-    for (const p of roster.slice(0, cap)) { if(used.has(p.name)) continue; names.push({ id:p.name, isSub:!!p.isSub, prefs:{}, platform: p.platform || 'guest', founder: !!p.founder }); used.add(p.name); }
+    for (const p of roster.slice(0, cap)) { if(used.has(p.name)) continue; const isMe = p.name === _joinName; names.push({ id:p.name, isSub:!!p.isSub || isMe && !!_myPrefs.skin, prefs: isMe ? _myPrefs : {}, platform: p.platform || 'guest', founder: !!p.founder }); used.add(p.name); }
     const bots = mpBots(race.seed); let bi = 0;
     while (names.length < MP_FIELD) { let bn = bots[bi++ % bots.length]; while(used.has(bn)) bn += '·'; used.add(bn); names.push({ id:bn, isSub:false, prefs:{}, platform:'bot' }); }
     startRace(race.seed, names);
@@ -2475,9 +2505,68 @@ if (_volEl) {
     history.replaceState({}, '', '/v2');
   }
 
+  // ── Kick Skin Picker ─────────────────────────────────────────────────────────
+  // Free skins available to all Kick sign-ins (sub-gated ones unlock via isSub).
+  // This picker is shown ONCE: if `sess.skin` is already set, skip straight to game.
+  const FREE_SKINS = ['classic','marble','chrome','glass','crystal','phantom'];
+  function buildSkinPickerCanvas(skinKey, size){
+    const s = ZCOSMETICS.ballSkins[skinKey];
+    const c = document.createElement('canvas');
+    c.width = c.height = size;
+    const ctx = c.getContext('2d');
+    const cx2 = size/2, r = size/2 - 2;
+    const col = s.color != null ? '#' + s.color.toString(16).padStart(6,'0') : '#7fe9ff';
+    const g = ctx.createRadialGradient(cx2 - r*0.3, cx2 - r*0.3, r*0.05, cx2, cx2, r);
+    g.addColorStop(0, col === '#7fe9ff' ? '#aff' : shiftColor(col, 60));
+    g.addColorStop(1, col);
+    ctx.beginPath(); ctx.arc(cx2, cx2, r, 0, Math.PI*2);
+    ctx.fillStyle = g; ctx.fill();
+    if (s.emissive > 0.3) {
+      ctx.beginPath(); ctx.arc(cx2, cx2, r, 0, Math.PI*2);
+      ctx.strokeStyle = 'rgba(180,120,255,' + (s.emissive * 0.7) + ')';
+      ctx.lineWidth = 3; ctx.stroke();
+    }
+    return c;
+  }
+  function shiftColor(hex, amt){
+    const n = parseInt(hex.slice(1), 16);
+    const r = Math.min(255, (n>>16) + amt), g2 = Math.min(255, ((n>>8)&0xff) + amt), b = Math.min(255, (n&0xff) + amt);
+    return '#' + ((r<<16)|(g2<<8)|b).toString(16).padStart(6,'0');
+  }
+  function showSkinPicker(onPick){
+    const picker = document.getElementById('skinPicker');
+    const grid = document.getElementById('spGrid');
+    grid.innerHTML = '';
+    let chosen = FREE_SKINS[0];
+    FREE_SKINS.forEach(key => {
+      const s = ZCOSMETICS.ballSkins[key];
+      if (!s) return;
+      const card = document.createElement('div');
+      card.className = 'sp-card' + (key === chosen ? ' selected' : '');
+      card.dataset.skin = key;
+      const cv = buildSkinPickerCanvas(key, 52);
+      card.appendChild(cv);
+      const nm = document.createElement('div'); nm.className = 'sp-name'; nm.textContent = s.name; card.appendChild(nm);
+      const ti = document.createElement('div'); ti.className = 'sp-tier' + (s.tier === 'paid' ? ' paid' : ''); ti.textContent = s.tier === 'free' ? 'FREE' : s.tier === 'sub' ? 'KICK SUB' : 'PREMIUM'; card.appendChild(ti);
+      card.addEventListener('click', () => {
+        grid.querySelectorAll('.sp-card').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+        chosen = key;
+      });
+      grid.appendChild(card);
+    });
+    picker.style.display = 'flex';
+    document.getElementById('spConfirm').onclick = () => {
+      picker.style.display = 'none';
+      onPick(chosen);
+    };
+  }
+
   if (sess && sess.username) {
     // signed in with Kick → race as that account, no nickname needed
     _kickName = sess.username;
+    // Load saved skin prefs from session
+    if (sess.skin) _myPrefs = { skin: sess.skin };
     // am I a beta tester? → render the gold founders ball. Re-send to the room if it
     // resolves after we've already joined, so others see the founders ball too.
     if (sess.kickId) {
@@ -2510,8 +2599,25 @@ if (_volEl) {
     startMusic();   // the click is the user gesture browsers require for audio
     boot();
   }
-  document.getElementById('playbtn').addEventListener('click', go);
-  nickEl.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+  function goWithSkinCheck(){
+    // Kick players who haven't picked a skin yet get the picker shown first.
+    // Non-Kick (guest) players skip straight to game.
+    if (_kickName && !(sess && sess.skin)) {
+      showSkinPicker(skinKey => {
+        _myPrefs = { skin: skinKey };
+        try {
+          const s2 = JSON.parse(localStorage.getItem('zorbs_session') || 'null') || {};
+          s2.skin = skinKey;
+          localStorage.setItem('zorbs_session', JSON.stringify(s2));
+        } catch(_){}
+        go();
+      });
+    } else {
+      go();
+    }
+  }
+  document.getElementById('playbtn').addEventListener('click', goWithSkinCheck);
+  nickEl.addEventListener('keydown', e => { if (e.key === 'Enter') goWithSkinCheck(); });
 
   // OBS / overlay mode: skip the join screen and watch as a clean spectator (no own marble).
   if (_OBS) { document.body.classList.add('obs'); go(); }
