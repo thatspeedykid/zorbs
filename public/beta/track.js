@@ -330,11 +330,13 @@ const ZTRACK = (() => {
       const bankUp = applyBank(n);
       const lf = add(n.pos, scale(n.right, -n.halfW)); // left floor
       const rf = add(n.pos, scale(n.right, n.halfW));  // right floor
-      const lw = add(lf, scale(bankUp, 1.5));          // left wall top
-      const rw = add(rf, scale(bankUp, 1.5));          // right wall top
-      const lc = add(lf, scale(bankUp, 3.2));          // left ceiling
-      const rc = add(rf, scale(bankUp, 3.2));          // right ceiling
-      return { lf, rf, lw, rw, lc, rc, tunnel: !!n.tunnel,
+      const lw = add(lf, scale(bankUp, 2.8));          // left wall top (taller for more substance)
+      const rw = add(rf, scale(bankUp, 2.8));          // right wall top
+      const lc = add(lf, scale(bankUp, 4.5));          // left ceiling
+      const rc = add(rf, scale(bankUp, 4.5));          // right ceiling
+      const ld = add(lf, scale(bankUp, -2.2));         // left underside (skirt hides bumpers)
+      const rd = add(rf, scale(bankUp, -2.2));         // right underside
+      return { lf, rf, lw, rw, lc, rc, ld, rd, tunnel: !!n.tunnel,
         noWallL: !!(n.noWalls || n.noWallL), noWallR: !!(n.noWalls || n.noWallR) };
     }
     function applyBank(n) {
@@ -367,6 +369,11 @@ const ZTRACK = (() => {
         const cLW = cur.tunnel ? cur.lc : cur.lw,  cRW = cur.tunnel ? cur.rc : cur.rw;
         if (!prev.noWallL && !cur.noWallL) { pushQuad(wallPos, wallIdx, prev.lf, pLW, cLW, cur.lf, wvi); wvi += 4; }
         if (!prev.noWallR && !cur.noWallR) { pushQuad(wallPos, wallIdx, prev.rf, pRW, cRW, cur.rf, wvi); wvi += 4; }
+        // underside skirt — extends below the floor so the track reads as a solid board, not a ribbon,
+        // and hides bumpers/obstacles that are recessed beneath the track surface.
+        pushQuad(wallPos, wallIdx, prev.ld, prev.lf, cur.lf, cur.ld, wvi); wvi += 4;  // left skirt
+        pushQuad(wallPos, wallIdx, prev.rf, prev.rd, cur.rd, cur.rf, wvi); wvi += 4;  // right skirt
+        pushQuad(wallPos, wallIdx, prev.rd, prev.ld, cur.ld, cur.rd, wvi); wvi += 4;  // bottom face
         // ceiling only where BOTH ends are tunnel
         if (prev.tunnel && cur.tunnel) {
           pushQuad(roofPos, roofIdx, prev.lc, prev.rc, cur.rc, cur.lc, rvi); rvi += 4;

@@ -604,7 +604,11 @@ const ZFORK = (() => {
 
     // ---- APPROACH: longer runway so the entry track sits well back from the funnel rim. ----
     const APPROACH_NODES = 22;
-    for (let k = 0; k <= APPROACH_NODES; k++) mainNodes[splitIdx + k].kind = 'sorter';
+    for (let k = 0; k <= APPROACH_NODES; k++) {
+      mainNodes[splitIdx + k].kind = 'sorter';
+      // Last 4 approach nodes: remove walls so the track mouth opens into the funnel cleanly
+      if (k >= APPROACH_NODES - 4) { mainNodes[splitIdx + k].noWallL = true; mainNodes[splitIdx + k].noWallR = true; }
+    }
     const entryNode = mainNodes[splitIdx + APPROACH_NODES];
     const entryIdx = splitIdx + APPROACH_NODES;
 
@@ -792,9 +796,12 @@ const ZFORK = (() => {
         const right = norm(cross(bheading, worldUp));
         const up = norm(cross(right, bheading));
         const nearRejoin = k >= TRACK_LEN - 30;
+        // meshSkip the final 22 nodes so the branch floor doesn't end in a hard cliff edge —
+        // the ball simply glides off the elevated tip and drops onto the main track.
+        const meshSkip = k >= TRACK_LEN - 22;
         nlist.push({ pos: v(bpos.x, bpos.y, bpos.z), dir: v(bheading.x, bheading.y, bheading.z), right, up,
           halfW: LW, bank: 0, kind: 'route', tunnel: false, branchId: bid,
-          noWallL: nearRejoin, noWallR: nearRejoin });
+          noWallL: nearRejoin, noWallR: nearRejoin, meshSkip });
       }
       // End elevated — ball falls onto the main track naturally. No position snap needed.
       branches[bid] = nlist;
