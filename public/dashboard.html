@@ -191,7 +191,7 @@ body{background:#05050f;color:#fff;font-family:'Courier New',monospace;min-heigh
 
       <div class="nav-section">ACCOUNT</div>
       <div class="nav-item" onclick="showPage('settings')" id="ni-settings"><span class="icon">◧</span> SETTINGS</div>
-      <div class="nav-item disabled"><span class="icon">🛍</span> MARKETPLACE <span class="coming-soon">SOON</span></div>
+      <div class="nav-item" onclick="showPage('marketplace')" id="ni-marketplace"><span class="icon">🛍</span> MARKETPLACE</div>
 
       <div class="nav-section admin-only" style="display:none">ADMIN</div>
       <div class="nav-item admin-only" style="display:none" onclick="showPage('admin-streamers')" id="ni-admin-streamers"><span class="icon">◈</span> ALL STREAMERS</div>
@@ -386,16 +386,21 @@ body{background:#05050f;color:#fff;font-family:'Courier New',monospace;min-heigh
       </div>
 
       <!-- SETTINGS -->
-      <div class="page" id="page-settings">
-        <div class="page-title">ACCOUNT SETTINGS</div>
+      <!-- MARKETPLACE -->
+      <div class="page" id="page-marketplace">
+        <div class="page-title">MARKETPLACE</div>
         <!-- BALL SKIN SELECTOR -->
         <div class="card" style="margin-bottom:16px;">
-          <h3>BALL SKIN</h3>
+          <h3>SKINS</h3>
           <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-bottom:14px;letter-spacing:1px;">Alpha: all skins unlocked. Post-launch some require sub or purchase.</div>
           <div id="dash-skin-grid" style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px;"></div>
           <button class="btn btn-cyan" id="btn-save-skin">SAVE SKIN</button>
           <span id="skin-saved-msg" style="display:none;font-size:10px;color:#53fc18;margin-left:12px;letter-spacing:1px;">✓ SAVED</span>
         </div>
+      </div>
+
+      <div class="page" id="page-settings">
+        <div class="page-title">ACCOUNT SETTINGS</div>
         <div class="grid grid-2">
           <div class="card">
             <h3>KICK ACCOUNT</h3>
@@ -628,7 +633,7 @@ function showPage(id){
   if(nav)  nav.classList.add('active');
   if(id === 'leaderboard') loadGlobalLeaderboard();
   if(id === 'obs') { fillLobbyLinks(); initCustom(); connectLobby(); }
-  if(id === 'settings') buildDashSkinGrid();
+  if(id === 'marketplace') buildDashSkinGrid();
 }
 
 // ── MY LOBBY · live host controls (WebSocket to the room) ──────────────────
