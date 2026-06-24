@@ -1280,7 +1280,7 @@ function buildCoreMaterial(skin, baseCol, accent) {
   const style = skin.style || 'metal';
   if (style === 'galaxy') {
     return new THREE.MeshStandardMaterial({ map: galaxyTexture(), color: 0xffffff,
-      metalness: 0.3, roughness: 0.4, emissive: 0x6633cc, emissiveIntensity: 0.5,
+      metalness: 0.3, roughness: 0.4, emissive: 0x8844ee, emissiveIntensity: 0.85,
       emissiveMap: galaxyTexture(), envMap: _envMap || null, envMapIntensity: 0.8 });
   }
   if (style === 'lava') {
@@ -1289,9 +1289,11 @@ function buildCoreMaterial(skin, baseCol, accent) {
       emissiveMap: lavaTexture() });
   }
   if (style === 'glass' && THREE.MeshPhysicalMaterial) {
+    // less transmission + stronger emissive so the tinted glass reads as its color instead
+    // of rendering near-black (transmission alone looks dark against the scene).
     return new THREE.MeshPhysicalMaterial({ color: baseCol, metalness: 0.0, roughness: 0.04,
-      transmission: 0.92, thickness: 0.6, ior: 1.4, transparent: true,
-      emissive: accent, emissiveIntensity: 0.12,
+      transmission: 0.45, thickness: 0.6, ior: 1.4, transparent: true,
+      emissive: accent, emissiveIntensity: 0.5,
       clearcoat: 1.0, clearcoatRoughness: 0.05, envMap: _envMap || null, envMapIntensity: 1.0 });
   }
   if (style === 'marble') {
@@ -1311,8 +1313,8 @@ function buildCoreMaterial(skin, baseCol, accent) {
   if (style === 'crystal') {
     return THREE.MeshPhysicalMaterial
       ? new THREE.MeshPhysicalMaterial({ color: baseCol, metalness: 0.0, roughness: 0.02,
-          transmission: 0.7, thickness: 1.0, ior: 1.8, transparent: true,
-          emissive: accent, emissiveIntensity: 0.4,
+          transmission: 0.4, thickness: 1.0, ior: 1.8, transparent: true,
+          emissive: accent, emissiveIntensity: 0.7,
           clearcoat: 1.0, clearcoatRoughness: 0.0, envMap: _envMap || null, envMapIntensity: 1.4 })
       : new THREE.MeshStandardMaterial({ color: baseCol, metalness: 0.1, roughness: 0.02,
           emissive: accent, emissiveIntensity: 0.4, transparent: true, opacity: 0.85 });
@@ -2646,6 +2648,12 @@ if (_volEl) {
   let started = false;
   function go(){
     if (started) return; started = true;
+    // Re-read the saved skin FRESH at play time — covers the case where the skin was picked
+    // in the dashboard after this game tab had already loaded (stale _myPrefs otherwise).
+    try {
+      const fresh = JSON.parse(localStorage.getItem('zorbs_session') || 'null');
+      if (fresh && fresh.skin) _myPrefs = { skin: fresh.skin, owned: ['Rainbow','Solar','Galaxy','Lava','Plasma','Void','Gold'] };
+    } catch(_){}
     _joinName = (_kickName || nickEl.value || '').trim().slice(0,16) || ('guest'+Math.floor(1000+Math.random()*9000));
     armEl.remove();
     startMusic();   // the click is the user gesture browsers require for audio
