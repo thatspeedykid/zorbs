@@ -92,6 +92,8 @@
     <span class="sp"></span>
     <button class="warn" id="btn-clear">Clear</button>
     <button id="btn-undo">↩ Undo</button>
+    <button id="btn-load">📂 Load Draft</button>
+    <button id="btn-save">💾 Save Draft</button>
     <button id="btn-test">▶ Test</button>
     <button class="pri" id="btn-submit">Submit for Review</button>
   </header>
@@ -133,6 +135,18 @@
   </aside>
 </div>
 <div class="toast" id="toast"></div>
+
+<div id="draft-modal" style="display:none;position:fixed;inset:0;z-index:50;background:rgba(6,8,14,.72);backdrop-filter:blur(2px)">
+  <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:min(560px,92vw);max-height:80vh;display:flex;flex-direction:column;background:#121726;border:1px solid #2a3358;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #222a40">
+      <strong style="font-size:15px">📂 Your saved drafts</strong>
+      <button onclick="closeDraftModal()" style="background:none;border:0;color:#9aa6c4;font-size:20px;cursor:pointer;line-height:1">×</button>
+    </div>
+    <div id="draft-list" style="overflow:auto;padding:10px 12px;gap:8px;display:flex;flex-direction:column">
+      <div style="color:#9aa6c4;padding:20px;text-align:center">Loading…</div>
+    </div>
+  </div>
+</div>
 
 <script>
 // ============================================================================
@@ -837,6 +851,82 @@ document.getElementById('btn-submit').onclick=async()=>{
   }catch(e){toast('Network error — try again.');}
   btn.textContent='Submit for Review'; btn.disabled=false; validate();
 };
+
+// ---- DRAFTS (save/load a build-in-progress to the account) ----
+let currentDraftId = null;
+
+function applyMap(d){
+  sections = Array.isArray(d.sections)? JSON.parse(JSON.stringify(d.sections)) : [];
+  obstacles = Array.isArray(d.obstacles)? JSON.parse(JSON.stringify(d.obstacles)) : [];
+  document.getElementById('m-name').value = d.name && d.name!=='Untitled Draft' ? d.name : '';
+  document.getElementById('m-desc').value = d.description||'';
+  difficulty = ['easy','medium','hard'].includes(d.difficulty)? d.difficulty : 'medium';
+  document.getElementById('m-diff').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x.dataset.d===difficulty));
+  const th=document.getElementById('m-theme'); th.value = d.theme||'';
+  deselect(); undoStack=[]; redoStack=[]; fit(); refresh();
+}
+
+document.getElementById('btn-save').onclick=async()=>{
+  if(!author){toast('Sign in on the dashboard first to save drafts to your account.');return;}
+  if(!sections.length){toast('Nothing to save yet — add a piece first.');return;}
+  const btn=document.getElementById('btn-save'); btn.disabled=true; const old=btn.textContent; btn.textContent='Saving…';
+  try{
+    const map=Object.assign(currentMap(),{thumb:makeThumb()});
+    const r=await fetch('/api/maps',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'draft-save',map,id:currentDraftId||undefined})});
+    const j=await r.json().catch(()=>({}));
+    if(j&&j.ok){ currentDraftId=j.id; toast('💾 Draft saved to your account.'); }
+    else toast('Save failed: '+(j&&j.error||'try again'));
+  }catch(e){toast('Network error — try again.');}
+  btn.textContent=old; btn.disabled=false;
+};
+
+document.getElementById('btn-load').onclick=openDraftModal;
+function closeDraftModal(){ document.getElementById('draft-modal').style.display='none'; }
+async function openDraftModal(){
+  if(!author){toast('Sign in on the dashboard first to load your drafts.');return;}
+  const modal=document.getElementById('draft-modal'); const list=document.getElementById('draft-list');
+  modal.style.display='block';
+  list.innerHTML='<div style="color:#9aa6c4;padding:20px;text-align:center">Loading…</div>';
+  try{
+    const r=await fetch('/api/maps?list=drafts&author='+encodeURIComponent(author));
+    const j=await r.json().catch(()=>({}));
+    const drafts=(j&&j.drafts)||[];
+    if(!drafts.length){ list.innerHTML='<div style="color:#9aa6c4;padding:24px;text-align:center">No saved drafts yet.<br><span style="font-size:12px">Build a track and hit 💾 Save Draft.</span></div>'; return; }
+    list.innerHTML=drafts.map(d=>{
+      const when=d.updated?new Date(d.updated).toLocaleString():'';
+      const img=d.thumb?`<img src="${d.thumb}" style="width:80px;height:50px;object-fit:cover;border-radius:6px;flex:0 0 auto;background:#0c0f1a">`:`<div style="width:80px;height:50px;border-radius:6px;background:#0c0f1a;flex:0 0 auto"></div>`;
+      const nm=(d.name||'Untitled Draft').replace(/[<>&]/g,'');
+      return `<div style="display:flex;gap:10px;align-items:center;background:#0f1422;border:1px solid #222a40;border-radius:8px;padding:8px">
+        ${img}
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${nm}</div>
+          <div style="color:#9aa6c4;font-size:11px">${d.sectionCount} pieces · ${d.obstacleCount} obstacles · ${d.difficulty}</div>
+          <div style="color:#6b7596;font-size:10px">${when}</div>
+        </div>
+        <button onclick="loadDraft('${d.id}')" style="background:#2a6cff;border:0;color:#fff;border-radius:6px;padding:7px 12px;cursor:pointer;font-size:12px">Load</button>
+        <button onclick="delDraft('${d.id}','${nm.replace(/'/g,"")}')" style="background:#3a2030;border:1px solid #5a2a40;color:#ff8a9c;border-radius:6px;padding:7px 10px;cursor:pointer;font-size:12px">🗑</button>
+      </div>`;
+    }).join('');
+  }catch(e){ list.innerHTML='<div style="color:#ff8a9c;padding:20px;text-align:center">Couldn\'t load drafts — try again.</div>'; }
+}
+async function loadDraft(id){
+  try{
+    const r=await fetch('/api/maps?draft='+encodeURIComponent(id)+'&author='+encodeURIComponent(author));
+    const j=await r.json().catch(()=>({}));
+    if(j&&j.ok&&j.draft){ applyMap(j.draft); currentDraftId=id; closeDraftModal(); toast('📂 Draft loaded — keep building.'); }
+    else toast('Couldn\'t load that draft.');
+  }catch(e){toast('Network error — try again.');}
+}
+async function delDraft(id,name){
+  if(!confirm('Delete draft "'+name+'"? This can\'t be undone.')) return;
+  try{
+    await fetch('/api/maps',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'draft-delete',id,author})});
+    if(currentDraftId===id) currentDraftId=null;
+    openDraftModal();
+  }catch(e){toast('Network error — try again.');}
+}
 
 // ---- CLEAR ----
 document.getElementById('btn-clear').onclick=()=>{

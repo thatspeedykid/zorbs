@@ -11,6 +11,12 @@
 //   POST /api/maps  { action:'review', id, approve, admin }   -> approve/deny a map (ADMIN ONLY)
 //   POST /api/maps  { action:'feature', id, admin }           -> pin as featured map (ADMIN ONLY)
 //
+//   DRAFTS (private, per-account work-in-progress so a build can be paused & resumed):
+//   POST /api/maps  { action:'draft-save', map, id? }          -> save/update a draft (returns id)
+//   GET  /api/maps?list=drafts&author=<name>                   -> that author's drafts (metadata)
+//   GET  /api/maps?draft=<id>&author=<name>                    -> one full draft (to resume editing)
+//   POST /api/maps  { action:'draft-delete', id, author }      -> delete a draft
+//
 // No-ops gracefully (configured:false) until a DB is connected, so nothing breaks.
 
 function kvEnv() {
@@ -108,6 +114,35 @@ function sanitizeThumb(t) {
   return t.length <= 200000 ? t : '';
 }
 
+// A DRAFT is a private, in-progress map saved to the author's account so they can pause a build and
+// resume later. Unlike a submitted map it isn't reviewed or shown to anyone else, so we allow it to
+// be incomplete (a single section, no obstacles). Same field clamps otherwise.
+function sanitizeDraft(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const sections = Array.isArray(raw.sections)
+    ? raw.sections.map(sanitizeSection).filter(Boolean).slice(0, 80) : [];
+  const obstacles = Array.isArray(raw.obstacles)
+    ? raw.obstacles.map(sanitizeObstacle).filter(Boolean).slice(0, 60) : [];
+  return {
+    name: clean(raw.name, 40) || 'Untitled Draft',
+    author: clean(raw.author, 24) || 'anon',
+    difficulty: ['easy', 'medium', 'hard'].includes(raw.difficulty) ? raw.difficulty : 'medium',
+    description: clean(raw.description, 140),
+    theme: clean(raw.theme, 20),
+    thumb: sanitizeThumb(raw.thumb),
+    sections, obstacles,
+  };
+}
+
+function draftMeta(d) {
+  if (!d) return null;
+  return {
+    id: d.id, name: d.name, difficulty: d.difficulty, theme: d.theme,
+    thumb: d.thumb || '', sectionCount: (d.sections || []).length,
+    obstacleCount: (d.obstacles || []).length, updated: d.updated, created: d.created,
+  };
+}
+
 function sanitizeMap(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const sections = Array.isArray(raw.sections)
@@ -168,7 +203,27 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true, map: m });
       }
 
+      // a single full draft (for resuming a build) — author-scoped key
+      const draftId = clean(req.query.draft, 24);
+      if (draftId) {
+        const author = clean(req.query.author, 24).toLowerCase();
+        if (!author) return res.status(400).json({ ok: false, error: 'no author' });
+        const raw = await redis(['GET', 'zdraft:' + author + ':' + draftId]);
+        let d = null; if (raw) { try { d = JSON.parse(raw); } catch (_) {} }
+        return res.status(200).json({ ok: true, draft: d });
+      }
+
       const list = clean(req.query.list, 16) || 'approved';
+
+      // the author's saved drafts (metadata only)
+      if (list === 'drafts') {
+        const author = clean(req.query.author, 24).toLowerCase();
+        if (!author) return res.status(400).json({ ok: false, error: 'no author' });
+        const ids = (await redis(['ZREVRANGE', 'zdrafts:by:' + author, '0', '49'])) || [];
+        const rows = ids.length ? await pipeline(ids.map(i => ['GET', 'zdraft:' + author + ':' + i])) : [];
+        const drafts = rows.map(r => { try { return draftMeta(JSON.parse(r)); } catch (_) { return null; } }).filter(Boolean);
+        return res.status(200).json({ ok: true, drafts });
+      }
 
       if (list === 'pending') {
         if (!isAdmin(clean(req.query.admin, 80))) return res.status(403).json({ ok: false, error: 'admin only' });
@@ -276,6 +331,50 @@ export default async function handler(req, res) {
         ['ZREM', 'zmaps:pending', id],
         ['ZREM', 'zmaps:approved', id],
         ['ZREM', 'zmaps:by:' + String(m.author || '').toLowerCase(), id],
+      ]);
+      return res.status(200).json({ ok: true, deleted: id });
+    }
+
+    if (action === 'draft-save') {
+      // save or update a private draft on the author's account. If `id` is supplied and the draft
+      // exists it's overwritten in place; otherwise a new draft is created.
+      const d = sanitizeDraft(body.map);
+      if (!d || !d.sections.length) return res.status(400).json({ ok: false, error: 'empty draft' });
+      const author = d.author.toLowerCase();
+      if (!author || author === 'anon') return res.status(401).json({ ok: false, error: 'sign in to save drafts' });
+      const key = 'zdrafts:by:' + author;
+      let id = clean(body.id, 24);
+      let existing = null;
+      if (id) {
+        const raw = await redis(['GET', 'zdraft:' + author + ':' + id]);
+        if (raw) { try { existing = JSON.parse(raw); } catch (_) {} }
+      }
+      if (!existing) {
+        // cap drafts per account so the store can't be flooded
+        const count = (await redis(['ZCARD', key])) || 0;
+        if (count >= 30) return res.status(400).json({ ok: false, error: 'draft limit reached (30) — delete some first' });
+        id = newId();
+        d.created = Date.now();
+      } else {
+        d.created = existing.created || Date.now();
+      }
+      d.id = id;
+      d.author = author;
+      d.updated = Date.now();
+      await pipeline([
+        ['SET', 'zdraft:' + author + ':' + id, JSON.stringify(d)],
+        ['ZADD', key, String(d.updated), id],
+      ]);
+      return res.status(200).json({ ok: true, id, updated: d.updated });
+    }
+
+    if (action === 'draft-delete') {
+      const author = clean(body.author, 24).toLowerCase();
+      const id = clean(body.id, 24);
+      if (!author || !id) return res.status(400).json({ ok: false, error: 'bad request' });
+      await pipeline([
+        ['DEL', 'zdraft:' + author + ':' + id],
+        ['ZREM', 'zdrafts:by:' + author, id],
       ]);
       return res.status(200).json({ ok: true, deleted: id });
     }
