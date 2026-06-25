@@ -64,11 +64,42 @@ async function pipeline(cmds) {
 
 const clean = (s, n) => String(s == null ? '' : s).slice(0, n || 40).replace(/[<>\r\n]/g, '');
 
-// Admin gate: the ZORBS_ADMIN_KEY env var must match the `admin` field. If unset, admin ops are
-// refused (fail-closed) rather than open to everyone.
+// Admin gate (legacy): the ZORBS_ADMIN_KEY env var must match the `admin` field. If unset, admin
+// ops are refused (fail-closed). Kept as a fallback so a key still works if Kick is unreachable.
 function isAdmin(key) {
   const k = process.env.ZORBS_ADMIN_KEY || '';
   return !!k && key === k;
+}
+
+// Allowlist of admin Kick usernames (must match api/kick-auth.js ADMIN_USERNAMES).
+const ADMIN_USERNAMES = (process.env.ZORBS_ADMIN_USERNAMES || 'marsscumbags')
+  .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+
+// Identity-based admin check: verify the caller's Kick access token against Kick's API and
+// confirm the resolved username is in the admin allowlist. The session blob handed to the
+// browser is only base64 (forgeable), so we never trust its `role` field — we re-verify the
+// token with Kick here, which can't be spoofed without a real admin login.
+async function isAdminToken(token) {
+  if (!token) return false;
+  try {
+    const r = await fetch('https://api.kick.com/public/v1/users', {
+      headers: { 'Authorization': 'Bearer ' + token,
+                 'Client-Id': process.env.KICK_CLIENT_ID || '01KTMSSQ3PNEAA8EYYX1T6T4CK' },
+    });
+    if (!r.ok) return false;
+    const j = await r.json().catch(() => ({}));
+    const user = (j.data && j.data[0]) || j || {};
+    const username = String(user.username || user.name || '').toLowerCase();
+    return !!username && ADMIN_USERNAMES.includes(username);
+  } catch (_) { return false; }
+}
+
+// Combined gate used by every admin endpoint: pass if EITHER a valid admin Kick token
+// (preferred — no shared secret to type) OR the legacy admin key is supplied.
+async function adminOK(req, bodyAdmin) {
+  const token = (req.headers && (req.headers['x-kick-token'] || req.headers['x-kick-token'.toLowerCase()])) || '';
+  if (await isAdminToken(clean(token, 4000))) return true;
+  return isAdmin(clean(bodyAdmin, 80));
 }
 
 // The set of section kinds the track builder understands. Anything else is dropped on save so a
@@ -251,7 +282,7 @@ export default async function handler(req, res) {
       }
 
       if (list === 'pending') {
-        if (!isAdmin(clean(req.query.admin, 80))) return res.status(403).json({ ok: false, error: 'admin only' });
+        if (!(await adminOK(req, req.query.admin))) return res.status(403).json({ ok: false, error: 'admin only' });
         const ids = (await redis(['ZREVRANGE', 'zmaps:pending', '0', '99'])) || [];
         const rows = ids.length ? await pipeline(ids.map(i => ['GET', 'zmap:' + i])) : [];
         const maps = rows.map(r => { try { return meta(JSON.parse(r)); } catch (_) { return null; } }).filter(Boolean);
@@ -296,7 +327,7 @@ export default async function handler(req, res) {
     }
 
     if (action === 'review') {
-      if (!isAdmin(clean(body.admin, 80))) return res.status(403).json({ ok: false, error: 'admin only' });
+      if (!(await adminOK(req, body.admin))) return res.status(403).json({ ok: false, error: 'admin only' });
       const id = clean(body.id, 24);
       const raw = await redis(['GET', 'zmap:' + id]);
       let m = null; if (raw) { try { m = JSON.parse(raw); } catch (_) {} }
@@ -312,7 +343,7 @@ export default async function handler(req, res) {
     }
 
     if (action === 'feature') {
-      if (!isAdmin(clean(body.admin, 80))) return res.status(403).json({ ok: false, error: 'admin only' });
+      if (!(await adminOK(req, body.admin))) return res.status(403).json({ ok: false, error: 'admin only' });
       const id = clean(body.id, 24);
       const raw = await redis(['GET', 'zmap:' + id]);
       let m = null; if (raw) { try { m = JSON.parse(raw); } catch (_) {} }
@@ -348,7 +379,7 @@ export default async function handler(req, res) {
       let m = null; if (raw) { try { m = JSON.parse(raw); } catch (_) {} }
       if (!m) return res.status(404).json({ ok: false, error: 'not found' });
       const requester = clean(body.author, 24).toLowerCase();
-      const admin = isAdmin(clean(body.admin, 80));
+      const admin = await adminOK(req, body.admin);
       if (!admin && (!requester || requester !== String(m.author || '').toLowerCase()))
         return res.status(403).json({ ok: false, error: 'not your map' });
       await pipeline([

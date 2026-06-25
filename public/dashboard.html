@@ -739,12 +739,18 @@ async function loadCommunityMaps(){
 // ── MAP EDITOR / COMMUNITY MAPS ────────────────────────────────────────────
 function openMapEditor(){ window.open('/beta/map-editor.html', '_blank'); }
 
-// admin key: stored locally once entered (the API verifies it server-side against ZORBS_ADMIN_KEY)
-function adminKey(){
-  let k = localStorage.getItem('zorbs_admin_key') || '';
-  if(!k){ k = prompt('Enter admin key to manage maps:') || ''; if(k) localStorage.setItem('zorbs_admin_key', k); }
-  return k;
+// Admins are verified by their Kick identity (session.role === 'admin', re-checked server-side
+// against the Kick access token) — no separate key to type. adminHeaders() attaches the token
+// the API verifies. The legacy typed key still works as a fallback if Kick is ever unreachable.
+function adminToken(){
+  try { const s = session || JSON.parse(localStorage.getItem('zorbs_session')||'null'); return (s && s.accessToken) || ''; }
+  catch(_){ return ''; }
 }
+function adminHeaders(extra){
+  return Object.assign({ 'x-kick-token': adminToken() }, extra || {});
+}
+// legacy key fallback (only prompts if explicitly needed)
+function adminKey(){ return localStorage.getItem('zorbs_admin_key') || ''; }
 
 function mapStatusBadge(st){
   const cls = st==='approved'?'live':st==='denied'?'idle':'admin';
@@ -827,11 +833,9 @@ async function deleteMyMap(id, name){
 async function loadAdminMaps(){
   const tb = document.getElementById('admin-maps-table');
   if(!session || session.role !== 'admin'){ tb.innerHTML='<tr><td colspan="6" style="padding:20px;text-align:center">Admin only.</td></tr>'; return; }
-  const key = adminKey();
-  if(!key){ tb.innerHTML='<tr><td colspan="6" style="padding:20px;text-align:center">Admin key required.</td></tr>'; return; }
   try {
-    const r = await fetch('/api/maps?list=pending&admin=' + encodeURIComponent(key));
-    if(r.status === 403){ localStorage.removeItem('zorbs_admin_key'); tb.innerHTML='<tr><td colspan="6" style="color:#ff4060;padding:20px;text-align:center">Bad admin key — click MAP REVIEW again to re-enter.</td></tr>'; return; }
+    const r = await fetch('/api/maps?list=pending&admin=' + encodeURIComponent(adminKey()), { headers: adminHeaders() });
+    if(r.status === 403){ tb.innerHTML='<tr><td colspan="6" style="color:#ff4060;padding:20px;text-align:center">Admin verification failed — try logging out and back in with your admin Kick account.</td></tr>'; return; }
     const j = await r.json().catch(()=>({}));
     const maps = (j && j.maps) || [];
     const badge = document.getElementById('admin-maps-badge');
@@ -850,10 +854,9 @@ async function loadAdminMaps(){
 }
 
 async function reviewMap(id, approve){
-  const key = adminKey(); if(!key) return;
   try {
-    const r = await fetch('/api/maps', { method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ action:'review', id, approve, admin:key }) });
+    const r = await fetch('/api/maps', { method:'POST', headers: adminHeaders({'Content-Type':'application/json'}),
+      body: JSON.stringify({ action:'review', id, approve, admin:adminKey() }) });
     const j = await r.json().catch(()=>({}));
     if(j && j.ok) loadAdminMaps();
     else alert('Review failed: ' + (j&&j.error||'try again'));
