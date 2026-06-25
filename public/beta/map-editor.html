@@ -217,7 +217,9 @@ function buildPath(){
       x+=Math.sin(ang)*STEP; z+=Math.cos(ang)*STEP;
       let w=WIDTH;
       const t=len>1?i/(len-1):0;
-      if(s.kind==='funnel')   w=WIDTH*(1-(1-(s.min||0.45))*t);
+      // funnel is a V: narrows to `min` at the MIDDLE then reopens to full width by the end,
+      // matching the generator (track.js) exactly so both ends attach seamlessly to neighbours.
+      if(s.kind==='funnel')   w=WIDTH*(1-Math.sin(t*Math.PI)*(1-(s.min||0.45)));
       if(s.kind==='narrower') w=WIDTH*(t<0.5?1-(1-(s.min||0.38))*(t*2):(s.min||0.38));
       if(s.kind==='tunnel')   w=WIDTH*0.8;
       pts.push({x,z,w,kind:s.kind,sIdx:si,split:!!s.split});
@@ -552,11 +554,18 @@ cv.addEventListener('dragover', e=>{
   }
   draw();
 });
-cv.addEventListener('dragleave',()=>{ _hoverInsert=-1; _hoverT=-1; _palDrag=null; draw(); });
+// NOTE: do NOT clear _palDrag here. Many browsers fire `dragleave` immediately before
+// `drop`, so nulling the active-drag state on leave dropped the very first placement (the
+// drop then had no kind and silently no-op'd → "place twice" bug). Only clear the hover
+// cursor here; _palDrag is cleared on `dragend` (a real end of the gesture) instead.
+cv.addEventListener('dragleave',()=>{ _hoverInsert=-1; _hoverT=-1; draw(); });
+// Trust the in-page JS drag state first (reliable same-page); dataTransfer custom types are
+// flaky across browsers and were the other half of the place-twice bug.
+window.addEventListener('dragend',()=>{ _palDrag=null; _hoverInsert=-1; _hoverT=-1; draw(); });
 cv.addEventListener('drop',e=>{
   e.preventDefault();
-  const paltype=e.dataTransfer.getData('paltype')||(_palDrag&&_palDrag.paltype)||'';
-  const kind=e.dataTransfer.getData('kind')||(_palDrag&&_palDrag.kind)||'';
+  const paltype=(_palDrag&&_palDrag.paltype)||e.dataTransfer.getData('paltype')||'';
+  const kind=(_palDrag&&_palDrag.kind)||e.dataTransfer.getData('kind')||'';
   _hoverInsert=-1; _hoverT=-1; _palDrag=null;
   if(!kind){ draw(); return; }
   const c=S2C(e.clientX,e.clientY);
