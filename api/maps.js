@@ -73,7 +73,7 @@ function isAdmin(key) {
 
 // The set of section kinds the track builder understands. Anything else is dropped on save so a
 // malicious/buggy editor can't inject arbitrary fields into the generator.
-const SECTION_KINDS = ['straight', 'sweep', 'drop', 'funnel', 'narrower', 'moguls', 'spiral', 'tunnel', 'cascade'];
+const SECTION_KINDS = ['straight', 'sweep', 'drop', 'funnel', 'narrower', 'moguls', 'spiral', 'tunnel', 'cascade', 'arena'];
 
 // Sanitize one authored section into the minimal shape the generator reads. Numeric params are
 // clamped so no single section can blow up the node budget or the geometry.
@@ -86,6 +86,7 @@ function sanitizeSection(s) {
   if (kind === 'funnel' || kind === 'narrower') out.min = Math.max(0.25, Math.min(0.9, +s.min || 0.45));
   if (kind === 'drop') out.drop = Math.max(0.4, Math.min(3, +s.drop || 1.2));
   if (kind === 'cascade') out.steps = Math.max(2, Math.min(8, (s.steps | 0) || 4));
+  if (kind === 'arena') out.w = Math.max(8, Math.min(30, +s.w || 14));
   if (s.split === true) out.split = true;
   return out;
 }
@@ -129,6 +130,12 @@ function sanitizeDraft(raw) {
     ? raw.sections.map(sanitizeSection).filter(Boolean).slice(0, 80) : [];
   const obstacles = Array.isArray(raw.obstacles)
     ? raw.obstacles.map(sanitizeObstacle).filter(Boolean).slice(0, 60) : [];
+  const branches = Array.isArray(raw.branches) ? raw.branches.slice(0, 8).map(br => {
+    if (!br || typeof br !== 'object') return null;
+    const bSections = Array.isArray(br.sections) ? br.sections.map(sanitizeSection).filter(Boolean).slice(0, 40) : [];
+    const bObstacles = Array.isArray(br.obstacles) ? br.obstacles.map(sanitizeObstacle).filter(Boolean).slice(0, 20) : [];
+    return { id: br.id || 0, fromSection: Math.max(0, (br.fromSection | 0)), sections: bSections, obstacles: bObstacles };
+  }).filter(Boolean) : [];
   return {
     name: clean(raw.name, 40) || 'Untitled Draft',
     author: clean(raw.author, 24) || 'anon',
@@ -136,7 +143,7 @@ function sanitizeDraft(raw) {
     description: clean(raw.description, 140),
     theme: clean(raw.theme, 20),
     thumb: sanitizeThumb(raw.thumb),
-    sections, obstacles,
+    sections, obstacles, branches,
   };
 }
 
@@ -156,6 +163,15 @@ function sanitizeMap(raw) {
   if (sections.length < 2) return null;   // too short to be a real course
   const obstacles = Array.isArray(raw.obstacles)
     ? raw.obstacles.map(sanitizeObstacle).filter(Boolean).slice(0, 60) : [];
+  const branches = Array.isArray(raw.branches) ? raw.branches.slice(0, 8).map(br => {
+    if (!br || typeof br !== 'object') return null;
+    const bSections = Array.isArray(br.sections)
+      ? br.sections.map(sanitizeSection).filter(Boolean).slice(0, 40) : [];
+    const bObstacles = Array.isArray(br.obstacles)
+      ? br.obstacles.map(sanitizeObstacle).filter(Boolean).slice(0, 20) : [];
+    const fromSection = Math.max(0, (br.fromSection | 0));
+    return { id: br.id || 0, fromSection, sections: bSections, obstacles: bObstacles };
+  }).filter(Boolean) : [];
   return {
     name: clean(raw.name, 40) || 'Untitled Track',
     author: clean(raw.author, 24) || 'anon',
@@ -164,7 +180,7 @@ function sanitizeMap(raw) {
     theme: clean(raw.theme, 20),
     tags: Array.isArray(raw.tags) ? raw.tags.slice(0, 6).map(t => clean(t, 16)) : [],
     thumb: sanitizeThumb(raw.thumb),
-    sections, obstacles,
+    sections, obstacles, branches,
   };
 }
 

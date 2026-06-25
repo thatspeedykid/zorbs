@@ -157,6 +157,8 @@ const ZTRACK = (() => {
     let narrowMin = 1, narrowLen = 1;
     // CASCADE: a multi-tier shelf — flat treads separated by steep risers, balls tumble down.
     let cascadeLen = 1, cascadeSteps = 4;
+    // ARENA: wide-open flat zone — halfW expands to arenaHalfW, nearly flat floor.
+    let arenaHalfW = 14, arenaLen = 40;
     let curFinish = false, finishMarked = false;   // mark the finish line at the finish-funnel throat
     let curForkZone = false;   // true while laying a marked split-zone (for divergent forks)
     // GENTLE LEVEL WINDING: a smooth low-frequency turn applied through the split-zone so the whole
@@ -242,10 +244,17 @@ const ZTRACK = (() => {
           segLeft = sec.len;
         } else if (sec.kind === 'cascade') {
           moveKind = 'cascade';
-          targetTurn = (rng() - 0.5) * 0.008;     // basically straight
+          targetTurn = (rng() - 0.5) * 0.008;
           targetBank = 0;
           cascadeLen = sec.len;
           cascadeSteps = Math.max(2, Math.min(8, (sec.steps | 0) || 4));
+          segLeft = sec.len;
+        } else if (sec.kind === 'arena') {
+          moveKind = 'arena';
+          targetTurn = 0;
+          targetBank = 0;
+          arenaHalfW = Math.max(8, Math.min(30, +sec.w || 14));
+          arenaLen = sec.len;
           segLeft = sec.len;
         } else {
           // straight — split-zones now WIND gently (set per-node below); plain straights stay ~level
@@ -291,14 +300,15 @@ const ZTRACK = (() => {
       // enforce downhill: keep a downward component on y (steeper during a DROP)
       let eDrop = extraDrop;
       if (moveKind === 'cascade') {
-        // walk the section in discrete steps: a flat tread, then a steep riser at the lip
-        const cp = 1 - (segLeft / cascadeLen);     // 0..1 through the section
-        const ph = (cp * cascadeSteps) % 1;        // 0..1 within the current step
-        eDrop = ph > 0.68 ? 4.2 : -1.0;            // steep riser at the lip, ~flat tread between
+        const cp = 1 - (segLeft / cascadeLen);
+        const ph = (cp * cascadeSteps) % 1;
+        eDrop = ph > 0.68 ? 4.2 : -1.0;
+      } else if (moveKind === 'arena') {
+        eDrop = -0.85;   // nearly flat so balls roll gently across the surface
       }
       const dropTarget = -(DROP_PER_STEP * (1 + eDrop)) / STEP;
-      // cascade snaps to its step profile faster so the tiers read as distinct shelves
-      heading.y += (dropTarget - heading.y) * (moveKind === 'cascade' ? 0.30 : 0.10);
+      const dropEase = moveKind === 'cascade' ? 0.30 : moveKind === 'arena' ? 0.06 : 0.10;
+      heading.y += (dropTarget - heading.y) * dropEase;
       heading = norm(heading);
 
       // advance
@@ -326,11 +336,16 @@ const ZTRACK = (() => {
         const e = Math.max(0, ramp); const es = e*e*(3-2*e);
         widthFactor *= 1 + 0.45 * es;                    // up to +45% in the middle only
       } else if (moveKind === 'narrower') {
-        // PINCH to single-file and HOLD (a bottleneck), easing in/out so there's no hard step.
-        const np = 1 - (segLeft / narrowLen);            // 0..1 through the narrower
-        const ramp = Math.min(1, np / 0.22, (1 - np) / 0.22); // 0 at ends, 1 across the middle
+        const np = 1 - (segLeft / narrowLen);
+        const ramp = Math.min(1, np / 0.22, (1 - np) / 0.22);
         const e = Math.max(0, ramp); const es = e * e * (3 - 2 * e);
-        widthFactor *= 1 - es * (1 - narrowMin);          // hold ~narrowMin across the plateau
+        widthFactor *= 1 - es * (1 - narrowMin);
+      } else if (moveKind === 'arena') {
+        // WIDEN to arenaHalfW over the first/last 15% of the section (smooth mouth), hold at max.
+        const ap = 1 - (segLeft / arenaLen);
+        const ramp = Math.min(1, ap / 0.15, (1 - ap) / 0.15);
+        const es = ramp * ramp * (3 - 2 * ramp);
+        widthFactor = 1 + (arenaHalfW / WIDTH - 1) * Math.max(0, es);
       }
       const halfW = WIDTH * widthFactor;
 

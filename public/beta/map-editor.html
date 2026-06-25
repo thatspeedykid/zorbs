@@ -114,6 +114,11 @@
     <div class="valid" id="valid">—</div>
     <canvas id="cv"></canvas>
     <div class="mode-hint" id="mode-hint">Drag a piece onto the track · drag obstacles to reposition</div>
+    <div id="branch-bar" style="display:none;position:absolute;top:10px;left:50%;transform:translateX(-50%);
+      background:#1a0d2e;border:1px solid #cc77ff;border-radius:16px;padding:6px 16px;
+      font-size:11px;color:#cc77ff;z-index:10">
+      <span id="branch-bar-label"></span><button onclick="exitBranchMode()" style="padding:2px 9px;font-size:11px;margin-left:6px">← Back to main</button>
+    </div>
   </main>
 
   <aside class="props" id="props">
@@ -167,6 +172,7 @@ const TRACK_PIECES = [
   { kind:'moguls',   name:'Moguls',    desc:'washboard bumps',   color:'#b06bff', def:{len:28} },
   { kind:'drop',     name:'Drop',      desc:'steep descent',     color:'#2ec27e', def:{len:16,drop:1.2} },
   { kind:'cascade',  name:'Cascade',   desc:'stepped shelf descent', color:'#5ad1a0', def:{len:44,steps:4} },
+  { kind:'arena',    name:'Arena',     desc:'wide open flat zone',  color:'#f5c518', def:{len:40,w:14} },
   { kind:'spiral',   name:'Spiral',    desc:'helix descent',     color:'#ff5db0', def:{len:32,dir:1} },
   { kind:'tunnel',   name:'Tunnel',    desc:'enclosed run',      color:'#7f8cad', def:{len:20,dir:1} },
 ];
@@ -184,6 +190,9 @@ const obsByKind = k => OBS_ITEMS.find(o => o.kind === k);
 // ---- STATE ----
 let sections = [];         // {kind, len, ...params}
 let obstacles = [];        // {kind, t, side, dir}  t=0..1 along track, side=-1..1
+let branches = [];         // [{id, fromSection, sections, obstacles}] — alternate exits
+let activeBranch = -1;     // -1 = main track; ≥0 = editing branches[activeBranch]
+let _savedMain = null;     // main track backup while in branch mode
 let selType = null;        // 'section' | 'obstacle'
 let selIdx = -1;           // index into sections[] or obstacles[]
 let difficulty = 'medium';
@@ -222,6 +231,7 @@ function buildPath(){
       if(s.kind==='funnel')   w=WIDTH*(1-Math.sin(t*Math.PI)*(1-(s.min||0.45)));
       if(s.kind==='narrower') w=WIDTH*(t<0.5?1-(1-(s.min||0.38))*(t*2):(s.min||0.38));
       if(s.kind==='tunnel')   w=WIDTH*0.8;
+      if(s.kind==='arena'){ const ramp=Math.min(1,t/0.15,(1-t)/0.15); const es=ramp*ramp*(3-2*ramp); w=WIDTH*(1+((s.w||14)/WIDTH-1)*Math.max(0,es)); }
       pts.push({x,z,w,kind:s.kind,sIdx:si,split:!!s.split});
     }
   }
@@ -229,6 +239,40 @@ function buildPath(){
   const platEnd = pts.findIndex(p=>p.sIdx>=0);
   _path = {pts, sectionStarts, platEnd: platEnd<0?pts.length:platEnd};
   return _path;
+}
+
+// Build a path for a branch starting from the endpoint of its fromSection on the main path.
+function buildBranchPath(br, mainPath){
+  if(!br.sections||!br.sections.length) return null;
+  const{pts,sectionStarts}=mainPath||buildPath();
+  const fromSI=br.fromSection;
+  if(fromSI<0||fromSI>=sectionStarts.length) return null;
+  const endIdx=fromSI+1<sectionStarts.length?sectionStarts[fromSI+1]-1:pts.length-1;
+  const sp=pts[endIdx]; if(!sp) return null;
+  const prev=pts[Math.max(0,endIdx-1)];
+  const baseAng=Math.atan2(sp.x-prev.x, sp.z-prev.z);
+  // build branch pts from start point using same 2D path logic as buildPath()
+  const bpts=[];
+  let x=sp.x, z=sp.z, ang=baseAng, turn=0;
+  for(let si=0;si<br.sections.length;si++){
+    const s=br.sections[si], len=s.len|0;
+    let target=0;
+    if(s.kind==='sweep')  target=(s.dir||1)*(s.sharp||0.028);
+    if(s.kind==='spiral') target=(s.dir||1)*0.030;
+    if(s.kind==='tunnel') target=(s.dir||1)*0.012;
+    for(let i=0;i<len;i++){
+      turn+=(target-turn)*0.12; ang+=turn;
+      x+=Math.sin(ang)*STEP; z+=Math.cos(ang)*STEP;
+      let w=WIDTH;
+      const t=len>1?i/(len-1):0;
+      if(s.kind==='funnel')   w=WIDTH*(1-Math.sin(t*Math.PI)*(1-(s.min||0.45)));
+      if(s.kind==='narrower') w=WIDTH*(t<0.5?1-(1-(s.min||0.38))*(t*2):(s.min||0.38));
+      if(s.kind==='tunnel')   w=WIDTH*0.8;
+      if(s.kind==='arena'){ const ramp=Math.min(1,t/0.15,(1-t)/0.15); const es=ramp*ramp*(3-2*ramp); w=WIDTH*(1+((s.w||14)/WIDTH-1)*Math.max(0,es)); }
+      bpts.push({x,z,w,kind:s.kind,sIdx:si});
+    }
+  }
+  return bpts;
 }
 
 // ---- CANVAS COORDINATES ----
@@ -406,6 +450,37 @@ function draw(){
   mark(W2S(pts[0].x,pts[0].z),'#2ec27e','START');
   mark(W2S(pts[pts.length-1].x,pts[pts.length-1].z),'#ff8800','FINISH');
 
+  // draw branch paths (when in main-track view, not branch-edit mode)
+  if(activeBranch < 0 && branches.length){
+    branches.forEach((br,bi)=>{
+      const bpts = buildBranchPath(br, {pts,sectionStarts});
+      if(!bpts||bpts.length<2) return;
+      const bcol='#cc77ff';
+      // ribbon fill
+      const bl=[],brr=[];
+      for(let i=0;i<bpts.length;i++){
+        const a=bpts[i],b2=bpts[Math.min(i+1,bpts.length-1)];
+        let dx=b2.x-a.x,dz=b2.z-a.z;const l=Math.hypot(dx,dz)||1;dx/=l;dz/=l;
+        const nx=-dz,nz=dx;
+        bl.push(W2S(a.x+nx*a.w,a.z+nz*a.w)); brr.push(W2S(a.x-nx*a.w,a.z-nz*a.w));
+      }
+      ctx.beginPath();
+      bl.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));
+      for(let i=brr.length-1;i>=0;i--) ctx.lineTo(brr[i].x,brr[i].y);
+      ctx.closePath(); ctx.fillStyle='rgba(204,119,255,0.10)'; ctx.fill();
+      // edges
+      ctx.strokeStyle=bcol; ctx.lineWidth=2*devicePixelRatio; ctx.setLineDash([5,3]);
+      ctx.beginPath(); bl.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.stroke();
+      ctx.beginPath(); brr.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.stroke();
+      ctx.setLineDash([]);
+      // label
+      const ep=bpts[bpts.length-1]; const es=W2S(ep.x,ep.z);
+      ctx.fillStyle=bcol; ctx.font=`${10*devicePixelRatio}px system-ui`;
+      ctx.textAlign='left'; ctx.textBaseline='middle';
+      ctx.fillText('Branch '+(bi+1),es.x+6,es.y);
+    });
+  }
+
   // section boundary tick marks
   if(sectionStarts.length){
     ctx.strokeStyle='rgba(255,255,255,.3)'; ctx.lineWidth=devicePixelRatio;
@@ -504,6 +579,7 @@ function glyph(kind,c){
     case'spiral':  return s('<path d="M14 14m0-9 a9 9 0 1 1-6 15"/><circle cx="14" cy="14" r="2.5"/>');
     case'tunnel':  return s('<rect x="5" y="4" width="18" height="20" rx="7"/>');
     case'cascade': return s('<path d="M4 5h7v6h7v6h6"/>');
+    case'arena':   return s('<rect x="3" y="6" width="22" height="16" rx="1.5"/>');
     default:       return s('<circle cx="14" cy="14" r="8"/>');
   }
 }
@@ -646,12 +722,19 @@ function addPiece(kind,at){
   const s=Object.assign({kind},JSON.parse(JSON.stringify(p.def)));
   if(at==null||at>sections.length) at=sections.length;
   sections.splice(at,0,s);
+  // shift branch fromSection indices that now point past the insertion point
+  if(activeBranch < 0) branches.forEach(b=>{ if(b.fromSection>=at) b.fromSection++; });
   pushUndo(); select('section',at); refresh();
 }
 function removePiece(i){
   sections.splice(i,1);
   // remap obstacles t to stay in range
   if(selType==='section'&&selIdx>=sections.length) selIdx=sections.length-1;
+  // remap branch fromSection indices (only relevant on main track)
+  if(activeBranch < 0){
+    branches = branches.filter(b=>b.fromSection!==i);
+    branches.forEach(b=>{ if(b.fromSection>i) b.fromSection--; });
+  }
   pushUndo(); if(selType==='section'&&selIdx>=sections.length) deselect(); else refresh();
 }
 function addObstacle(kind,t,side){
@@ -667,9 +750,43 @@ function removeObstacle(i){
 function select(type,idx){ selType=type; selIdx=idx; renderSelPanel(); draw(); }
 function deselect(){ selType=null; selIdx=-1; renderSelPanel(); draw(); }
 
+// ---- BRANCH MODE — swap active sections/obstacles so all existing editing code works unchanged ----
+function enterBranchMode(idx){
+  if(activeBranch >= 0) exitBranchMode();
+  _savedMain = {sections, obstacles};
+  sections  = branches[idx].sections;
+  obstacles = branches[idx].obstacles;
+  activeBranch = idx;
+  selType=null; selIdx=-1; undoStack=[]; redoStack=[];
+  _path=null; refresh();
+  document.getElementById('branch-bar').style.display='';
+  document.getElementById('branch-bar-label').textContent='Editing branch exit '+(idx+1)+' — ';
+}
+function exitBranchMode(){
+  if(!_savedMain) return;
+  branches[activeBranch].sections  = sections;
+  branches[activeBranch].obstacles = obstacles;
+  sections  = _savedMain.sections;
+  obstacles = _savedMain.obstacles;
+  _savedMain = null; activeBranch = -1;
+  selType=null; selIdx=-1; undoStack=[]; redoStack=[];
+  _path=null; refresh();
+  document.getElementById('branch-bar').style.display='none';
+}
+function addBranch(fromSection){
+  const id = Date.now();
+  branches.push({id, fromSection, sections:[], obstacles:[]});
+  enterBranchMode(branches.length-1);
+}
+function deleteBranch(idx){
+  if(activeBranch===idx) exitBranchMode();
+  branches.splice(idx,1);
+  refresh();
+}
+
 // ---- UNDO / REDO ----
-function state(){ return JSON.stringify({sections,obstacles}); }
-function restoreState(s){ const d=JSON.parse(s); sections=d.sections; obstacles=d.obstacles; }
+function state(){ return JSON.stringify({sections,obstacles,branches:activeBranch<0?branches:undefined}); }
+function restoreState(s){ const d=JSON.parse(s); sections=d.sections; obstacles=d.obstacles; if(activeBranch<0&&d.branches) branches=d.branches; }
 function pushUndo(){ undoStack.push(state()); if(undoStack.length>60)undoStack.shift(); redoStack=[]; }
 function undo(){ if(!undoStack.length)return; redoStack.push(state()); restoreState(undoStack.pop()); deselect(); refresh(); }
 function redo(){ if(!redoStack.length)return; undoStack.push(state()); restoreState(redoStack.pop()); deselect(); refresh(); }
@@ -702,8 +819,21 @@ function renderSelPanel(){
     if('min'   in s) h+=slider('Throat width','min',s.min,0.25,0.85,0.01);
     if('drop'  in s) h+=slider('Steepness','drop',s.drop,0.4,3,0.1);
     if('steps' in s) h+=slider('Tiers','steps',s.steps,2,8,1);
+    if('w'     in s) h+=slider('Arena width','w',s.w,8,30,1);
     if('dir'   in s) h+=dirseg(s.dir);
     if(s.kind==='straight') h+=splitseg(!!s.split);
+    // Branch exits — funnel/split/turn can have alternate exit paths
+    if(['funnel','sweep','tunnel','narrower','arena'].includes(s.kind)||s.split){
+      const myBranches=branches.map((b,i)=>({b,i})).filter(({b})=>b.fromSection===selIdx);
+      h+=`<hr class="div"><div style="font-size:10px;color:var(--dim);margin-bottom:6px">BRANCH EXITS</div>`;
+      myBranches.forEach(({b,i})=>{
+        h+=`<div style="display:flex;gap:5px;margin-bottom:5px">
+          <button style="flex:1;padding:4px;font-size:11px" onclick="enterBranchMode(${i})">✏ Edit branch ${i+1} (${b.sections.length} piece${b.sections.length!==1?'s':''})</button>
+          <button class="danger" style="padding:4px 8px;font-size:11px" onclick="deleteBranch(${i})">✕</button>
+        </div>`;
+      });
+      h+=`<button style="width:100%;padding:4px;font-size:11px;margin-top:2px" onclick="addBranch(${selIdx})">＋ Add branch exit</button>`;
+    }
     h+=`<button class="danger" style="width:100%;margin-top:8px" onclick="removePiece(${selIdx})">Delete piece</button>`;
     selPanel.innerHTML=h;
     selPanel.querySelectorAll('input[type=range]').forEach(r=>{
@@ -819,6 +949,7 @@ function currentMap(){
     author:author||'anon',
     sections:JSON.parse(JSON.stringify(sections)),
     obstacles:JSON.parse(JSON.stringify(obstacles)),
+    branches:JSON.parse(JSON.stringify(branches)),
   };
 }
 
@@ -877,8 +1008,10 @@ document.getElementById('btn-submit').onclick=async()=>{
 let currentDraftId = null;
 
 function applyMap(d){
+  if(activeBranch >= 0) exitBranchMode();
   sections = Array.isArray(d.sections)? JSON.parse(JSON.stringify(d.sections)) : [];
   obstacles = Array.isArray(d.obstacles)? JSON.parse(JSON.stringify(d.obstacles)) : [];
+  branches = Array.isArray(d.branches)? JSON.parse(JSON.stringify(d.branches)) : [];
   document.getElementById('m-name').value = d.name && d.name!=='Untitled Draft' ? d.name : '';
   document.getElementById('m-desc').value = d.description||'';
   difficulty = ['easy','medium','hard'].includes(d.difficulty)? d.difficulty : 'medium';
@@ -952,7 +1085,7 @@ async function delDraft(id,name){
 // ---- CLEAR ----
 document.getElementById('btn-clear').onclick=()=>{
   if(!sections.length&&!obstacles.length) return;
-  if(confirm('Clear the whole track?')){sections=[];obstacles=[];deselect();pushUndo();fit();refresh();}
+  if(confirm('Clear the whole track?')){ if(activeBranch>=0)exitBranchMode(); sections=[];obstacles=[];branches=[];deselect();pushUndo();fit();refresh();}
 };
 
 // ---- STARTER TRACK ---- (gentle S-curve track, no spirals, so default state is clean)
