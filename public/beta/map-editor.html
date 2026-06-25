@@ -253,9 +253,17 @@ function buildBranchPath(br, mainPath){
   const sp=pts[endIdx]; if(!sp) return null;
   const prev=pts[Math.max(0,endIdx-1)];
   const baseAng=Math.atan2(sp.x-prev.x, sp.z-prev.z);
+  // Side-aware start: left-port branches (side<0) peel off the left edge, right-port
+  // branches peel off the right edge. Offset the start to that edge and angle the
+  // initial heading outward so two branches at the same boundary clearly diverge
+  // instead of stacking on top of each other / the main line.
+  const side = br.side || 0;
+  const rx=Math.cos(baseAng), rz=-Math.sin(baseAng); // right-hand normal of heading
+  const startX = sp.x + (side?rx*sp.w*side*0.6:0);
+  const startZ = sp.z + (side?rz*sp.w*side*0.6:0);
   // build branch pts from start point using same 2D path logic as buildPath()
   const bpts=[];
-  let x=sp.x, z=sp.z, ang=baseAng, turn=0;
+  let x=startX, z=startZ, ang=baseAng + side*0.5, turn=0;
   for(let si=0;si<br.sections.length;si++){
     const s=br.sections[si], len=s.len|0;
     let target=0;
@@ -606,7 +614,8 @@ function drawPorts(pts, sectionStarts){
   _cachedPorts.forEach(pt=>{
     const hov = _hoverPort && _hoverPort.si===pt.si && _hoverPort.pi===pt.pi && _hoverPort.end===pt.end;
     const isMain = pt.pi===1;          // center port = MAIN line (extends main track)
-    const hasBranch = !isMain && branches.some(b=>b.fromSection===pt.branchFrom);
+    const portSide = pt.pi===0?-1:1;
+    const hasBranch = !isMain && branches.some(b=>b.fromSection===pt.branchFrom && (b.side||0)===portSide);
     // MAIN port = cyan (matches main track), BRANCH ports = green; existing branch = purple
     const baseFill = isMain ? 'rgba(57,200,224,0.40)' : 'rgba(46,194,126,0.35)';
     const baseStroke = isMain ? 'rgba(57,200,224,0.85)' : 'rgba(46,194,126,0.7)';
@@ -804,10 +813,11 @@ cv.addEventListener('pointerdown',e=>{
       // if a pending palette piece is armed, drop it onto this port
       if(_pendingKind){ const k=_pendingKind; _pendingKind=null; _hoverInsert=-1; updateModeHint(); dropPieceOnPort(pt,k); return; }
       if(pt.pi===1){ select('section', pt.si); return; }    // center → select the main section
-      // side port: select existing branch from here, otherwise create new
-      const existing=branches.findIndex(b=>b.fromSection===pt.branchFrom);
+      // side port: select existing branch on THIS side, otherwise create new
+      const side=pt.pi===0?-1:1;
+      const existing=branches.findIndex(b=>b.fromSection===pt.branchFrom && (b.side||0)===side);
       if(existing>=0) select('branch',existing);
-      else addBranch(pt.branchFrom);
+      else addBranch(pt.branchFrom, side);
       return;
     }
   }
@@ -1006,9 +1016,9 @@ function select(type,idx){
 function deselect(){ selType=null; selIdx=-1; selObs=[]; selBranchPiece=-1; renderSelPanel(); draw(); }
 
 // ---- BRANCH EDITING — inline, no mode-swap ----
-function addBranch(fromSection){
+function addBranch(fromSection, side){
   const id = Date.now();
-  branches.push({id, fromSection, end:'rejoin', sections:[], obstacles:[]});
+  branches.push({id, fromSection, side:side||0, end:'rejoin', sections:[], obstacles:[]});
   pushUndo();
   select('branch', branches.length-1);
 }
@@ -1040,9 +1050,12 @@ function dropPieceOnPort(pt, kind){
     return;
   }
   const from=pt.branchFrom;
-  let bi=branches.findIndex(b=>b.fromSection===from);
+  const side=pt.pi===0?-1:1;   // left port = left branch, right port = right branch
+  // match BOTH the section AND the side, so the left and right ports at a boundary
+  // are independent branches (dropping on the right never extends a left branch).
+  let bi=branches.findIndex(b=>b.fromSection===from && (b.side||0)===side);
   if(bi<0){
-    branches.push({id:Date.now(), fromSection:from, end:'rejoin', sections:[], obstacles:[]});
+    branches.push({id:Date.now(), fromSection:from, side, end:'rejoin', sections:[], obstacles:[]});
     bi=branches.length-1;
   }
   branches[bi].sections.push(Object.assign({kind},JSON.parse(JSON.stringify(p.def))));

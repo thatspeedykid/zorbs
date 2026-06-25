@@ -511,10 +511,20 @@ const ZTRACK = (() => {
 
   // Build branch nodes for an authored branch, starting from a fork node on the main track.
   // Mirrors the core of buildCenterline but with no platform or seeded randomness.
-  function buildCustomBranchNodes(startNode, sections, branchId) {
+  function buildCustomBranchNodes(startNode, sections, branchId, side) {
     const nodes = [];
-    let pos = { x: startNode.pos.x, y: startNode.pos.y, z: startNode.pos.z };
+    // Side-aware start (matches the editor preview): left branches (side<0) peel off the
+    // left edge, right branches off the right edge, with the initial heading angled outward
+    // so two branches at the same fork clearly diverge instead of starting coincident.
+    side = side || 0;
+    const sr = startNode.right;
+    let pos = { x: startNode.pos.x + sr.x*startNode.halfW*side*0.6, y: startNode.pos.y,
+                z: startNode.pos.z + sr.z*startNode.halfW*side*0.6 };
     let heading = norm({ x: startNode.dir.x, y: startNode.dir.y, z: startNode.dir.z });
+    if (side) {
+      const a = side*0.5, c = Math.cos(a), s = Math.sin(a);
+      heading = norm({ x: heading.x*c - heading.z*s, y: heading.y, z: heading.x*s + heading.z*c });
+    }
     let turn = 0;
     let funnelMin = 0.45, funnelLen = 1;
     let spiralTurn = 0, spiralLen = 1;
@@ -626,7 +636,7 @@ const ZTRACK = (() => {
         for (let bi = 0; bi < brs.length; bi++) {
           const branchId = forkId + '_' + bi;
           branchIds.push(branchId);
-          const bnodes = buildCustomBranchNodes(forkNode, brs[bi].sections, branchId);
+          const bnodes = buildCustomBranchNodes(forkNode, brs[bi].sections, branchId, brs[bi].side || 0);
           branches[branchId] = bnodes;
           // Author chooses per branch: rejoin the main track, or run to its own separate finish.
           const isFinish = brs[bi].end === 'finish';
