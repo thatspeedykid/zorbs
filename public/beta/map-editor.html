@@ -195,6 +195,7 @@ let activeBranch = -1;     // -1 = main track; ≥0 = editing branches[activeBra
 let _savedMain = null;     // main track backup while in branch mode
 let selType = null;        // 'section' | 'obstacle'
 let selIdx = -1;           // index into sections[] or obstacles[]
+let _pendingKind = null;   // palette piece kind waiting for a canvas click to place it
 let difficulty = 'medium';
 let undoStack = [], redoStack = [];
 const author = (() => { try { const s=JSON.parse(localStorage.getItem('zorbs_session')||'{}'); return s.username||s.name||''; } catch(_){return '';} })();
@@ -591,7 +592,7 @@ function renderPalette(){
     const d=document.createElement('div'); d.className='piece'; d.draggable=true; d.dataset.palkind=p.kind; d.dataset.paltype='track';
     d.innerHTML=`<div class="p-ic" style="background:${p.color}22;border:1px solid ${p.color}55">${glyph(p.kind,p.color)}</div>
       <div><div class="p-nm">${p.name}</div><div class="p-ds">${p.desc}</div></div>`;
-    d.addEventListener('dragstart',palDragStart); d.addEventListener('click',()=>addPiece(p.kind));
+    d.addEventListener('dragstart',palDragStart); d.addEventListener('click',()=>startPendingPlace(p.kind));
     tp.appendChild(d);
   });
 
@@ -607,10 +608,31 @@ function renderPalette(){
 }
 renderPalette();
 
+// ---- PENDING PLACEMENT MODE ---- (click palette piece → hover canvas → click to insert)
+function startPendingPlace(kind){
+  _pendingKind=kind; _hoverInsert=sections.length; _hoverT=-1;
+  updateModeHint(); draw();
+}
+function cancelPendingPlace(){
+  _pendingKind=null; _hoverInsert=-1; updateModeHint(); draw();
+}
+function updateModeHint(){
+  const el=document.getElementById('mode-hint');
+  if(_pendingKind){
+    const p=byKind(_pendingKind);
+    el.textContent=`Click the track to place ${p?.name||_pendingKind} · Esc to cancel`;
+    el.style.color='#fff'; el.style.borderColor='var(--accent)';
+  } else {
+    el.textContent='Drag a piece onto the track · drag obstacles to reposition';
+    el.style.color=''; el.style.borderColor='';
+  }
+}
+
 // ---- DRAG FROM PALETTE → CANVAS ----
 let _palDrag = null; // {paltype, kind}
 
 function palDragStart(e){
+  if(_pendingKind) cancelPendingPlace();
   _palDrag={paltype:e.currentTarget.dataset.paltype, kind:e.currentTarget.dataset.palkind};
   e.dataTransfer.setData('paltype', _palDrag.paltype);
   e.dataTransfer.setData('kind', _palDrag.kind);
@@ -674,6 +696,13 @@ cv.addEventListener('pointerdown',e=>{
   else { _obsDragIdx=-1; }
 });
 cv.addEventListener('pointermove',e=>{
+  // update hover cursor for pending placement even without pointer down
+  if(!_panStart && _pendingKind){
+    if(!_path) buildPath();
+    const c=S2C(e.clientX,e.clientY);
+    _hoverInsert=sections.length?nearestInsertIdx(c.x,c.z):0;
+    draw(); return;
+  }
   if(!_panStart) return;
   const dx=e.clientX-_panStart.x, dy=e.clientY-_panStart.y;
   if(Math.abs(dx)>3||Math.abs(dy)>3) _hasMoved=true;
@@ -696,14 +725,22 @@ cv.addEventListener('pointermove',e=>{
 });
 cv.addEventListener('pointerup',e=>{
   if(!_hasMoved&&_panStart&&_obsDragIdx<0){
-    // click — select section or obstacle
-    if(!_path) buildPath();
-    const c=S2C(e.clientX,e.clientY);
-    const oi=hitObstacle(c.x,c.z);
-    if(oi>=0){ select('obstacle',oi); }
-    else{
-      const si=hitSection(c.x,c.z);
-      if(si>=0) select('section',si); else deselect();
+    if(_pendingKind){
+      // commit pending placement at hover position
+      const at=_hoverInsert>=0?_hoverInsert:sections.length;
+      const kind=_pendingKind;
+      _pendingKind=null; _hoverInsert=-1; updateModeHint();
+      addPiece(kind,at);
+    } else {
+      // click — select section or obstacle
+      if(!_path) buildPath();
+      const c=S2C(e.clientX,e.clientY);
+      const oi=hitObstacle(c.x,c.z);
+      if(oi>=0){ select('obstacle',oi); }
+      else{
+        const si=hitSection(c.x,c.z);
+        if(si>=0) select('section',si); else deselect();
+      }
     }
   }
   if(_obsDragIdx>=0){ pushUndo(); _obsDragIdx=-1; }
@@ -728,14 +765,12 @@ function addPiece(kind,at){
 }
 function removePiece(i){
   sections.splice(i,1);
-  // remap obstacles t to stay in range
-  if(selType==='section'&&selIdx>=sections.length) selIdx=sections.length-1;
-  // remap branch fromSection indices (only relevant on main track)
   if(activeBranch < 0){
     branches = branches.filter(b=>b.fromSection!==i);
     branches.forEach(b=>{ if(b.fromSection>i) b.fromSection--; });
   }
-  pushUndo(); if(selType==='section'&&selIdx>=sections.length) deselect(); else refresh();
+  selType=null; selIdx=-1; // always clear — prevents double-delete when panel auto-updates
+  pushUndo(); refresh();
 }
 function addObstacle(kind,t,side){
   side=Math.max(-0.85,Math.min(0.85,side||0));
@@ -792,11 +827,15 @@ function undo(){ if(!undoStack.length)return; redoStack.push(state()); restoreSt
 function redo(){ if(!redoStack.length)return; undoStack.push(state()); restoreState(redoStack.pop()); deselect(); refresh(); }
 document.getElementById('btn-undo').onclick=undo;
 addEventListener('keydown',e=>{
+  if(e.key==='Escape'){ if(_pendingKind){ cancelPendingPlace(); e.preventDefault(); } return; }
   if((e.ctrlKey||e.metaKey)&&!e.shiftKey&&e.key==='z'){e.preventDefault();undo();}
   if((e.ctrlKey||e.metaKey)&&(e.shiftKey&&e.key==='z'||e.key==='y')){e.preventDefault();redo();}
-  if((e.key==='Delete'||e.key==='Backspace')&&document.activeElement.tagName!=='INPUT'&&document.activeElement.tagName!=='TEXTAREA'){
-    if(selType==='section'&&selIdx>=0) removePiece(selIdx);
-    else if(selType==='obstacle'&&selIdx>=0) removeObstacle(selIdx);
+  // Delete/Backspace: allow when focus is on range sliders, block only on text inputs/textareas
+  const ae=document.activeElement;
+  const isText=ae&&(ae.tagName==='TEXTAREA'||(ae.tagName==='INPUT'&&ae.type!=='range'));
+  if((e.key==='Delete'||e.key==='Backspace')&&!isText){
+    if(selType==='section'&&selIdx>=0){ e.preventDefault(); removePiece(selIdx); }
+    else if(selType==='obstacle'&&selIdx>=0){ e.preventDefault(); removeObstacle(selIdx); }
   }
 });
 
