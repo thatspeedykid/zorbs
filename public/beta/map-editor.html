@@ -174,6 +174,7 @@ const OBS_ITEMS = [
   { kind:'spinner', name:'Spinner',     desc:'rotating arm knockback',    color:'#ff8800', icon:'✳' },
   { kind:'boost',   name:'Boost Pad',   desc:'speed burst strip',         color:'#2ec27e', icon:'▲' },
   { kind:'launch',  name:'Launch Pin',  desc:'flings ball airborne',      color:'#aa44ff', icon:'⬆' },
+  { kind:'pendulum',name:'Pendulum',    desc:'swings across the lane',     color:'#4cd6ff', icon:'⊙' },
 ];
 const byKind = k => TRACK_PIECES.find(p => p.kind === k);
 const obsByKind = k => OBS_ITEMS.find(o => o.kind === k);
@@ -722,6 +723,7 @@ function renderSelPanel(){
       h+=`<div class="field"><label>Spin direction</label><div class="seg" id="obsdirseg">
       <button data-v="-1" class="${(o.dir||1)<0?'on':''}">◀ Left</button><button data-v="1" class="${(o.dir||1)>0?'on':''}">Right ▶</button></div></div>`; }
     if(o.kind==='boost') h+=slider('Pad length','length',o.length||14,6,28,1);
+    if(o.kind==='pendulum') h+=slider('Swing speed','speed',o.speed||1.6,0.5,3.5,0.1);
     h+=`<button class="danger" style="width:100%;margin-top:8px" onclick="removeObstacle(${selIdx})">Delete obstacle</button>`;
     selPanel.innerHTML=h;
     selPanel.querySelectorAll('input[type=range]').forEach(r=>{
@@ -824,7 +826,7 @@ function makeThumb(){
     g.strokeStyle='#4cd6ff'; g.lineWidth=2; g.stroke();
     // obstacles
     for(const o of obstacles){ const pi=tToPathIdx(o.t); const q=pts[pi]; if(!q)continue;
-      g.fillStyle=o.kind==='boost'?'#ffd34c':o.kind==='spinner'?'#ff5db0':o.kind==='launch'?'#2ec27e':'#ff7a59';
+      g.fillStyle=o.kind==='boost'?'#ffd34c':o.kind==='spinner'?'#ff5db0':o.kind==='launch'?'#2ec27e':o.kind==='pendulum'?'#4cd6ff':'#ff7a59';
       g.beginPath(); g.arc(X(q),Y(q),3,0,7); g.fill(); }
     return c.toDataURL('image/png');
   }catch(_){ return ''; }

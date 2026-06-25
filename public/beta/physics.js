@@ -29,6 +29,8 @@ const ZPHYSICS = (() => {
   const BUMP_RISE_CYCLE = 4.2, SHOCK_KICK = 9, SHOCK_UP = 5;   // seconds for one full hide→rise→hold→retract cycle
   // spinners: kinematic arms that rotate around a Y post and physically bat marbles sideways
   let spinners = [];
+  // pendulums: kinematic bobs swinging laterally across the lane on an overhead pivot
+  let pendulums = [];
 
   // ---- load Rapier from CDN (browser) or require (node) ----
   async function load() {
@@ -226,6 +228,50 @@ const ZPHYSICS = (() => {
         });
       }
     }
+
+    // PENDULUMS: a bob hangs from an overhead pivot and swings laterally across the lane.
+    // Swing axis = track forward (local Z), so the bob sweeps left↔right (and dips) across the
+    // width — a ball caught at the bottom of the swing gets batted sideways. Kinematic body at
+    // the pivot; the bob is a sphere collider hung at local (0,-L,0); we rock the body about
+    // local Z by swing*sin(phase).
+    pendulums = [];
+    if (forkData && forkData.pendulums) {
+      const PIVOT_H = 4.2;          // pivot height above the floor
+      const BOB_R = 0.7;            // bob radius
+      const BOB_L = PIVOT_H - BALL_R - 0.2;   // arm length: bob bottom grazes ball height at rest
+      // reuse the spinner frame: base orientation aligns local Y→up, local Z→fwd.
+      const baseQuatFromUpFwd = (up, fwd) => {
+        let rx = up.y*fwd.z - up.z*fwd.y, ry = up.z*fwd.x - up.x*fwd.z, rz = up.x*fwd.y - up.y*fwd.x;
+        let rl = Math.hypot(rx, ry, rz) || 1; rx /= rl; ry /= rl; rz /= rl;
+        const fx2 = ry*up.z - rz*up.y, fy2 = rz*up.x - rx*up.z, fz2 = rx*up.y - ry*up.x;
+        const m00 = rx, m01 = up.x, m02 = fx2, m10 = ry, m11 = up.y, m12 = fy2, m20 = rz, m21 = up.z, m22 = fz2;
+        const trace = m00 + m11 + m22; let qx, qy, qz, qw;
+        if (trace > 0) { const s = Math.sqrt(trace + 1) * 2; qw = 0.25*s; qx = (m21-m12)/s; qy = (m02-m20)/s; qz = (m10-m01)/s; }
+        else if (m00 > m11 && m00 > m22) { const s = Math.sqrt(1+m00-m11-m22)*2; qw = (m21-m12)/s; qx = 0.25*s; qy = (m01+m10)/s; qz = (m02+m20)/s; }
+        else if (m11 > m22) { const s = Math.sqrt(1+m11-m00-m22)*2; qw = (m02-m20)/s; qx = (m01+m10)/s; qy = 0.25*s; qz = (m12+m21)/s; }
+        else { const s = Math.sqrt(1+m22-m00-m11)*2; qw = (m10-m01)/s; qx = (m02+m20)/s; qy = (m12+m21)/s; qz = 0.25*s; }
+        return { x: qx, y: qy, z: qz, w: qw };
+      };
+      for (const pn of forkData.pendulums) {
+        const up = pn.up || { x: 0, y: 1, z: 0 };
+        const fwd = pn.fwd || { x: 0, y: 0, z: 1 };
+        const baseQuat = baseQuatFromUpFwd(up, fwd);
+        const pivot = { x: pn.pos.x + up.x * PIVOT_H, y: pn.pos.y + up.y * PIVOT_H, z: pn.pos.z + up.z * PIVOT_H };
+        const bd = RAPIER.RigidBodyDesc.kinematicPositionBased()
+          .setTranslation(pivot.x, pivot.y, pivot.z)
+          .setRotation(baseQuat);
+        const body = world.createRigidBody(bd);
+        const cd = RAPIER.ColliderDesc.ball(BOB_R)
+          .setTranslation(0, -BOB_L, 0)
+          .setRestitution(0.5).setFriction(0.06);
+        world.createCollider(cd, body);
+        pendulums.push({
+          body, pivot, baseQuat,
+          rate: pn.rate || 1.6, swing: pn.swing || 0.95,
+          bobL: BOB_L, bobR: BOB_R, phase: Math.random() * Math.PI * 2, angle: 0,
+        });
+      }
+    }
   }   // end setTrack
 
   // The node list a ball is currently following (its committed branch, or main path).
@@ -358,6 +404,7 @@ const ZPHYSICS = (() => {
     const dt = Math.max(0.002, Math.min(0.033, realDt));
     world.timestep = dt;
     processSpinners(dt);   // set kinematic positions BEFORE the solver step (required by Rapier)
+    processPendulums(dt);
     processBumpers(dt);    // bumpers are now kinematic too — same ordering requirement
     fixedStep(dt);
   }
@@ -387,6 +434,19 @@ const ZPHYSICS = (() => {
       const q = sp.baseQuat ? quatMul(sp.baseQuat, spinQuat) : spinQuat;
       sp.body.setNextKinematicTranslation(sp.pos);
       sp.body.setNextKinematicRotation(q);
+    }
+  }
+
+  function processPendulums(dt) {
+    if (!pendulums.length) return;
+    for (const pn of pendulums) {
+      pn.phase += pn.rate * dt;
+      pn.angle = pn.swing * Math.sin(pn.phase);   // rock about local Z (track forward)
+      const ha = pn.angle * 0.5, s = Math.sin(ha), c = Math.cos(ha);
+      const swingQuat = { x: 0, y: 0, z: s, w: c };
+      const q = quatMul(pn.baseQuat, swingQuat);
+      pn.body.setNextKinematicTranslation(pn.pivot);
+      pn.body.setNextKinematicRotation(q);
     }
   }
 
@@ -977,6 +1037,7 @@ const ZPHYSICS = (() => {
     init, setTrack, addBall, removeBall, clearBalls, giveBoost,
     getBumpers: () => bumpers,
     getSpinners: () => spinners,
+    getPendulums: () => pendulums,
     step, snapshot, eliminate, checkFalls, leader,
     nearestNode,
     isReady: () => ready,

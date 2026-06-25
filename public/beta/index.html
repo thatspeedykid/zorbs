@@ -623,7 +623,7 @@ let _planet = null, _clouds = null;
 })();
 
 // ---- build the course ----
-let track = null, trackMeshes = [], _bumperVis = [], _spinnerVis = [], _launchVis = [];
+let track = null, trackMeshes = [], _bumperVis = [], _spinnerVis = [], _launchVis = [], _pendulumVis = [];
 let _pulse = null;                  // streaking-pulse animation state (set in buildCourse)
 let _boostMats = [];                // boost-pad chevron textures (scrolled each frame)
 const _tmpV = new THREE.Vector3();  // scratch vector reused each frame (no per-frame alloc)
@@ -736,7 +736,7 @@ function applyMapTheme(t) {
 
 function buildCourse(seed) {
   trackMeshes.forEach(m => scene.remove(m)); trackMeshes = [];
-  _bumperVis = []; _spinnerVis = []; _launchVis = [];
+  _bumperVis = []; _spinnerVis = []; _launchVis = []; _pendulumVis = [];
   // CUSTOM MAP (map editor / community map): when one is loaded, its hand-authored section plan
   // replaces the seeded course and its chosen theme (if any) overrides the seed theme.
   const _cmap = window._zorbsCustomMap || null;
@@ -1056,6 +1056,50 @@ function buildCourse(seed) {
       grp.add(glow);
       scene.add(grp); trackMeshes.push(grp);
       _spinnerVis.push({ grp, initAngle: 0 });
+    }
+  }
+
+  // PENDULUMS — a futuristic energy bob swinging across the lane on an overhead rail.
+  // Visual = a glowing plasma core inside a translucent shell, a thin emissive arm, and an
+  // overhead pivot housing. On impact the core flashes white and an energy ring bursts out.
+  _pendulumVis = [];
+  if (track.pendulums && track.pendulums.length && ZPHYSICS.getPendulums) {
+    const phys = ZPHYSICS.getPendulums();
+    for (let i = 0; i < track.pendulums.length; i++) {
+      const pn = track.pendulums[i];
+      const pp = phys[i]; if (!pp) continue;
+      const grp = new THREE.Group();              // anchored at the pivot, rotates as it swings
+      grp.position.set(pp.pivot.x, pp.pivot.y, pp.pivot.z);
+      grp.quaternion.set(pp.baseQuat.x, pp.baseQuat.y, pp.baseQuat.z, pp.baseQuat.w);
+      const L = pp.bobL, R = pp.bobR;
+      // overhead pivot housing (stays put visually since the grp pivots here)
+      const hub = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.3, 0.3, 0.5, 16),
+        new THREE.MeshStandardMaterial({ color: 0x223055, emissive: 0x1a3a6a, emissiveIntensity: 0.7, metalness: 0.8, roughness: 0.3 }));
+      grp.add(hub);
+      // arm: thin emissive rod from pivot down to the bob
+      const arm = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.06, 0.06, L, 8),
+        new THREE.MeshStandardMaterial({ color: 0x33ccff, emissive: 0x22aaff, emissiveIntensity: 1.4, metalness: 0.4, roughness: 0.2 }));
+      arm.position.y = -L * 0.5;
+      grp.add(arm);
+      // bob: translucent shell + bright plasma core
+      const shell = new THREE.Mesh(
+        new THREE.SphereGeometry(R, 24, 18),
+        new THREE.MeshStandardMaterial({ color: 0x4cd6ff, emissive: 0x2090ff, emissiveIntensity: 1.0, metalness: 0.1, roughness: 0.15, transparent: true, opacity: 0.55 }));
+      shell.position.y = -L; grp.add(shell);
+      const core = new THREE.Mesh(
+        new THREE.SphereGeometry(R * 0.55, 18, 14),
+        new THREE.MeshBasicMaterial({ color: 0xbff4ff }));
+      core.position.y = -L; grp.add(core);
+      // energy burst ring (hidden until a hit) — expands + fades on impact
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(R * 1.1, 0.05, 8, 28),
+        new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0 }));
+      ring.position.y = -L; grp.add(ring);
+      scene.add(grp); trackMeshes.push(grp);
+      _pendulumVis.push({ grp, shell, core, ring, baseEmissive: 1.0, hit: 0,
+        bobL: L, bobR: R, baseShellColor: shell.material.color.clone() });
     }
   }
 
@@ -1629,7 +1673,7 @@ function startRace(seed, names) {
   _mapView = null;   // re-frame the overhead map cam for the new track
   buildCourse(seed);
   ZPHYSICS.clearBalls();
-  ZPHYSICS.setTrack(track.collider, track.nodes, { forks: track.forks, branchColliders: track.branchColliders, obstacles: track.obstacles, spinners: track.spinners });  // new track each race
+  ZPHYSICS.setTrack(track.collider, track.nodes, { forks: track.forks, branchColliders: track.branchColliders, obstacles: track.obstacles, spinners: track.spinners, pendulums: track.pendulums });  // new track each race
   zorbs.forEach(z => { scene.remove(z.mesh); if(z.ring) scene.remove(z.ring); if(z.ringGlow) scene.remove(z.ringGlow); if(z.trail) scene.remove(z.trail); if(z.streak) scene.remove(z.streak); if(z.label) scene.remove(z.label); });
   _explosions.forEach(e => { scene.remove(e.pts); scene.remove(e.flash); }); _explosions.length = 0;
   _resultSent = false; _officialOrder = null; _officialSlot = -1; _boostQueue.length = 0;
@@ -1920,6 +1964,7 @@ function loop(now) {
   updateCamera(dt);
   updateBumpers();
   updateSpinners();
+  updatePendulums();
   updateLaunchPins(now);
   updateSkyFollow();
 
@@ -2006,6 +2051,46 @@ function updateSpinners() {
       vis.grp.quaternion.copy(baseQ).multiply(spinQ);
     } else {
       vis.grp.quaternion.copy(spinQ);
+    }
+  }
+}
+// PENDULUMS — sync the swing to physics, then fire a futuristic impact burst when a ball is
+// caught near the bob: the core flashes white, the shell pulses, and an energy ring expands.
+const _tmpBob = new THREE.Vector3();
+function updatePendulums() {
+  if (!_pendulumVis.length || !ZPHYSICS.getPendulums) return;
+  const pps = ZPHYSICS.getPendulums();
+  for (let k = 0; k < _pendulumVis.length; k++) {
+    const vis = _pendulumVis[k], pp = pps[k]; if (!pp) continue;
+    // rotate the group about local Z (track forward) by the live swing angle
+    const ha = pp.angle * 0.5, s = Math.sin(ha), c = Math.cos(ha);
+    const baseQ = new THREE.Quaternion(pp.baseQuat.x, pp.baseQuat.y, pp.baseQuat.z, pp.baseQuat.w);
+    vis.grp.quaternion.copy(baseQ).multiply(new THREE.Quaternion(0, 0, s, c));
+    // world position of the bob (pivot + arm rotated down) for proximity hit detection
+    _tmpBob.set(0, -vis.bobL, 0).applyQuaternion(vis.grp.quaternion).add(vis.grp.position);
+    if (vis.hit <= 0 && typeof zorbs !== 'undefined') {
+      const hitR = vis.bobR + 0.9;
+      for (const z of zorbs) {
+        if (!z.mesh || z.mesh.visible === false) continue;
+        if (z.mesh.position.distanceToSquared(_tmpBob) < hitR * hitR) { vis.hit = 1; break; }
+      }
+    }
+    // animate the impact flash + ring burst (decays over ~0.5s)
+    if (vis.hit > 0) {
+      vis.hit = Math.max(0, vis.hit - 0.06);
+      const e = vis.hit;
+      vis.core.material.color.setRGB(0.75 + 0.25*e, 0.95, 1);
+      vis.core.scale.setScalar(1 + e * 0.8);
+      vis.shell.material.emissiveIntensity = 1.0 + e * 3.5;
+      vis.shell.material.opacity = 0.55 + e * 0.4;
+      vis.ring.material.opacity = e * 0.9;
+      vis.ring.scale.setScalar(1 + (1 - e) * 3.5);
+    } else {
+      // gentle idle pulse so it reads as "live"
+      const idle = 1.0 + Math.sin(performance.now() * 0.004 + k) * 0.25;
+      vis.shell.material.emissiveIntensity = idle;
+      vis.core.scale.setScalar(1);
+      vis.ring.material.opacity = 0;
     }
   }
 }
@@ -2502,7 +2587,7 @@ async function boot() {
   const seed = await fetchRaceSeed();
   buildCourse(seed);
   // give the physics the track collider
-  ZPHYSICS.setTrack(track.collider, track.nodes, { forks: track.forks, branchColliders: track.branchColliders, obstacles: track.obstacles, spinners: track.spinners });
+  ZPHYSICS.setTrack(track.collider, track.nodes, { forks: track.forks, branchColliders: track.branchColliders, obstacles: track.obstacles, spinners: track.spinners, pendulums: track.pendulums });
   // demo: spawn a field of test balls and race. A few are given the premium skins so
   // Galaxy / Lava / Glass / Chrome are actually visible in the demo (they were all
   // Classic before, so the paid skins never showed on screen).
