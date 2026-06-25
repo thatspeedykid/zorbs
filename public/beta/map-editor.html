@@ -195,7 +195,10 @@ let activeBranch = -1;     // -1 = main track; ≥0 = editing branches[activeBra
 let _savedMain = null;     // main track backup while in branch mode
 let selType = null;        // 'section' | 'obstacle'
 let selIdx = -1;           // index into sections[] or obstacles[]
+let selObs = [];           // multi-selected obstacle indices (always includes selIdx when selType==='obstacle')
+let _clip = [];            // clipboard of copied obstacle objects
 let _pendingKind = null;   // palette piece kind waiting for a canvas click to place it
+let _boxSel = null;        // {x0,z0,x1,z1} world-space rect during shift-drag box select
 let difficulty = 'medium';
 let undoStack = [], redoStack = [];
 const author = (() => { try { const s=JSON.parse(localStorage.getItem('zorbs_session')||'{}'); return s.username||s.name||''; } catch(_){return '';} })();
@@ -523,7 +526,7 @@ function draw(){
     const s=W2S(p.x+rx,p.z+rz);
     const ob=obsByKind(o.kind);
     const r=7*devicePixelRatio;
-    const sel=(selType==='obstacle'&&selIdx===i);
+    const sel=(selType==='obstacle'&&selObs.includes(i));
     ctx.fillStyle=sel?'#fff':(ob?.color||'#ff4d5e');
     ctx.strokeStyle=sel?ob?.color||'#ff4d5e':'rgba(0,0,0,.5)';
     ctx.lineWidth=sel?2.5*devicePixelRatio:1*devicePixelRatio;
@@ -534,6 +537,15 @@ function draw(){
     if(sel){ ctx.strokeStyle='#fff'; ctx.lineWidth=1.5*devicePixelRatio;
       ctx.beginPath(); ctx.arc(s.x,s.y,r+3*devicePixelRatio,0,7); ctx.stroke(); }
   });
+
+  // box-select rectangle
+  if(_boxSel){
+    const a=W2S(_boxSel.x0,_boxSel.z0), b=W2S(_boxSel.x1,_boxSel.z1);
+    ctx.strokeStyle='rgba(57,200,224,.9)'; ctx.fillStyle='rgba(57,200,224,.12)';
+    ctx.lineWidth=1.5*devicePixelRatio; ctx.setLineDash([5,4]);
+    ctx.beginPath(); ctx.rect(Math.min(a.x,b.x),Math.min(a.y,b.y),Math.abs(b.x-a.x),Math.abs(b.y-a.y));
+    ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
+  }
 }
 function mark(s,col,txt){
   const r=5*devicePixelRatio;
@@ -688,10 +700,15 @@ cv.addEventListener('pointerdown',e=>{
   cv.setPointerCapture(e.pointerId);
   _panStart={x:e.clientX,y:e.clientY,px:view.panx,py:view.pany};
   _hasMoved=false;
-  // check obstacle hit
   if(!_path) buildPath();
   const c=S2C(e.clientX,e.clientY);
   const oi=hitObstacle(c.x,c.z);
+  // SHIFT+drag on empty space → box-select obstacles. SHIFT+click an obstacle → toggle it in the set.
+  if(e.shiftKey){
+    if(oi>=0){ toggleObsSel(oi); e.stopPropagation(); _obsDragIdx=-1; }
+    else { _boxSel={x0:c.x,z0:c.z,x1:c.x,z1:c.z}; _obsDragIdx=-1; }
+    return;
+  }
   if(oi>=0){ _obsDragIdx=oi; select('obstacle',oi); e.stopPropagation(); }
   else { _obsDragIdx=-1; }
 });
@@ -706,6 +723,9 @@ cv.addEventListener('pointermove',e=>{
   if(!_panStart) return;
   const dx=e.clientX-_panStart.x, dy=e.clientY-_panStart.y;
   if(Math.abs(dx)>3||Math.abs(dy)>3) _hasMoved=true;
+  if(_boxSel){
+    const c=S2C(e.clientX,e.clientY); _boxSel.x1=c.x; _boxSel.z1=c.z; draw(); return;
+  }
   if(_obsDragIdx>=0){
     // drag obstacle to new position
     const c=S2C(e.clientX,e.clientY);
@@ -724,6 +744,20 @@ cv.addEventListener('pointermove',e=>{
   }
 });
 cv.addEventListener('pointerup',e=>{
+  if(_boxSel){
+    // finalize box select → all obstacles whose marker falls inside the rect
+    const x0=Math.min(_boxSel.x0,_boxSel.x1), x1=Math.max(_boxSel.x0,_boxSel.x1);
+    const z0=Math.min(_boxSel.z0,_boxSel.z1), z1=Math.max(_boxSel.z0,_boxSel.z1);
+    const inside=[];
+    obstacles.forEach((o,i)=>{
+      const pos=obsWorldPos(i); if(!pos) return;
+      if(pos.x>=x0&&pos.x<=x1&&pos.z>=z0&&pos.z<=z1) inside.push(i);
+    });
+    _boxSel=null;
+    if(inside.length){ selType='obstacle'; selObs=inside; selIdx=inside[0]; renderSelPanel(); }
+    else deselect();
+    draw(); _panStart=null; _hasMoved=false; return;
+  }
   if(!_hasMoved&&_panStart&&_obsDragIdx<0){
     if(_pendingKind){
       // commit pending placement at hover position
@@ -788,8 +822,64 @@ function duplicateObstacle(i){
   pushUndo(); select('obstacle',i+1); refresh();
 }
 
-function select(type,idx){ selType=type; selIdx=idx; renderSelPanel(); draw(); }
-function deselect(){ selType=null; selIdx=-1; renderSelPanel(); draw(); }
+// ---- MULTI-SELECT obstacle helpers ----
+// world position of an obstacle marker (matches the draw() placement math)
+function obsWorldPos(i){
+  if(!_path) buildPath();
+  const o=obstacles[i]; if(!o) return null;
+  const pi=tToPathIdx(o.t); const p=_path.pts[pi]; if(!p) return null;
+  const b=_path.pts[Math.min(pi+1,_path.pts.length-1)];
+  let dx=b.x-p.x,dz=b.z-p.z;const l=Math.hypot(dx,dz)||1;dx/=l;dz/=l;
+  return { x:p.x+dz*p.w*(o.side||0), z:p.z-dx*p.w*(o.side||0) };
+}
+function toggleObsSel(i){
+  if(selType!=='obstacle') selObs=[];
+  selType='obstacle';
+  const k=selObs.indexOf(i);
+  if(k>=0) selObs.splice(k,1); else selObs.push(i);
+  selIdx=selObs.length?selObs[selObs.length-1]:-1;
+  if(!selObs.length){ deselect(); return; }
+  renderSelPanel(); draw();
+}
+function copyObs(){
+  if(selType!=='obstacle'||!selObs.length) return;
+  _clip=selObs.map(i=>JSON.parse(JSON.stringify(obstacles[i]))).filter(Boolean);
+  toast(_clip.length+' obstacle'+(_clip.length!==1?'s':'')+' copied');
+}
+function pasteObs(){
+  if(!_clip.length) return;
+  // paste offset slightly down-track + sideways, preserving relative layout
+  const baseT=Math.min(..._clip.map(o=>o.t));
+  const start=obstacles.length, added=[];
+  _clip.forEach(o=>{
+    const c=JSON.parse(JSON.stringify(o));
+    c.t=Math.min(1,c.t+0.04);
+    obstacles.push(c); added.push(obstacles.length-1);
+  });
+  selType='obstacle'; selObs=added; selIdx=added[added.length-1];
+  pushUndo(); renderSelPanel(); refresh();
+  toast('Pasted '+added.length);
+}
+function duplicateSelObs(){
+  if(selType!=='obstacle'||!selObs.length) return;
+  const added=[];
+  selObs.slice().forEach(i=>{
+    const c=JSON.parse(JSON.stringify(obstacles[i]));
+    c.t=Math.min(1,c.t+0.03); c.side=Math.max(-0.85,Math.min(0.85,(c.side||0)+0.12));
+    obstacles.push(c); added.push(obstacles.length-1);
+  });
+  selObs=added; selIdx=added[added.length-1];
+  pushUndo(); renderSelPanel(); refresh();
+}
+function deleteSelObs(){
+  if(selType!=='obstacle'||!selObs.length) return;
+  // remove highest indices first so lower indices stay valid
+  selObs.slice().sort((a,b)=>b-a).forEach(i=>obstacles.splice(i,1));
+  deselect(); pushUndo(); refresh();
+}
+
+function select(type,idx){ selType=type; selIdx=idx; selObs=(type==='obstacle'&&idx>=0)?[idx]:[]; renderSelPanel(); draw(); }
+function deselect(){ selType=null; selIdx=-1; selObs=[]; renderSelPanel(); draw(); }
 
 // ---- BRANCH MODE — swap active sections/obstacles so all existing editing code works unchanged ----
 function enterBranchMode(idx){
@@ -816,7 +906,7 @@ function exitBranchMode(){
 }
 function addBranch(fromSection){
   const id = Date.now();
-  branches.push({id, fromSection, sections:[], obstacles:[]});
+  branches.push({id, fromSection, end:'rejoin', sections:[], obstacles:[]});
   enterBranchMode(branches.length-1);
 }
 function deleteBranch(idx){
@@ -839,9 +929,14 @@ addEventListener('keydown',e=>{
   // Delete/Backspace: allow when focus is on range sliders, block only on text inputs/textareas
   const ae=document.activeElement;
   const isText=ae&&(ae.tagName==='TEXTAREA'||(ae.tagName==='INPUT'&&ae.type!=='range'));
-  if((e.ctrlKey||e.metaKey)&&e.key==='d'&&selType==='obstacle'&&selIdx>=0){ e.preventDefault(); duplicateObstacle(selIdx); return; }
-  if((e.key==='Delete'||e.key==='Backspace')&&!isText){
+  if(isText) return;
+  const mod=e.ctrlKey||e.metaKey;
+  if(mod&&e.key==='c'&&selType==='obstacle'&&selObs.length){ e.preventDefault(); copyObs(); return; }
+  if(mod&&e.key==='v'&&_clip.length){ e.preventDefault(); pasteObs(); return; }
+  if(mod&&e.key==='d'&&selType==='obstacle'&&selObs.length){ e.preventDefault(); selObs.length>1?duplicateSelObs():duplicateObstacle(selIdx); return; }
+  if((e.key==='Delete'||e.key==='Backspace')){
     if(selType==='section'&&selIdx>=0){ e.preventDefault(); removePiece(selIdx); }
+    else if(selType==='obstacle'&&selObs.length>1){ e.preventDefault(); deleteSelObs(); }
     else if(selType==='obstacle'&&selIdx>=0){ e.preventDefault(); removeObstacle(selIdx); }
   }
 });
@@ -873,11 +968,25 @@ function renderSelPanel(){
       const myBranches=branches.map((b,i)=>({b,i})).filter(({b})=>b.fromSection===selIdx);
       h+=`<hr class="div"><div style="font-size:10px;color:var(--dim);margin-bottom:6px">BRANCH EXITS</div>`;
       myBranches.forEach(({b,i})=>{
-        h+=`<div style="display:flex;gap:5px;margin-bottom:5px">
-          <button style="flex:1;padding:4px;font-size:11px" onclick="enterBranchMode(${i})">✏ Edit branch ${i+1} (${b.sections.length} piece${b.sections.length!==1?'s':''})</button>
-          <button class="danger" style="padding:4px 8px;font-size:11px" onclick="deleteBranch(${i})">✕</button>
+        const isFinish=b.end==='finish';
+        h+=`<div style="border:1px solid var(--line);border-radius:7px;padding:6px;margin-bottom:6px">
+          <div style="display:flex;gap:5px;margin-bottom:5px">
+            <button style="flex:1;padding:4px;font-size:11px" onclick="enterBranchMode(${i})">✏ Edit branch ${i+1} (${b.sections.length} piece${b.sections.length!==1?'s':''})</button>
+            <button class="danger" style="padding:4px 8px;font-size:11px" onclick="deleteBranch(${i})">✕</button>
+          </div>
+          <div class="seg" data-brend="${i}" style="font-size:10px">
+            <button data-v="rejoin" class="${!isFinish?'on':''}">↩ Rejoin main</button>
+            <button data-v="finish" class="${isFinish?'on':''}">🏁 Own finish</button>
+          </div>
         </div>`;
       });
+      // summary of how many ends still need joining for a single finish
+      const fin=myBranches.filter(({b})=>b.end==='finish').length;
+      if(myBranches.length){
+        h+=`<div style="font-size:10px;color:var(--dim);margin:2px 0 6px">`+
+           (fin?`${fin} separate finish${fin!==1?'es':''} + main = ${fin+1} finish lines`
+               :`all rejoin → single finish`)+`</div>`;
+      }
       h+=`<button style="width:100%;padding:4px;font-size:11px;margin-top:2px" onclick="addBranch(${selIdx})">＋ Add branch exit</button>`;
     }
     h+=`<button class="danger" style="width:100%;margin-top:8px" onclick="removePiece(${selIdx})">Delete piece</button>`;
@@ -899,6 +1008,26 @@ function renderSelPanel(){
       if(+b.dataset.v) sections[selIdx].split=true; else delete sections[selIdx].split;
       pushUndo(); refresh();
     });
+    // branch end-mode (rejoin vs own finish) toggles
+    selPanel.querySelectorAll('[data-brend]').forEach(seg=>{
+      const bi=+seg.dataset.brend;
+      seg.querySelectorAll('button').forEach(b=>b.onclick=()=>{
+        if(branches[bi]){ branches[bi].end=b.dataset.v; pushUndo(); refresh(); }
+      });
+    });
+  } else if(selType==='obstacle'&&selObs.length>1){
+    // MULTI-SELECT group panel
+    const kinds={}; selObs.forEach(i=>{ const k=obstacles[i]&&obstacles[i].kind; if(k)kinds[k]=(kinds[k]||0)+1; });
+    const summary=Object.entries(kinds).map(([k,n])=>`${n}× ${obsByKind(k)?.name||k}`).join(', ');
+    let h=`<div style="font-weight:700;margin-bottom:4px">${selObs.length} obstacles selected</div>
+      <div style="font-size:10px;color:var(--dim);margin-bottom:10px">${summary}</div>
+      <button style="width:100%;margin-bottom:6px" onclick="duplicateSelObs()">⧉ Duplicate all (Ctrl+D)</button>
+      <button style="width:100%;margin-bottom:6px" onclick="copyObs()">⧉ Copy (Ctrl+C)</button>
+      ${_clip.length?`<button style="width:100%;margin-bottom:6px" onclick="pasteObs()">📋 Paste ${_clip.length} (Ctrl+V)</button>`:''}
+      <button class="danger" style="width:100%;margin-top:4px" onclick="deleteSelObs()">Delete all</button>
+      <div class="empty" style="margin-top:10px">Shift+drag to box-select · Shift+click to toggle one</div>`;
+    selPanel.innerHTML=h;
+    return;
   } else if(selType==='obstacle'){
     const o=obstacles[selIdx]; if(!o){selPanel.innerHTML='';return;}
     const ob=obsByKind(o.kind);
@@ -922,8 +1051,12 @@ function renderSelPanel(){
       h+=`<div class="field"><label>Spin direction</label><div class="seg" id="obsdirseg">
       <button data-v="-1" class="${(o.dir||1)<0?'on':''}">◀ Left</button><button data-v="1" class="${(o.dir||1)>0?'on':''}">Right ▶</button></div></div>`;
     }
-    h+=`<button style="width:100%;margin-top:8px" onclick="duplicateObstacle(${selIdx})">⧉ Duplicate</button>`;
+    h+=`<div style="display:flex;gap:5px;margin-top:8px">
+      <button style="flex:1" onclick="duplicateObstacle(${selIdx})">⧉ Duplicate</button>
+      <button style="flex:1" onclick="copyObs()">Copy</button></div>`;
+    if(_clip.length) h+=`<button style="width:100%;margin-top:6px" onclick="pasteObs()">📋 Paste ${_clip.length}</button>`;
     h+=`<button class="danger" style="width:100%;margin-top:6px" onclick="removeObstacle(${selIdx})">Delete obstacle</button>`;
+    h+=`<div class="empty" style="margin-top:8px">Shift+drag the canvas to select several at once</div>`;
     selPanel.innerHTML=h;
     selPanel.querySelectorAll('input[type=range]').forEach(r=>{
       r.addEventListener('input',()=>{

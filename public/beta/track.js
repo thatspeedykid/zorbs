@@ -567,16 +567,45 @@ const ZTRACK = (() => {
         const forkNodeIdx = sectionEndIdx[fromSection];
         const forkNode = nodes[forkNodeIdx]; if (!forkNode) continue;
         const forkId = 'cbr_' + fromSection;
-        const branches = {}, branchOrder = [], rejoinIdx = {};
+        // '__main__' sentinel lane keeps the main centerline flowing alongside the branches —
+        // balls binned to it stay on main (handled in physics commit). Placed in the middle so
+        // the main lane sits centrally and branches peel off to the sides.
+        const branches = {}, rejoinIdx = {}, branchRejoin = {};
+        const branchIds = [];
+        let anyRejoin = false;
         for (let bi = 0; bi < brs.length; bi++) {
           const branchId = forkId + '_' + bi;
-          branchOrder.push(branchId);
-          branches[branchId] = buildCustomBranchNodes(forkNode, brs[bi].sections, branchId);
-          rejoinIdx[branchId] = rejoinNode;
+          branchIds.push(branchId);
+          const bnodes = buildCustomBranchNodes(forkNode, brs[bi].sections, branchId);
+          branches[branchId] = bnodes;
+          // Author chooses per branch: rejoin the main track, or run to its own separate finish.
+          const isFinish = brs[bi].end === 'finish';
+          branchRejoin[branchId] = !isFinish;
+          const last = bnodes[bnodes.length - 1];
+          if (isFinish) {
+            // mark the branch's last node as its own finish line so the race detects finishers here
+            if (last) { last.finishLine = true; last.branchFinish = true; }
+          } else {
+            // REJOIN: snap back to whichever MAIN node is physically nearest the branch's end
+            // (authored branches don't curve back on their own, so pick the closest re-entry).
+            let bestIdx = rejoinNode, bestD = Infinity;
+            if (last) {
+              for (let mi = forkNodeIdx + 1; mi < nodes.length; mi++) {
+                const mn = nodes[mi]; if (!mn || mn.branchId) continue;
+                const d = (mn.pos.x-last.pos.x)**2 + (mn.pos.y-last.pos.y)**2 + (mn.pos.z-last.pos.z)**2;
+                if (d < bestD) { bestD = d; bestIdx = mi; }
+              }
+            }
+            rejoinIdx[branchId] = bestIdx; anyRejoin = true;
+          }
         }
-        const fork = { id: forkId, splitIdx: forkNodeIdx, flavor: 'divergent',
-          rejoin: true, rejoinIdx, branches, branchOrder, laneCount: brs.length,
-          ends: branchOrder.map(bid => branches[bid][branches[bid].length-1] || forkNode),
+        // Insert the main sentinel in the MIDDLE of the lane order so the main path stays
+        // centered and authored branches peel off to either side.
+        const mid = Math.floor(branchIds.length / 2);
+        const branchOrder = branchIds.slice(0, mid).concat(['__main__'], branchIds.slice(mid));
+        const fork = { id: forkId, splitIdx: forkNodeIdx, flavor: 'divergent', keepMain: true,
+          rejoin: anyRejoin, branchRejoin, rejoinIdx, branches, branchOrder, laneCount: brs.length + 1,
+          ends: branchIds.map(bid => branches[bid][branches[bid].length-1] || forkNode),
           end: rejoinNode };
         forks.push(fork);
         forkAtIdx.set(forkNodeIdx, fork);

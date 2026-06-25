@@ -1894,7 +1894,9 @@ function loop(now) {
     const endHint = track.nodes.length - 3;
     for (const id in snapR) {
       const z = zorbs.get(id);
-      if (snapR[id].hint >= endHint && !_finishedSet.has(id) && z && !z.eliminated) {
+      // finish on the main line OR on a separate branch finish (custom maps with non-rejoin branches)
+      const atFinish = snapR[id].hint >= endHint || snapR[id].finished;
+      if (atFinish && !_finishedSet.has(id) && z && !z.eliminated) {
         _finishedSet.add(id); _finishOrder.push(id); explodeBall(z);   // blow up at the finish line
         if (_finishOrder.length === 1) { winner = id; _winAt = now; pushFeed('lead', '🏆 <b>'+esc(id)+'</b> WINS!'); }
         else pushFeed('lead', '<b>'+esc(id)+'</b> finished #'+_finishOrder.length);

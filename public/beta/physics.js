@@ -746,11 +746,15 @@ const ZPHYSICS = (() => {
                                       // (splitIdx sits BEFORE entryIdx), skipping the orbit
                                       // entirely and committing the ball to a random lane
                                       // the instant it crossed splitIdx.
+          // CUSTOM forks with keepMain leave the main path intact alongside the branches,
+          // so a ball can be resolved to "stay on main" once — guard against re-binning.
+          if (f.keepMain && b._forkDone && b._forkDone[f.id]) continue;
           const commitIdx = (f.throatIdx != null) ? f.throatIdx : f.splitIdx;
           if (b.hint >= commitIdx - 1 && b.hint <= commitIdx + 1) {
             const sn = nodes[commitIdx];
             const latv = (t.x - sn.pos.x)*sn.right.x + (t.z - sn.pos.z)*sn.right.z;
             const order = f.branchOrder;
+            let chosen = null;
             if (order && order.length) {
               // bin lateral position into one of N fan lanes (left→right). commitHalfW (set
               // on sorter-fork throat nodes) reflects the actual hole-spread radius, which can
@@ -759,10 +763,17 @@ const ZPHYSICS = (() => {
               const hw = sn.commitHalfW || sn.halfW || 7;
               let frac = (latv / hw + 1) / 2;            // 0 (far left) .. 1 (far right)
               frac = Math.max(0, Math.min(0.99999, frac));
-              b.branch = order[Math.floor(frac * order.length)];
+              chosen = order[Math.floor(frac * order.length)];
             } else {
-              b.branch = latv < 0 ? f.id+'_A' : f.id+'_B';   // legacy two-lane fallback
+              chosen = latv < 0 ? f.id+'_A' : f.id+'_B';   // legacy two-lane fallback
             }
+            // keepMain forks include a '__main__' sentinel lane: a ball binned there simply
+            // continues on the main centerline (no branch commit, hint untouched).
+            if (f.keepMain && !branchNodes[chosen]) {
+              b._forkDone = b._forkDone || {}; b._forkDone[f.id] = true;
+              break;
+            }
+            b.branch = chosen;
             b.branchFork = f;
             b.hint = 0;   // restart hint within the branch
             break;
@@ -803,7 +814,18 @@ const ZPHYSICS = (() => {
       // it via a dedicated check here, specifically because branches radiated outward with
       // no relationship to the main path at all — that asymmetric design is gone now that
       // every track is built to converge on its own.)
-      if (b.branch && b.branchFork && b.branchFork.rejoin && b.hint >= curNodes.length - 2) {
+      // per-branch rejoin: seeded forks set fork.rejoin for all branches; custom forks carry a
+      // branchRejoin map so each authored branch can rejoin OR run to its own separate finish.
+      const _branchRejoins = b.branch && b.branchFork
+        ? (b.branchFork.branchRejoin ? !!b.branchFork.branchRejoin[b.branch] : !!b.branchFork.rejoin)
+        : false;
+      // SEPARATE FINISH: a non-rejoining branch ends at its own finish line. Mark the ball
+      // finished once it reaches the branch end so the race counts it in standings.
+      if (b.branch && b.branchFork && !_branchRejoins && !b.finished && b.hint >= curNodes.length - 2) {
+        b.finished = true;
+        b.progress = 1e9;   // rank with main-track finishers
+      }
+      if (b.branch && b.branchFork && _branchRejoins && b.hint >= curNodes.length - 2) {
         // THE OLD BUG: this searched main from node 0 with a tiny window, so a ball
         // rejoining at main node ~450 got hint≈24, snapped to the wrong floor height,
         // and was lost forever. Now: search a wide window around the KNOWN merge index
@@ -827,7 +849,8 @@ const ZPHYSICS = (() => {
       const n = N[Math.min(b.hint, N.length-1)];
       const nx = N[Math.min(b.hint + 1, N.length - 1)];
       // global progress for leader/cam: main hint, or split point + branch hint
-      b.progress = b.branch && b.branchFork ? (b.branchFork.splitIdx + b.hint) : b.hint;
+      // (finished branch balls keep their sentinel progress so they rank as finishers)
+      if (!b.finished) b.progress = b.branch && b.branchFork ? (b.branchFork.splitIdx + b.hint) : b.hint;
 
       // forward direction = toward the next node (down the track), NEVER sideways
       let fx = nx.pos.x - n.pos.x, fy = nx.pos.y - n.pos.y, fz = nx.pos.z - n.pos.z;
@@ -1063,7 +1086,7 @@ const ZPHYSICS = (() => {
     for (const [id, b] of balls) {
       const t = b.body.translation();
       const lv = b.body.linvel();
-      out[id] = { x: t.x, y: t.y, z: t.z, vx: lv.x, vz: lv.z, alive: b.alive, hint: b.hint, branch: b.branch||null, progress: b.progress||b.hint, boost: b.boost||0, justLaunched: !!b._justLaunched };
+      out[id] = { x: t.x, y: t.y, z: t.z, vx: lv.x, vz: lv.z, alive: b.alive, hint: b.hint, branch: b.branch||null, progress: b.progress||b.hint, boost: b.boost||0, justLaunched: !!b._justLaunched, finished: !!b.finished };
       b._justLaunched = false;   // one-shot edge — cleared right after this snapshot reads it
     }
     return out;
