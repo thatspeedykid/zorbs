@@ -114,11 +114,6 @@
     <div class="valid" id="valid">—</div>
     <canvas id="cv"></canvas>
     <div class="mode-hint" id="mode-hint">Drag a piece onto the track · drag obstacles to reposition</div>
-    <div id="branch-bar" style="display:none;position:absolute;top:10px;left:50%;transform:translateX(-50%);
-      background:#1a0d2e;border:1px solid #cc77ff;border-radius:16px;padding:6px 16px;
-      font-size:11px;color:#cc77ff;z-index:10">
-      <span id="branch-bar-label"></span><button onclick="exitBranchMode()" style="padding:2px 9px;font-size:11px;margin-left:6px">← Back to main</button>
-    </div>
   </main>
 
   <aside class="props" id="props">
@@ -373,6 +368,20 @@ function hitObstacle(wx,wz){
   return -1;
 }
 
+// branch path hit test: returns branch index or -1
+function hitBranch(wx,wz){
+  const mainPath=buildPath();
+  for(let bi=0;bi<branches.length;bi++){
+    const bpts=buildBranchPath(branches[bi],mainPath);
+    if(!bpts) continue;
+    for(let i=0;i<bpts.length;i++){
+      const p=bpts[i];
+      if((p.x-wx)**2+(p.z-wz)**2<(p.w*0.85)**2) return bi;
+    }
+  }
+  return -1;
+}
+
 // section hit test: click on a section area → return section index
 function hitSection(wx,wz){
   if(!_path) return -1;
@@ -455,9 +464,10 @@ function draw(){
   mark(W2S(pts[0].x,pts[0].z),'#2ec27e','START');
   mark(W2S(pts[pts.length-1].x,pts[pts.length-1].z),'#ff8800','FINISH');
 
-  // draw branch paths (when in main-track view, not branch-edit mode)
-  if(activeBranch < 0 && branches.length){
+  // draw branch paths
+  if(branches.length){
     branches.forEach((br,bi)=>{
+      const isSel=(selType==='branch'&&selIdx===bi);
       const bpts = buildBranchPath(br, {pts,sectionStarts});
       if(!bpts||bpts.length<2) return;
       const bcol='#cc77ff';
@@ -472,17 +482,17 @@ function draw(){
       ctx.beginPath();
       bl.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));
       for(let i=brr.length-1;i>=0;i--) ctx.lineTo(brr[i].x,brr[i].y);
-      ctx.closePath(); ctx.fillStyle='rgba(204,119,255,0.10)'; ctx.fill();
+      ctx.closePath(); ctx.fillStyle=isSel?'rgba(204,119,255,0.22)':'rgba(204,119,255,0.10)'; ctx.fill();
       // edges
-      ctx.strokeStyle=bcol; ctx.lineWidth=2*devicePixelRatio; ctx.setLineDash([5,3]);
+      ctx.strokeStyle=isSel?'#e8aaff':bcol; ctx.lineWidth=(isSel?3:2)*devicePixelRatio; ctx.setLineDash([5,3]);
       ctx.beginPath(); bl.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.stroke();
       ctx.beginPath(); brr.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.stroke();
       ctx.setLineDash([]);
       // label
       const ep=bpts[bpts.length-1]; const es=W2S(ep.x,ep.z);
-      ctx.fillStyle=bcol; ctx.font=`${10*devicePixelRatio}px system-ui`;
+      ctx.fillStyle=isSel?'#e8aaff':bcol; ctx.font=`${isSel?'bold ':''} ${10*devicePixelRatio}px system-ui`;
       ctx.textAlign='left'; ctx.textBaseline='middle';
-      ctx.fillText('Branch '+(bi+1),es.x+6,es.y);
+      ctx.fillText('Branch '+(bi+1)+(isSel?' ◀':''),es.x+6,es.y);
     });
   }
 
@@ -563,19 +573,22 @@ function mark(s,col,txt){
 // Returns array of {si, pi, sx, sy, wx, wz} for all visible port dots given current path
 function computePorts(pts, sectionStarts){
   const ports = [];
-  if(activeBranch >= 0) return ports; // hide in branch-edit mode
   for(let si=0; si<sections.length; si++){
-    const idx = sectionStarts[si]; if(idx==null) continue;
-    const p = pts[idx]; if(!p) continue;
-    const b = pts[Math.min(idx+1,pts.length-1)];
-    const dx=b.x-p.x, dz=b.z-p.z, l=Math.hypot(dx,dz)||1;
-    const rx=dz/l, rz=-dx/l; // right normal
-    // 3 ports: left edge, center, right edge
-    const offsets = [-0.7, 0, 0.7];
-    offsets.forEach((off,pi)=>{
-      const wx=p.x+rx*p.w*off, wz=p.z+rz*p.w*off;
-      const s=W2S(wx,wz);
-      ports.push({si,pi,sx:s.x,sy:s.y,wx,wz});
+    // show ports at both the START and END of each section
+    const endIdx = si+1 < sectionStarts.length ? sectionStarts[si+1] : pts.length-1;
+    const indices = [sectionStarts[si], endIdx];
+    indices.forEach((idx,end)=>{
+      if(idx==null) return;
+      const p = pts[idx]; if(!p) return;
+      const b = pts[Math.min(idx+1,pts.length-1)];
+      const dx=b.x-p.x, dz=b.z-p.z, l=Math.hypot(dx,dz)||1;
+      const rx=dz/l, rz=-dx/l;
+      // 3 ports: left edge, center, right edge
+      [-0.7, 0, 0.7].forEach((off,pi)=>{
+        const wx=p.x+rx*p.w*off, wz=p.z+rz*p.w*off;
+        const s=W2S(wx,wz);
+        ports.push({si,pi,end,sx:s.x,sy:s.y,wx,wz});
+      });
     });
   }
   return ports;
@@ -759,10 +772,16 @@ cv.addEventListener('pointerdown',e=>{
   _hasMoved=false;
   if(!_path) buildPath();
   const c=S2C(e.clientX,e.clientY);
-  // Port dot click → add branch from that section
-  if(!e.shiftKey && activeBranch<0){
+  // Port dot click → add branch from that section (or select existing)
+  if(!e.shiftKey){
     const pt=hitPort(c.x,c.z);
-    if(pt){ pushUndo(); addBranch(pt.si); return; }
+    if(pt){
+      // if branch already exists on this section, select it; otherwise create new
+      const existing=branches.findIndex(b=>b.fromSection===pt.si);
+      if(existing>=0) select('branch',existing);
+      else addBranch(pt.si);
+      return;
+    }
   }
   const oi=hitObstacle(c.x,c.z);
   // SHIFT+drag on empty space → box-select obstacles. SHIFT+click an obstacle → toggle it in the set.
@@ -783,7 +802,7 @@ cv.addEventListener('pointermove',e=>{
     draw(); return;
   }
   // port hover highlight (no drag in progress)
-  if(!_panStart && !_pendingKind && activeBranch<0){
+  if(!_panStart && !_pendingKind){
     const c=S2C(e.clientX,e.clientY);
     const pt=hitPort(c.x,c.z);
     const prev=_hoverPort;
@@ -844,8 +863,12 @@ cv.addEventListener('pointerup',e=>{
       const oi=hitObstacle(c.x,c.z);
       if(oi>=0){ select('obstacle',oi); }
       else{
-        const si=hitSection(c.x,c.z);
-        if(si>=0) select('section',si); else deselect();
+        const bi=hitBranch(c.x,c.z);
+        if(bi>=0){ select('branch',bi); }
+        else{
+          const si=hitSection(c.x,c.z);
+          if(si>=0) select('section',si); else deselect();
+        }
       }
     }
   }
@@ -866,15 +889,13 @@ function addPiece(kind,at){
   if(at==null||at>sections.length) at=sections.length;
   sections.splice(at,0,s);
   // shift branch fromSection indices that now point past the insertion point
-  if(activeBranch < 0) branches.forEach(b=>{ if(b.fromSection>=at) b.fromSection++; });
+  branches.forEach(b=>{ if(b.fromSection>=at) b.fromSection++; });
   pushUndo(); select('section',at); refresh();
 }
 function removePiece(i){
   sections.splice(i,1);
-  if(activeBranch < 0){
-    branches = branches.filter(b=>b.fromSection!==i);
-    branches.forEach(b=>{ if(b.fromSection>i) b.fromSection--; });
-  }
+  branches = branches.filter(b=>b.fromSection!==i);
+  branches.forEach(b=>{ if(b.fromSection>i) b.fromSection--; });
   selType=null; selIdx=-1; // always clear — prevents double-delete when panel auto-updates
   pushUndo(); refresh();
 }
@@ -953,43 +974,34 @@ function deleteSelObs(){
 function select(type,idx){ selType=type; selIdx=idx; selObs=(type==='obstacle'&&idx>=0)?[idx]:[]; renderSelPanel(); draw(); }
 function deselect(){ selType=null; selIdx=-1; selObs=[]; renderSelPanel(); draw(); }
 
-// ---- BRANCH MODE — swap active sections/obstacles so all existing editing code works unchanged ----
-function enterBranchMode(idx){
-  if(activeBranch >= 0) exitBranchMode();
-  _savedMain = {sections, obstacles};
-  sections  = branches[idx].sections;
-  obstacles = branches[idx].obstacles;
-  activeBranch = idx;
-  selType=null; selIdx=-1; undoStack=[]; redoStack=[];
-  _path=null; refresh();
-  document.getElementById('branch-bar').style.display='';
-  document.getElementById('branch-bar-label').textContent='Editing branch exit '+(idx+1)+' — ';
-}
-function exitBranchMode(){
-  if(!_savedMain) return;
-  branches[activeBranch].sections  = sections;
-  branches[activeBranch].obstacles = obstacles;
-  sections  = _savedMain.sections;
-  obstacles = _savedMain.obstacles;
-  _savedMain = null; activeBranch = -1;
-  selType=null; selIdx=-1; undoStack=[]; redoStack=[];
-  _path=null; refresh();
-  document.getElementById('branch-bar').style.display='none';
-}
+// ---- BRANCH EDITING — inline, no mode-swap ----
 function addBranch(fromSection){
   const id = Date.now();
   branches.push({id, fromSection, end:'rejoin', sections:[], obstacles:[]});
-  enterBranchMode(branches.length-1);
+  pushUndo();
+  select('branch', branches.length-1);
 }
 function deleteBranch(idx){
-  if(activeBranch===idx) exitBranchMode();
   branches.splice(idx,1);
-  refresh();
+  if(selType==='branch'){ if(selIdx===idx) deselect(); else if(selIdx>idx){ selIdx--; renderSelPanel(); } }
+  pushUndo(); refresh();
 }
+function addBranchPiece(bi, kind){
+  const p=byKind(kind); if(!p) return;
+  branches[bi].sections.push(Object.assign({kind},JSON.parse(JSON.stringify(p.def))));
+  pushUndo(); renderSelPanel(); draw();
+}
+function removeBranchPiece(bi, si){
+  branches[bi].sections.splice(si,1);
+  pushUndo(); renderSelPanel(); draw();
+}
+// stub kept for any lingering onclick references
+function enterBranchMode(idx){ select('branch',idx); }
+function exitBranchMode(){ deselect(); }
 
 // ---- UNDO / REDO ----
-function state(){ return JSON.stringify({sections,obstacles,branches:activeBranch<0?branches:undefined}); }
-function restoreState(s){ const d=JSON.parse(s); sections=d.sections; obstacles=d.obstacles; if(activeBranch<0&&d.branches) branches=d.branches; }
+function state(){ return JSON.stringify({sections,obstacles,branches}); }
+function restoreState(s){ const d=JSON.parse(s); sections=d.sections; obstacles=d.obstacles; branches=d.branches||[]; }
 function pushUndo(){ undoStack.push(state()); if(undoStack.length>60)undoStack.shift(); redoStack=[]; scheduleAutoSave(); }
 function undo(){ if(!undoStack.length)return; redoStack.push(state()); restoreState(undoStack.pop()); deselect(); refresh(); }
 function redo(){ if(!redoStack.length)return; undoStack.push(state()); restoreState(redoStack.pop()); deselect(); refresh(); }
@@ -1035,29 +1047,21 @@ function renderSelPanel(){
     if('w'     in s) h+=slider('Arena width','w',s.w,8,30,1);
     if('dir'   in s) h+=dirseg(s.dir);
     if(s.kind==='straight') h+=splitseg(!!s.split);
-    // Branch exits — funnel/split/turn can have alternate exit paths
-    if(['funnel','sweep','tunnel','narrower','arena'].includes(s.kind)||s.split){
+    // Branch exits — quick overview + add button; click the branch path to edit it
+    {
       const myBranches=branches.map((b,i)=>({b,i})).filter(({b})=>b.fromSection===selIdx);
-      h+=`<hr class="div"><div style="font-size:10px;color:var(--dim);margin-bottom:6px">BRANCH EXITS</div>`;
-      myBranches.forEach(({b,i})=>{
-        const isFinish=b.end==='finish';
-        h+=`<div style="border:1px solid var(--line);border-radius:7px;padding:6px;margin-bottom:6px">
-          <div style="display:flex;gap:5px;margin-bottom:5px">
-            <button style="flex:1;padding:4px;font-size:11px" onclick="enterBranchMode(${i})">✏ Edit branch ${i+1} (${b.sections.length} piece${b.sections.length!==1?'s':''})</button>
-            <button class="danger" style="padding:4px 8px;font-size:11px" onclick="deleteBranch(${i})">✕</button>
-          </div>
-          <div class="seg" data-brend="${i}" style="font-size:10px">
-            <button data-v="rejoin" class="${!isFinish?'on':''}">↩ Rejoin main</button>
-            <button data-v="finish" class="${isFinish?'on':''}">🏁 Own finish</button>
-          </div>
-        </div>`;
-      });
-      // summary of how many ends still need joining for a single finish
-      const fin=myBranches.filter(({b})=>b.end==='finish').length;
       if(myBranches.length){
-        h+=`<div style="font-size:10px;color:var(--dim);margin:2px 0 6px">`+
-           (fin?`${fin} separate finish${fin!==1?'es':''} + main = ${fin+1} finish lines`
-               :`all rejoin → single finish`)+`</div>`;
+        h+=`<hr class="div"><div style="font-size:10px;color:var(--dim);margin-bottom:6px">BRANCH EXITS</div>`;
+        myBranches.forEach(({b,i})=>{
+          const isFinish=b.end==='finish';
+          h+=`<div style="border:1px solid var(--line);border-radius:7px;padding:6px;margin-bottom:6px;cursor:pointer" onclick="select('branch',${i})">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span style="font-size:11px;color:#cc77ff">Branch ${i+1}</span>
+              <span style="font-size:10px;color:var(--dim)">${b.sections.length} piece${b.sections.length!==1?'s':''}</span>
+            </div>
+            <div style="font-size:10px;color:var(--dim);margin-top:2px">${isFinish?'🏁 Own finish':'↩ Rejoins main'} — click to edit</div>
+          </div>`;
+        });
       }
       h+=`<button style="width:100%;padding:4px;font-size:11px;margin-top:2px" onclick="addBranch(${selIdx})">＋ Add branch exit</button>`;
     }
@@ -1080,13 +1084,49 @@ function renderSelPanel(){
       if(+b.dataset.v) sections[selIdx].split=true; else delete sections[selIdx].split;
       pushUndo(); refresh();
     });
-    // branch end-mode (rejoin vs own finish) toggles
-    selPanel.querySelectorAll('[data-brend]').forEach(seg=>{
-      const bi=+seg.dataset.brend;
-      seg.querySelectorAll('button').forEach(b=>b.onclick=()=>{
-        if(branches[bi]){ branches[bi].end=b.dataset.v; pushUndo(); refresh(); }
+  } else if(selType==='branch'){
+    const bi=selIdx; const br=branches[bi];
+    if(!br){ selPanel.innerHTML=''; return; }
+    const isFinish=br.end==='finish';
+    let h=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div><div style="font-weight:700;color:#cc77ff">Branch ${bi+1}</div>
+      <div style="font-size:10px;color:var(--dim)">from section ${br.fromSection+1}</div></div>
+      <button class="danger" style="padding:4px 8px;font-size:11px" onclick="deleteBranch(${bi})">✕ Remove</button>
+    </div>`;
+    // rejoin/finish toggle
+    h+=`<div class="seg" id="brend-seg" style="margin-bottom:10px">
+      <button data-v="rejoin" class="${!isFinish?'on':''}">↩ Rejoin main</button>
+      <button data-v="finish" class="${isFinish?'on':''}">🏁 Own finish</button>
+    </div>`;
+    // section list
+    if(br.sections.length){
+      h+=`<div style="font-size:10px;color:var(--dim);margin-bottom:4px">BRANCH PIECES</div>`;
+      br.sections.forEach((s,si)=>{
+        const pc=byKind(s.kind);
+        h+=`<div style="display:flex;align-items:center;gap:6px;padding:5px 7px;margin-bottom:4px;
+              background:#141b30;border:1px solid var(--line);border-radius:7px">
+          <div style="flex:1;font-size:11px;color:${pc?.color||'#fff'}">${pc?.name||s.kind}</div>
+          <div style="font-size:10px;color:var(--dim)">len ${s.len||'?'}</div>
+          <button class="danger" style="padding:2px 7px;font-size:10px" onclick="removeBranchPiece(${bi},${si})">✕</button>
+        </div>`;
       });
+    } else {
+      h+=`<div style="font-size:11px;color:var(--dim);margin-bottom:8px">No pieces yet — add some below</div>`;
+    }
+    // add-piece buttons
+    h+=`<div style="font-size:10px;color:var(--dim);margin:8px 0 5px">ADD PIECE TO BRANCH</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">`;
+    TRACK_PIECES.forEach(p=>{
+      h+=`<button style="padding:5px;font-size:10px;text-align:left" onclick="addBranchPiece(${bi},'${p.kind}')">
+        <span style="color:${p.color}">+</span> ${p.name}</button>`;
     });
+    h+=`</div>`;
+    selPanel.innerHTML=h;
+    // rejoin/finish toggle wiring
+    selPanel.querySelector('#brend-seg').querySelectorAll('button').forEach(b=>b.onclick=()=>{
+      branches[bi].end=b.dataset.v; pushUndo(); refresh();
+    });
+    return;
   } else if(selType==='obstacle'&&selObs.length>1){
     // MULTI-SELECT group panel
     const kinds={}; selObs.forEach(i=>{ const k=obstacles[i]&&obstacles[i].kind; if(k)kinds[k]=(kinds[k]||0)+1; });
@@ -1263,7 +1303,6 @@ document.getElementById('btn-submit').onclick=async()=>{
 let currentDraftId = null;
 
 function applyMap(d){
-  if(activeBranch >= 0) exitBranchMode();
   sections = Array.isArray(d.sections)? JSON.parse(JSON.stringify(d.sections)) : [];
   obstacles = Array.isArray(d.obstacles)? JSON.parse(JSON.stringify(d.obstacles)) : [];
   branches = Array.isArray(d.branches)? JSON.parse(JSON.stringify(d.branches)) : [];
@@ -1340,7 +1379,7 @@ async function delDraft(id,name){
 // ---- CLEAR ----
 document.getElementById('btn-clear').onclick=()=>{
   if(!sections.length&&!obstacles.length) return;
-  if(confirm('Clear the whole track?')){ if(activeBranch>=0)exitBranchMode(); sections=[];obstacles=[];branches=[];deselect();pushUndo();fit();refresh();}
+  if(confirm('Clear the whole track?')){ sections=[];obstacles=[];branches=[];deselect();pushUndo();fit();refresh();}
 };
 
 // ---- STARTER TRACK ---- (gentle S-curve track, no spirals, so default state is clean)
