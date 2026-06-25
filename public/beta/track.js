@@ -612,18 +612,29 @@ const ZTRACK = (() => {
         forks.push(fork);
         forkAtIdx.set(forkNodeIdx, fork);
 
-        // Remove inner walls at the junction so balls can flow into branches without
-        // getting jammed. Tag a window of main-track nodes around the fork point and
-        // the first nodes of every branch with noWallL+noWallR — buildMesh and
-        // buildColliderBuffers both respect these flags.
-        const OPEN = 10; // nodes on each side of fork to open up
-        for (let k = Math.max(0, forkNodeIdx - OPEN); k < Math.min(nodes.length, forkNodeIdx + OPEN); k++) {
-          nodes[k].noWallL = true; nodes[k].noWallR = true;
-        }
+        // Open ONLY the inner divider walls at the junction so balls flow into branches
+        // without getting jammed — never the OUTER walls (that would let balls fall off).
+        // For each branch we work out which side of the main heading it peels off to
+        // (using the fork node's right vector), then open the MAIN wall on that side and
+        // the BRANCH wall facing back toward the main track. Outer walls stay intact.
+        const OPEN = 8;
+        const fr = forkNode.right;
         for (const bid of branchIds) {
           const bnodes = branches[bid];
-          for (let k = 0; k < Math.min(OPEN * 2, bnodes.length); k++) {
-            bnodes[k].noWallL = true; bnodes[k].noWallR = true;
+          if (!bnodes.length) continue;
+          // sample a node a little way in to read the peel direction robustly
+          const probe = bnodes[Math.min(6, bnodes.length - 1)];
+          const dx = probe.pos.x - forkNode.pos.x, dz = probe.pos.z - forkNode.pos.z;
+          const sideDot = dx * fr.x + dz * fr.z;       // >0 = peels toward +right, <0 = toward left
+          const peelRight = sideDot >= 0;
+          // MAIN: open only the wall on the branch's side, for a short window past the fork
+          for (let k = forkNodeIdx; k < Math.min(nodes.length, forkNodeIdx + OPEN); k++) {
+            if (peelRight) nodes[k].noWallR = true; else nodes[k].noWallL = true;
+          }
+          // BRANCH: open the inner wall (the one facing the main track) at the entrance.
+          // A branch peeling RIGHT has the main track on its LEFT, so open its left wall.
+          for (let k = 0; k < Math.min(OPEN, bnodes.length); k++) {
+            if (peelRight) bnodes[k].noWallL = true; else bnodes[k].noWallR = true;
           }
         }
       }
