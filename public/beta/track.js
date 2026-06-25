@@ -155,6 +155,8 @@ const ZTRACK = (() => {
     let moguAmp = 0, moguStep = 0, moguPhase = 0, moguLen = 1;
     // NARROWER: hard width pinch to single-file that holds (a bottleneck), then reopens.
     let narrowMin = 1, narrowLen = 1;
+    // CASCADE: a multi-tier shelf — flat treads separated by steep risers, balls tumble down.
+    let cascadeLen = 1, cascadeSteps = 4;
     let curFinish = false, finishMarked = false;   // mark the finish line at the finish-funnel throat
     let curForkZone = false;   // true while laying a marked split-zone (for divergent forks)
     // GENTLE LEVEL WINDING: a smooth low-frequency turn applied through the split-zone so the whole
@@ -238,6 +240,13 @@ const ZTRACK = (() => {
           narrowMin = sec.min;                   // throat width fraction (held, not a V)
           narrowLen = sec.len;
           segLeft = sec.len;
+        } else if (sec.kind === 'cascade') {
+          moveKind = 'cascade';
+          targetTurn = (rng() - 0.5) * 0.008;     // basically straight
+          targetBank = 0;
+          cascadeLen = sec.len;
+          cascadeSteps = Math.max(2, Math.min(8, (sec.steps | 0) || 4));
+          segLeft = sec.len;
         } else {
           // straight — split-zones now WIND gently (set per-node below); plain straights stay ~level
           targetTurn = sec.split ? 0 : (rng() - 0.5) * 0.012;
@@ -280,8 +289,16 @@ const ZTRACK = (() => {
       heading = v(hx, heading.y, hz);
 
       // enforce downhill: keep a downward component on y (steeper during a DROP)
-      const dropTarget = -(DROP_PER_STEP * (1 + extraDrop)) / STEP;
-      heading.y += (dropTarget - heading.y) * 0.10;
+      let eDrop = extraDrop;
+      if (moveKind === 'cascade') {
+        // walk the section in discrete steps: a flat tread, then a steep riser at the lip
+        const cp = 1 - (segLeft / cascadeLen);     // 0..1 through the section
+        const ph = (cp * cascadeSteps) % 1;        // 0..1 within the current step
+        eDrop = ph > 0.68 ? 4.2 : -1.0;            // steep riser at the lip, ~flat tread between
+      }
+      const dropTarget = -(DROP_PER_STEP * (1 + eDrop)) / STEP;
+      // cascade snaps to its step profile faster so the tiers read as distinct shelves
+      heading.y += (dropTarget - heading.y) * (moveKind === 'cascade' ? 0.30 : 0.10);
       heading = norm(heading);
 
       // advance

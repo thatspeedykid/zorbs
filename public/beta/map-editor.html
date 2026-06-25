@@ -166,6 +166,7 @@ const TRACK_PIECES = [
   { kind:'narrower', name:'Narrower',  desc:'bottleneck',        color:'#ff7a45', def:{len:20,min:0.38} },
   { kind:'moguls',   name:'Moguls',    desc:'washboard bumps',   color:'#b06bff', def:{len:28} },
   { kind:'drop',     name:'Drop',      desc:'steep descent',     color:'#2ec27e', def:{len:16,drop:1.2} },
+  { kind:'cascade',  name:'Cascade',   desc:'stepped shelf descent', color:'#5ad1a0', def:{len:44,steps:4} },
   { kind:'spiral',   name:'Spiral',    desc:'helix descent',     color:'#ff5db0', def:{len:32,dir:1} },
   { kind:'tunnel',   name:'Tunnel',    desc:'enclosed run',      color:'#7f8cad', def:{len:20,dir:1} },
 ];
@@ -499,6 +500,7 @@ function glyph(kind,c){
     case'drop':    return s('<path d="M14 3v16 M8 14l6 7 6-7"/>');
     case'spiral':  return s('<path d="M14 14m0-9 a9 9 0 1 1-6 15"/><circle cx="14" cy="14" r="2.5"/>');
     case'tunnel':  return s('<rect x="5" y="4" width="18" height="20" rx="7"/>');
+    case'cascade': return s('<path d="M4 5h7v6h7v6h6"/>');
     default:       return s('<circle cx="14" cy="14" r="8"/>');
   }
 }
@@ -689,6 +691,7 @@ function renderSelPanel(){
       h+=`<div id="turn-deg" style="font-size:10px;color:var(--dim);margin:-4px 0 8px">≈ ${Math.round(s.sharp*s.len*0.92*180/Math.PI)}° of turn</div>`; }
     if('min'   in s) h+=slider('Throat width','min',s.min,0.25,0.85,0.01);
     if('drop'  in s) h+=slider('Steepness','drop',s.drop,0.4,3,0.1);
+    if('steps' in s) h+=slider('Tiers','steps',s.steps,2,8,1);
     if('dir'   in s) h+=dirseg(s.dir);
     if(s.kind==='straight') h+=splitseg(!!s.split);
     h+=`<button class="danger" style="width:100%;margin-top:8px" onclick="removePiece(${selIdx})">Delete piece</button>`;
@@ -743,7 +746,7 @@ function slider(label,key,val,min,max,step){
     <input type="range" data-k="${key}" min="${min}" max="${max}" step="${step}" value="${val}">
     <span class="rval">${fmt(key,val)}</span></div></div>`;
 }
-function fmt(k,v){ return (k==='len'||k==='length')?String(v|0):(+v).toFixed(k==='t'||k==='side'||k==='min'||k==='sharp'?2:1); }
+function fmt(k,v){ return (k==='len'||k==='length'||k==='steps')?String(v|0):(+v).toFixed(k==='t'||k==='side'||k==='min'||k==='sharp'?2:1); }
 function dirseg(dir){
   return `<div class="field"><label>Direction</label><div class="seg" id="dirseg">
     <button data-v="-1" class="${dir<0?'on':''}">◀ Left</button>
