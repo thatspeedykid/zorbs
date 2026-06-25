@@ -199,6 +199,7 @@ let selObs = [];           // multi-selected obstacle indices (always includes s
 let _clip = [];            // clipboard of copied obstacle objects
 let _pendingKind = null;   // palette piece kind waiting for a canvas click to place it
 let _boxSel = null;        // {x0,z0,x1,z1} world-space rect during shift-drag box select
+let _hoverPort = null;     // {si, pi} — section index + port index currently hovered
 let difficulty = 'medium';
 let undoStack = [], redoStack = [];
 const author = (() => { try { const s=JSON.parse(localStorage.getItem('zorbs_session')||'{}'); return s.username||s.name||''; } catch(_){return '';} })();
@@ -515,6 +516,9 @@ function draw(){
       ctx.beginPath(); ctx.arc(s.x,s.y,7*devicePixelRatio,0,7); ctx.stroke(); }
   }
 
+  // port dots — branch attachment points on each section
+  drawPorts(pts, sectionStarts);
+
   // obstacles
   obstacles.forEach((o,i)=>{
     const pi=tToPathIdx(o.t);
@@ -553,6 +557,59 @@ function mark(s,col,txt){
   ctx.fillStyle=col; ctx.font=`${10*devicePixelRatio}px system-ui`;
   ctx.textAlign='left'; ctx.textBaseline='middle';
   ctx.fillText(txt,s.x+r+3,s.y);
+}
+
+// ---- PORT DOTS (branch attachment points on track pieces) ----
+// Returns array of {si, pi, sx, sy, wx, wz} for all visible port dots given current path
+function computePorts(pts, sectionStarts){
+  const ports = [];
+  if(activeBranch >= 0) return ports; // hide in branch-edit mode
+  for(let si=0; si<sections.length; si++){
+    const idx = sectionStarts[si]; if(idx==null) continue;
+    const p = pts[idx]; if(!p) continue;
+    const b = pts[Math.min(idx+1,pts.length-1)];
+    const dx=b.x-p.x, dz=b.z-p.z, l=Math.hypot(dx,dz)||1;
+    const rx=dz/l, rz=-dx/l; // right normal
+    // 3 ports: left edge, center, right edge
+    const offsets = [-0.7, 0, 0.7];
+    offsets.forEach((off,pi)=>{
+      const wx=p.x+rx*p.w*off, wz=p.z+rz*p.w*off;
+      const s=W2S(wx,wz);
+      ports.push({si,pi,sx:s.x,sy:s.y,wx,wz});
+    });
+  }
+  return ports;
+}
+let _cachedPorts = [];
+
+function drawPorts(pts, sectionStarts){
+  _cachedPorts = computePorts(pts, sectionStarts);
+  const PR = 5.5*devicePixelRatio;
+  _cachedPorts.forEach(pt=>{
+    const hov = _hoverPort && _hoverPort.si===pt.si && _hoverPort.pi===pt.pi;
+    const hasBranch = branches.some(b=>b.fromSection===pt.si);
+    ctx.beginPath(); ctx.arc(pt.sx,pt.sy,PR,0,7);
+    ctx.fillStyle = hov ? 'rgba(46,194,126,0.9)' : hasBranch ? 'rgba(204,119,255,0.7)' : 'rgba(46,194,126,0.35)';
+    ctx.strokeStyle = hov ? '#2ec27e' : hasBranch ? '#cc77ff' : 'rgba(46,194,126,0.7)';
+    ctx.lineWidth = (hov?2:1.2)*devicePixelRatio;
+    ctx.fill(); ctx.stroke();
+    // plus icon
+    ctx.strokeStyle = hov ? '#fff' : hasBranch ? '#fff' : 'rgba(46,194,126,0.9)';
+    ctx.lineWidth = 1.5*devicePixelRatio;
+    const s=PR*0.55;
+    ctx.beginPath(); ctx.moveTo(pt.sx-s,pt.sy); ctx.lineTo(pt.sx+s,pt.sy);
+    ctx.moveTo(pt.sx,pt.sy-s); ctx.lineTo(pt.sx,pt.sy+s); ctx.stroke();
+  });
+}
+
+function hitPort(cx,cz){
+  // radius in world units: port is 5.5px on screen, hit radius = 8px
+  const hitR = 8 / view.scale;
+  for(const pt of _cachedPorts){
+    const d=Math.hypot(cx-pt.wx, cz-pt.wz);
+    if(d<hitR) return pt;
+  }
+  return null;
 }
 
 // ---- FIT / ZOOM ----
@@ -702,6 +759,11 @@ cv.addEventListener('pointerdown',e=>{
   _hasMoved=false;
   if(!_path) buildPath();
   const c=S2C(e.clientX,e.clientY);
+  // Port dot click → add branch from that section
+  if(!e.shiftKey && activeBranch<0){
+    const pt=hitPort(c.x,c.z);
+    if(pt){ pushUndo(); addBranch(pt.si); return; }
+  }
   const oi=hitObstacle(c.x,c.z);
   // SHIFT+drag on empty space → box-select obstacles. SHIFT+click an obstacle → toggle it in the set.
   if(e.shiftKey){
@@ -719,6 +781,16 @@ cv.addEventListener('pointermove',e=>{
     const c=S2C(e.clientX,e.clientY);
     _hoverInsert=sections.length?nearestInsertIdx(c.x,c.z):0;
     draw(); return;
+  }
+  // port hover highlight (no drag in progress)
+  if(!_panStart && !_pendingKind && activeBranch<0){
+    const c=S2C(e.clientX,e.clientY);
+    const pt=hitPort(c.x,c.z);
+    const prev=_hoverPort;
+    _hoverPort = pt ? {si:pt.si,pi:pt.pi} : null;
+    if(!!prev !== !!_hoverPort || (prev&&pt&&(prev.si!==pt.si||prev.pi!==pt.pi))) draw();
+    if(_hoverPort) cv.style.cursor='pointer'; else cv.style.cursor='';
+    return;
   }
   if(!_panStart) return;
   const dx=e.clientX-_panStart.x, dy=e.clientY-_panStart.y;
@@ -778,7 +850,7 @@ cv.addEventListener('pointerup',e=>{
     }
   }
   if(_obsDragIdx>=0){ const wasDrag=_hasMoved; _obsDragIdx=-1; if(wasDrag) pushUndo(); }
-  _panStart=null; _hasMoved=false;
+  _panStart=null; _hasMoved=false; cv.style.cursor='';
 });
 cv.addEventListener('wheel',e=>{
   e.preventDefault();

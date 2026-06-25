@@ -42,6 +42,7 @@ const ZTRACK = (() => {
   const WIDTH = 7.0;          // track half-width baseline
   const STEP = 1.3;           // finer spacing = smaller facets, smoother look
   const DROP_PER_STEP = 0.30; // average descent per node (the "downhill") — gentle so straights aren't steep
+  const worldUp = v(0, 1, 0); // shared by buildCenterline and buildCustomBranchNodes
 
   // COURSE DIRECTOR: instead of rolling a random move every time a segment ends, pre-compose a
   // deliberate SEQUENCE of sections — intro straight → snaking sweeps (alternating direction, the
@@ -171,8 +172,6 @@ const ZTRACK = (() => {
     const WIND_AMP = 0.0022;
     let splitN = 0, splitLen0 = 1;
 
-
-    const worldUp = v(0, 1, 0);
 
     // lay the flat start platform (no descent, extra wide)
     for (let i = 0; i < platformNodes; i++) {
@@ -810,6 +809,7 @@ const ZTRACK = (() => {
           mesh: { floor: empty, walls: f.divider, roof: empty } });
       } else {
         for (const bid in f.branches) {
+          if (!f.branches[bid] || f.branches[bid].length < 2) continue;
           branchMeshes.push({ branchId: bid, mesh: buildMesh(f.branches[bid]) });
         }
         // SORTER CONE SURFACE: the radial cone mesh (built in forks.js) that gives the
