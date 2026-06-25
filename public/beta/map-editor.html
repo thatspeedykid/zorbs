@@ -595,23 +595,32 @@ function drawPorts(pts, sectionStarts){
   const PR = (dragging ? 8 : 5.5)*devicePixelRatio;
   _cachedPorts.forEach(pt=>{
     const hov = _hoverPort && _hoverPort.si===pt.si && _hoverPort.pi===pt.pi && _hoverPort.end===pt.end;
-    const hasBranch = branches.some(b=>b.fromSection===pt.branchFrom);
+    const isMain = pt.pi===1;          // center port = MAIN line (extends main track)
+    const hasBranch = !isMain && branches.some(b=>b.fromSection===pt.branchFrom);
+    // MAIN port = cyan (matches main track), BRANCH ports = green; existing branch = purple
+    const baseFill = isMain ? 'rgba(57,200,224,0.40)' : 'rgba(46,194,126,0.35)';
+    const baseStroke = isMain ? 'rgba(57,200,224,0.85)' : 'rgba(46,194,126,0.7)';
+    const hovCol = isMain ? '#39c8e0' : '#2ec27e';
+    const glowCol = isMain ? '57,200,224' : '46,194,126';
     // glow halo when dragging
     if(dragging){
       ctx.beginPath(); ctx.arc(pt.sx,pt.sy,PR+(hov?6:3)*devicePixelRatio,0,7);
-      ctx.fillStyle = hov ? 'rgba(46,194,126,0.30)' : 'rgba(46,194,126,0.12)'; ctx.fill();
+      ctx.fillStyle = `rgba(${glowCol},${hov?0.30:0.12})`; ctx.fill();
     }
     ctx.beginPath(); ctx.arc(pt.sx,pt.sy,PR,0,7);
-    ctx.fillStyle = hov ? 'rgba(46,194,126,0.95)' : hasBranch ? 'rgba(204,119,255,0.7)' : dragging ? 'rgba(46,194,126,0.6)' : 'rgba(46,194,126,0.35)';
-    ctx.strokeStyle = hov ? '#2ec27e' : hasBranch ? '#cc77ff' : 'rgba(46,194,126,0.7)';
+    ctx.fillStyle = hov ? (isMain?'rgba(57,200,224,0.95)':'rgba(46,194,126,0.95)') : hasBranch ? 'rgba(204,119,255,0.7)' : dragging ? `rgba(${glowCol},0.6)` : baseFill;
+    ctx.strokeStyle = hov ? hovCol : hasBranch ? '#cc77ff' : baseStroke;
     ctx.lineWidth = (hov?2.5:1.2)*devicePixelRatio;
     ctx.fill(); ctx.stroke();
-    // plus icon
-    ctx.strokeStyle = hov ? '#fff' : hasBranch ? '#fff' : 'rgba(46,194,126,0.9)';
+    // icon: main port shows a vertical bar (continue), branch ports show a plus
+    ctx.strokeStyle = hov ? '#fff' : hasBranch ? '#fff' : (isMain?'rgba(57,200,224,0.95)':'rgba(46,194,126,0.9)');
     ctx.lineWidth = 1.5*devicePixelRatio;
     const s=PR*0.55;
-    ctx.beginPath(); ctx.moveTo(pt.sx-s,pt.sy); ctx.lineTo(pt.sx+s,pt.sy);
-    ctx.moveTo(pt.sx,pt.sy-s); ctx.lineTo(pt.sx,pt.sy+s); ctx.stroke();
+    ctx.beginPath();
+    if(isMain){ ctx.moveTo(pt.sx,pt.sy-s); ctx.lineTo(pt.sx,pt.sy+s); }   // bar
+    else { ctx.moveTo(pt.sx-s,pt.sy); ctx.lineTo(pt.sx+s,pt.sy);
+           ctx.moveTo(pt.sx,pt.sy-s); ctx.lineTo(pt.sx,pt.sy+s); }        // plus
+    ctx.stroke();
   });
 }
 
@@ -778,13 +787,14 @@ cv.addEventListener('pointerdown',e=>{
   _hasMoved=false;
   if(!_path) buildPath();
   const c=S2C(e.clientX,e.clientY);
-  // Port dot click → add branch from that section (or select existing)
+  // Port dot click. CENTER (pi===1) = main line; SIDE = branch.
   if(!e.shiftKey){
     const pt=hitPort(c.x,c.z);
     if(pt){
-      // if a pending palette piece is armed, drop it onto this port as a branch
+      // if a pending palette piece is armed, drop it onto this port
       if(_pendingKind){ const k=_pendingKind; _pendingKind=null; _hoverInsert=-1; updateModeHint(); dropPieceOnPort(pt,k); return; }
-      // if branch already exists from here, select it; otherwise create new
+      if(pt.pi===1){ select('section', pt.si); return; }    // center → select the main section
+      // side port: select existing branch from here, otherwise create new
       const existing=branches.findIndex(b=>b.fromSection===pt.branchFrom);
       if(existing>=0) select('branch',existing);
       else addBranch(pt.branchFrom);
@@ -999,10 +1009,17 @@ function addBranchPiece(bi, kind){
   branches[bi].sections.push(Object.assign({kind},JSON.parse(JSON.stringify(p.def))));
   pushUndo(); renderSelPanel(); draw();
 }
-// Drop a track piece onto a port dot: find (or create) the branch from that
-// section, append the piece, and select the branch.
+// Drop a track piece onto a port dot.
+//   CENTER port (pi===1) = MAIN line → insert the piece into the main track here.
+//   SIDE ports (pi 0/2)   = BRANCH    → find/create a branch and append the piece.
 function dropPieceOnPort(pt, kind){
   const p=byKind(kind); if(!p) return;
+  if(pt.pi===1){
+    // exit port inserts after the section; entry port inserts before it
+    const at = pt.end===1 ? pt.si+1 : pt.si;
+    addPiece(kind, at);
+    return;
+  }
   const from=pt.branchFrom;
   let bi=branches.findIndex(b=>b.fromSection===from);
   if(bi<0){
