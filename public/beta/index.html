@@ -1063,15 +1063,31 @@ function buildCourse(seed) {
   // Visual = a glowing plasma core inside a translucent shell, a thin emissive arm, and an
   // overhead pivot housing. On impact the core flashes white and an energy ring bursts out.
   _pendulumVis = [];
-  if (track.pendulums && track.pendulums.length && ZPHYSICS.getPendulums) {
-    const phys = ZPHYSICS.getPendulums();
+  if (track.pendulums && track.pendulums.length) {
+    // Compute pivot/orientation from raw track data — NOT from ZPHYSICS.getPendulums()
+    // (physics isn't called until setTrack below, so getPendulums() returns stale data here).
+    const PEND_PIVOT_H = 4.2, PEND_BOB_R = 0.7, PEND_BOB_L = 4.2 - 0.5 - 0.2; // mirrors physics.js
+    const _pendBQ = (up, fwd) => {
+      let rx=up.y*fwd.z-up.z*fwd.y, ry=up.z*fwd.x-up.x*fwd.z, rz=up.x*fwd.y-up.y*fwd.x;
+      const rl=Math.hypot(rx,ry,rz)||1; rx/=rl; ry/=rl; rz/=rl;
+      const fx=ry*up.z-rz*up.y, fy=rz*up.x-rx*up.z, fz=rx*up.y-ry*up.x;
+      const m00=rx,m01=up.x,m02=fx, m10=ry,m11=up.y,m12=fy, m20=rz,m21=up.z,m22=fz;
+      const tr=m00+m11+m22; let qx,qy,qz,qw;
+      if(tr>0){const s=Math.sqrt(tr+1)*2;qw=.25*s;qx=(m21-m12)/s;qy=(m02-m20)/s;qz=(m10-m01)/s;}
+      else if(m00>m11&&m00>m22){const s=Math.sqrt(1+m00-m11-m22)*2;qw=(m21-m12)/s;qx=.25*s;qy=(m01+m10)/s;qz=(m02+m20)/s;}
+      else if(m11>m22){const s=Math.sqrt(1+m11-m00-m22)*2;qw=(m02-m20)/s;qx=(m01+m10)/s;qy=.25*s;qz=(m12+m21)/s;}
+      else{const s=Math.sqrt(1+m22-m00-m11)*2;qw=(m10-m01)/s;qx=(m02+m20)/s;qy=(m12+m21)/s;qz=.25*s;}
+      return {x:qx,y:qy,z:qz,w:qw};
+    };
     for (let i = 0; i < track.pendulums.length; i++) {
       const pn = track.pendulums[i];
-      const pp = phys[i]; if (!pp) continue;
+      const up = pn.up||{x:0,y:1,z:0}, fwd = pn.fwd||{x:0,y:0,z:1};
+      const pivot = { x:pn.pos.x+up.x*PEND_PIVOT_H, y:pn.pos.y+up.y*PEND_PIVOT_H, z:pn.pos.z+up.z*PEND_PIVOT_H };
+      const bq = _pendBQ(up, fwd);
       const grp = new THREE.Group();              // anchored at the pivot, rotates as it swings
-      grp.position.set(pp.pivot.x, pp.pivot.y, pp.pivot.z);
-      grp.quaternion.set(pp.baseQuat.x, pp.baseQuat.y, pp.baseQuat.z, pp.baseQuat.w);
-      const L = pp.bobL, R = pp.bobR;
+      grp.position.set(pivot.x, pivot.y, pivot.z);
+      grp.quaternion.set(bq.x, bq.y, bq.z, bq.w);
+      const L = PEND_BOB_L, R = PEND_BOB_R;
       // overhead pivot housing (stays put visually since the grp pivots here)
       const hub = new THREE.Mesh(
         new THREE.CylinderGeometry(0.3, 0.3, 0.5, 16),
@@ -1099,7 +1115,7 @@ function buildCourse(seed) {
       ring.position.y = -L; grp.add(ring);
       scene.add(grp); trackMeshes.push(grp);
       _pendulumVis.push({ grp, shell, core, ring, baseEmissive: 1.0, hit: 0,
-        bobL: L, bobR: R, baseShellColor: shell.material.color.clone() });
+        bobL: L, bobR: R, baseShellColor: shell.material.color.clone(), pendIdx: i });
     }
   }
 

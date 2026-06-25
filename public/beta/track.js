@@ -462,6 +462,62 @@ const ZTRACK = (() => {
     return { positions: new Float32Array(positions), indices: new Uint32Array(indices) };
   }
 
+  // Build branch nodes for an authored branch, starting from a fork node on the main track.
+  // Mirrors the core of buildCenterline but with no platform or seeded randomness.
+  function buildCustomBranchNodes(startNode, sections, branchId) {
+    const nodes = [];
+    let pos = { x: startNode.pos.x, y: startNode.pos.y, z: startNode.pos.z };
+    let heading = norm({ x: startNode.dir.x, y: startNode.dir.y, z: startNode.dir.z });
+    let turn = 0;
+    let funnelMin = 0.45, funnelLen = 1;
+    let spiralTurn = 0, spiralLen = 1;
+    let narrowMin = 0.38, narrowLen = 1;
+    let cascadeLen = 1, cascadeSteps = 4;
+    let arenaHalfW = 14, arenaLen = 1;
+    for (const sec of sections) {
+      const len = sec.len | 0; if (!len) continue;
+      const mk = sec.kind || 'straight';
+      let targetTurn = 0, extraDrop = 0, tunnel = false;
+      if (mk === 'sweep')    { targetTurn = (sec.dir||1) * (sec.sharp||0.028); }
+      if (mk === 'spiral')   { spiralTurn = (sec.dir||1)*0.030; spiralLen = len; targetTurn = spiralTurn; }
+      if (mk === 'tunnel')   { targetTurn = (sec.dir||1)*0.012; tunnel = true; }
+      if (mk === 'drop')     { extraDrop = sec.drop || 1.2; }
+      if (mk === 'cascade')  { cascadeLen = len; cascadeSteps = Math.max(2,Math.min(8,(sec.steps|0)||4)); }
+      if (mk === 'funnel')   { funnelMin = sec.min||0.45; funnelLen = len; }
+      if (mk === 'narrower') { narrowMin = sec.min||0.38; narrowLen = len; }
+      if (mk === 'arena')    { arenaHalfW = Math.max(8,Math.min(30,+sec.w||14)); arenaLen = len; }
+      let segLeft = len;
+      while (segLeft > 0) {
+        if (mk === 'spiral') targetTurn = spiralTurn;
+        turn += (targetTurn - turn) * 0.12;
+        const cosT = Math.cos(turn), sinT = Math.sin(turn);
+        heading = norm({ x: heading.x*cosT - heading.z*sinT, y: heading.y, z: heading.x*sinT + heading.z*cosT });
+        let eDrop = extraDrop;
+        if (mk === 'cascade') { const cp=1-(segLeft/cascadeLen); const ph=(cp*cascadeSteps)%1; eDrop=ph>0.68?4.2:-1.0; }
+        if (mk === 'arena') eDrop = -0.85;
+        const dropTarget = -(DROP_PER_STEP*(1+eDrop))/STEP;
+        const dropEase = mk==='cascade'?0.30:mk==='arena'?0.06:0.10;
+        heading.y += (dropTarget - heading.y) * dropEase;
+        heading = norm(heading);
+        pos = add(pos, scale(heading, STEP));
+        let widthFactor = 1.0;
+        const ap = 1 - (segLeft / Math.max(1, len));
+        if (mk === 'funnel')   { const throat = 1-Math.sin(ap*Math.PI)*(1-funnelMin); widthFactor=throat; }
+        else if (mk === 'narrower') { const r=Math.min(1,ap/0.22,(1-ap)/0.22); const e=r*r*(3-2*r); widthFactor=1-e*(1-narrowMin); }
+        else if (mk === 'spiral')   { const r=Math.min(1,ap/0.25,(1-ap)/0.25); const e=r*r*(3-2*r); widthFactor=1+0.45*e; }
+        else if (mk === 'arena')    { const r=Math.min(1,ap/0.15,(1-ap)/0.15); const e=r*r*(3-2*r); widthFactor=1+(arenaHalfW/WIDTH-1)*Math.max(0,e); }
+        else if (mk === 'tunnel')   widthFactor = 0.8;
+        const halfW = WIDTH * widthFactor;
+        const right = norm(cross(heading, worldUp));
+        const up = norm(cross(right, heading));
+        nodes.push({ pos:{x:pos.x,y:pos.y,z:pos.z}, dir:{x:heading.x,y:heading.y,z:heading.z},
+          right, up, halfW, bank:0, kind:mk, tunnel, branchId });
+        segLeft--;
+      }
+    }
+    return nodes;
+  }
+
   // Top-level: given a seed and a target length (seconds-ish), produce everything.
   function generate(seed, lengthNodes = 700, ballCount = 20, customPlan = null) {
     // for custom maps, size the node budget to the authored plan (sum of section lengths + slack)
@@ -484,6 +540,47 @@ const ZTRACK = (() => {
       const rng = mulberry32((seed ^ 0x9e3779b9) >>> 0);
       const built = _ZFORK.buildForks(nodes, platStart, rng);
       forks = built.forks; forkAtIdx = built.forkAtIdx;
+    }
+
+    // CUSTOM BRANCHES: wire editor-authored branch exits into the fork/physics system.
+    // Each editor branch becomes a divergent fork. All branches rejoin near the end of the
+    // main track so balls always reach the finish.
+    if (_isCustom && !Array.isArray(customPlan) && customPlan.branches && customPlan.branches.length) {
+      // Group branches by fromSection — multiple branches on the same section share one fork.
+      const branchGroups = new Map();
+      for (const br of customPlan.branches) {
+        if (!br.sections || !br.sections.length) continue;
+        const key = br.fromSection | 0;
+        if (!branchGroups.has(key)) branchGroups.set(key, []);
+        branchGroups.get(key).push(br);
+      }
+      // Compute the main-track node index of the LAST node in each section.
+      const sectionEndIdx = [];
+      let nodeOffset = platStart;
+      for (let si = 0; si < _secs.length; si++) {
+        nodeOffset += _secs[si].len | 0;
+        sectionEndIdx.push(Math.min(nodeOffset - 1, nodes.length - 1));
+      }
+      const rejoinNode = nodes.length - 8; // all branches rejoin near the finish
+      for (const [fromSection, brs] of branchGroups) {
+        if (fromSection < 0 || fromSection >= sectionEndIdx.length) continue;
+        const forkNodeIdx = sectionEndIdx[fromSection];
+        const forkNode = nodes[forkNodeIdx]; if (!forkNode) continue;
+        const forkId = 'cbr_' + fromSection;
+        const branches = {}, branchOrder = [], rejoinIdx = {};
+        for (let bi = 0; bi < brs.length; bi++) {
+          const branchId = forkId + '_' + bi;
+          branchOrder.push(branchId);
+          branches[branchId] = buildCustomBranchNodes(forkNode, brs[bi].sections, branchId);
+          rejoinIdx[branchId] = rejoinNode;
+        }
+        const fork = { id: forkId, splitIdx: forkNodeIdx, flavor: 'divergent',
+          rejoin: true, rejoinIdx, branches, branchOrder, laneCount: brs.length,
+          ends: branchOrder.map(bid => branches[bid][branches[bid].length-1] || forkNode),
+          end: rejoinNode };
+        forks.push(fork);
+        forkAtIdx.set(forkNodeIdx, fork);
+      }
     }
 
     // BOOST PADS (F-Zero side strips). Deterministic via a separate rng so the layout is
@@ -847,7 +944,8 @@ const ZTRACK = (() => {
             obstacles.push({ pos: {x:px, y:py, z:pz}, radius: rad, height: 2.8, idx: realIdx });
         } else if (co.kind === 'spinner') {
           const rate = Math.max(0.8, Math.min(5, co.speed || 2.5));
-          spinners.push({ pos: {x:px, y:py, z:pz}, armLen: Math.min(nd.halfW * 0.6, 4.5), armHeight: 0.85,
+          const armLen = co.size != null ? Math.max(0.8, Math.min(4.5, +co.size)) : Math.min(nd.halfW * 0.6, 4.5);
+          spinners.push({ pos: {x:px, y:py, z:pz}, armLen, armHeight: 0.85,
             rate, dir: co.dir || 1, up: nd.up, fwd: nd.dir, idx: realIdx });
         } else if (co.kind === 'pendulum') {
           const rate = Math.max(0.5, Math.min(3.5, co.speed || 1.6));

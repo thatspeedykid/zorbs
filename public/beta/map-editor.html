@@ -781,6 +781,12 @@ function removeObstacle(i){
   obstacles.splice(i,1);
   deselect(); pushUndo(); refresh();
 }
+function duplicateObstacle(i){
+  const copy=JSON.parse(JSON.stringify(obstacles[i]));
+  copy.t=Math.min(1,copy.t+0.02); copy.side=Math.max(-0.85,Math.min(0.85,(copy.side||0)+0.15));
+  obstacles.splice(i+1,0,copy);
+  pushUndo(); select('obstacle',i+1); refresh();
+}
 
 function select(type,idx){ selType=type; selIdx=idx; renderSelPanel(); draw(); }
 function deselect(){ selType=null; selIdx=-1; renderSelPanel(); draw(); }
@@ -833,6 +839,7 @@ addEventListener('keydown',e=>{
   // Delete/Backspace: allow when focus is on range sliders, block only on text inputs/textareas
   const ae=document.activeElement;
   const isText=ae&&(ae.tagName==='TEXTAREA'||(ae.tagName==='INPUT'&&ae.type!=='range'));
+  if((e.ctrlKey||e.metaKey)&&e.key==='d'&&selType==='obstacle'&&selIdx>=0){ e.preventDefault(); duplicateObstacle(selIdx); return; }
   if((e.key==='Delete'||e.key==='Backspace')&&!isText){
     if(selType==='section'&&selIdx>=0){ e.preventDefault(); removePiece(selIdx); }
     else if(selType==='obstacle'&&selIdx>=0){ e.preventDefault(); removeObstacle(selIdx); }
@@ -901,9 +908,12 @@ function renderSelPanel(){
     h+=slider('Track position','t',o.t,0,1,0.01);
     h+=slider('Side offset','side',o.side||0,-1,1,0.05);
     if(o.kind==='bumper') h+=slider('Post size','size',o.size||0.65,0.35,1.6,0.05);
-    if(o.kind==='spinner'){ h+=slider('Spin speed','speed',o.speed||2.5,0.8,5,0.1);
+    if(o.kind==='spinner'){
+      h+=slider('Arm length','size',o.size||2.5,0.8,4.5,0.1);
+      h+=slider('Spin speed','speed',o.speed||2.5,0.8,5,0.1);
       h+=`<div class="field"><label>Spin direction</label><div class="seg" id="obsdirseg">
-      <button data-v="-1" class="${(o.dir||1)<0?'on':''}">◀ Left</button><button data-v="1" class="${(o.dir||1)>0?'on':''}">Right ▶</button></div></div>`; }
+      <button data-v="-1" class="${(o.dir||1)<0?'on':''}">◀ Left</button><button data-v="1" class="${(o.dir||1)>0?'on':''}">Right ▶</button></div></div>`;
+    }
     if(o.kind==='boost') h+=slider('Pad length','length',o.length||14,6,28,1);
     if(o.kind==='pendulum') h+=slider('Swing speed','speed',o.speed||1.6,0.5,3.5,0.1);
     if(o.kind==='vortex'){
@@ -912,7 +922,8 @@ function renderSelPanel(){
       h+=`<div class="field"><label>Spin direction</label><div class="seg" id="obsdirseg">
       <button data-v="-1" class="${(o.dir||1)<0?'on':''}">◀ Left</button><button data-v="1" class="${(o.dir||1)>0?'on':''}">Right ▶</button></div></div>`;
     }
-    h+=`<button class="danger" style="width:100%;margin-top:8px" onclick="removeObstacle(${selIdx})">Delete obstacle</button>`;
+    h+=`<button style="width:100%;margin-top:8px" onclick="duplicateObstacle(${selIdx})">⧉ Duplicate</button>`;
+    h+=`<button class="danger" style="width:100%;margin-top:6px" onclick="removeObstacle(${selIdx})">Delete obstacle</button>`;
     selPanel.innerHTML=h;
     selPanel.querySelectorAll('input[type=range]').forEach(r=>{
       r.addEventListener('input',()=>{

@@ -104,6 +104,7 @@ function sanitizeObstacle(o) {
   // optional per-obstacle tuning (clamped to the same ranges the generator enforces)
   if (o.kind === 'bumper' && o.size != null) out.size = Math.max(0.35, Math.min(1.6, +o.size || 0.65));
   if (o.kind === 'spinner' && o.speed != null) out.speed = Math.max(0.8, Math.min(5, +o.speed || 2.5));
+  if (o.kind === 'spinner' && o.size != null) out.size = Math.max(0.8, Math.min(4.5, +o.size || 2.5));
   if (o.kind === 'boost' && o.length != null) out.length = Math.max(6, Math.min(28, (o.length | 0) || 14));
   if (o.kind === 'pendulum' && o.speed != null) out.speed = Math.max(0.5, Math.min(3.5, +o.speed || 1.6));
   if (o.kind === 'vortex') {
