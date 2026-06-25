@@ -743,7 +743,7 @@ cv.addEventListener('pointerup',e=>{
       }
     }
   }
-  if(_obsDragIdx>=0){ pushUndo(); _obsDragIdx=-1; }
+  if(_obsDragIdx>=0){ const wasDrag=_hasMoved; _obsDragIdx=-1; if(wasDrag) pushUndo(); }
   _panStart=null; _hasMoved=false;
 });
 cv.addEventListener('wheel',e=>{
@@ -822,7 +822,7 @@ function deleteBranch(idx){
 // ---- UNDO / REDO ----
 function state(){ return JSON.stringify({sections,obstacles,branches:activeBranch<0?branches:undefined}); }
 function restoreState(s){ const d=JSON.parse(s); sections=d.sections; obstacles=d.obstacles; if(activeBranch<0&&d.branches) branches=d.branches; }
-function pushUndo(){ undoStack.push(state()); if(undoStack.length>60)undoStack.shift(); redoStack=[]; }
+function pushUndo(){ undoStack.push(state()); if(undoStack.length>60)undoStack.shift(); redoStack=[]; scheduleAutoSave(); }
 function undo(){ if(!undoStack.length)return; redoStack.push(state()); restoreState(undoStack.pop()); deselect(); refresh(); }
 function redo(){ if(!redoStack.length)return; undoStack.push(state()); restoreState(redoStack.pop()); deselect(); refresh(); }
 document.getElementById('btn-undo').onclick=undo;
@@ -1163,9 +1163,7 @@ function scheduleAutoSave(){
     scheduleAutoSave();
   }, 90000);
 }
-// restart timer on any edit
-const _origPushUndo = pushUndo;
-function pushUndo(){ _origPushUndo(); scheduleAutoSave(); }
+// (auto-save is restarted from inside pushUndo on every edit)
 scheduleAutoSave();
 
 // ---- LOAD DRAFT FROM URL ---- so the dashboard "EDIT" button deep-links to the right draft
