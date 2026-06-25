@@ -1547,7 +1547,35 @@ function showEndCard(){
   }
   const againBtn = endcardEl.querySelector('.again');
   if (_mpMode) { againBtn.textContent = 'NEXT RACE STARTING SOON…'; againBtn.disabled = true; againBtn.style.cursor = 'default'; }
+  renderRateWidget();
   endcardEl.style.display = 'flex';
+}
+
+// POST-RACE RATING — a thumbs up/down for the community map just played, surfaced on the end card.
+function renderRateWidget(){
+  if (!window._rateMapId) return;
+  let el = endcardEl.querySelector('.rate-map');
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'rate-map';
+    el.style.cssText = 'margin-top:14px;text-align:center;font-size:13px';
+    (endcardEl.querySelector('.panel') || endcardEl).appendChild(el);
+  }
+  if (window._ratedMap) { el.innerHTML = '<span style="opacity:.7">Thanks for rating this track!</span>'; return; }
+  el.innerHTML = '<div style="opacity:.7;margin-bottom:6px">Rate this community map</div>'
+    + '<button class="rate-up" style="font-size:20px;background:none;border:1px solid rgba(255,255,255,.25);border-radius:8px;padding:6px 14px;cursor:pointer;margin:0 4px">👍</button>'
+    + '<button class="rate-down" style="font-size:20px;background:none;border:1px solid rgba(255,255,255,.25);border-radius:8px;padding:6px 14px;cursor:pointer;margin:0 4px">👎</button>';
+  el.querySelector('.rate-up').onclick = () => rateMap('up');
+  el.querySelector('.rate-down').onclick = () => rateMap('down');
+}
+async function rateMap(vote){
+  if (window._ratedMap || !window._rateMapId) return;
+  window._ratedMap = true;
+  try {
+    await fetch('/api/maps', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ action:'rate', id: window._rateMapId, vote }) });
+  } catch (_) {}
+  renderRateWidget();
 }
 document.querySelector('#endcard .again').addEventListener('click', () => location.reload());
 
@@ -2450,6 +2478,8 @@ async function boot() {
         const r = await fetch('/api/maps?id=' + encodeURIComponent(_mapParam));
         const j = await r.json().catch(() => null);
         window._zorbsCustomMap = (j && j.map) || null;
+        // a real community map is rateable — the end card shows a thumbs up/down
+        if (window._zorbsCustomMap && window._zorbsCustomMap.status === 'approved') window._rateMapId = _mapParam;
       }
     } catch (_) { window._zorbsCustomMap = null; }
     if (window._zorbsCustomMap && Array.isArray(window._zorbsCustomMap.sections)) {

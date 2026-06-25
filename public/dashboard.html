@@ -468,7 +468,7 @@ body{background:#05050f;color:#fff;font-family:'Courier New',monospace;min-heigh
         </div>
         <div class="card">
           <table class="tbl">
-            <thead><tr><th>NAME</th><th>AUTHOR</th><th>DIFFICULTY</th><th>PIECES</th><th>PLAYS</th><th></th></tr></thead>
+            <thead><tr><th>NAME</th><th>AUTHOR</th><th>DIFFICULTY</th><th>RATING</th><th>PLAYS</th><th></th></tr></thead>
             <tbody id="community-table">
               <tr><td colspan="6" style="color:rgba(255,255,255,0.2);padding:20px;text-align:center">Loading…</td></tr>
             </tbody>
@@ -711,12 +711,16 @@ async function loadCommunityMaps(){
     const j = await r.json().catch(()=>({}));
     const maps = (j && j.maps) || [];
     if(!maps.length){ tb.innerHTML = '<tr><td colspan="6" style="color:rgba(255,255,255,0.2);padding:20px;text-align:center">No community maps approved yet — build one in the Map Editor!</td></tr>'; return; }
-    // featured first, then by plays
-    maps.sort((a,b)=> (b.featured?1:0)-(a.featured?1:0) || (b.plays||0)-(a.plays||0));
+    // featured first, then by rating (up-share), then plays — surfaces the best community maps
+    maps.sort((a,b)=> (b.featured?1:0)-(a.featured?1:0) || (b.rating||0)-(a.rating||0) || (b.plays||0)-(a.plays||0));
     tb.innerHTML = maps.map(m => `<tr>
-      <td>${m.featured?'⭐ ':''}${esc(m.name)}${m.description?`<div style="font-size:9px;color:rgba(255,255,255,0.3)">${esc(m.description)}</div>`:''}</td>
+      <td><div style="display:flex;gap:8px;align-items:center">
+        ${m.thumb?`<img src="${m.thumb}" alt="" style="width:54px;height:34px;object-fit:cover;border-radius:4px;border:1px solid rgba(255,255,255,0.1)">`:''}
+        <div>${m.featured?'⭐ ':''}${esc(m.name)}${m.description?`<div style="font-size:9px;color:rgba(255,255,255,0.3)">${esc(m.description)}</div>`:''}</div>
+      </div></td>
       <td>${esc(m.author)}</td><td style="text-transform:capitalize">${esc(m.difficulty)}</td>
-      <td>${m.sectionCount}</td><td>${m.plays||0}</td>
+      <td>${m.votes?`👍 ${Math.round((m.rating||0)*100)}% <span style="color:rgba(255,255,255,0.3)">(${m.votes})</span>`:'<span style="color:rgba(255,255,255,0.3)">—</span>'}</td>
+      <td>${m.plays||0}</td>
       <td><button class="btn btn-cyan" onclick="window.open('/beta/?map=${m.id}','_blank')">▶ PLAY</button></td>
     </tr>`).join('');
   } catch(_){ tb.innerHTML = '<tr><td colspan="6" style="color:#ff4060;padding:20px;text-align:center">Could not load community maps.</td></tr>'; }
@@ -749,9 +753,24 @@ async function loadMyMaps(){
     tb.innerHTML = maps.map(m => `<tr>
       <td>${esc(m.name)}</td><td style="text-transform:capitalize">${esc(m.difficulty)}</td>
       <td>${m.sectionCount}</td><td>${mapStatusBadge(m.status)}</td><td>${m.plays||0}</td>
-      <td><button class="btn btn-cyan" onclick="window.open('/beta/?map=${m.id}','_blank')">PLAY</button></td>
+      <td style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-cyan" onclick="window.open('/beta/?map=${m.id}','_blank')">PLAY</button>
+        <button class="btn btn-red" onclick="deleteMyMap('${m.id}','${esc(m.name)}')">DELETE</button>
+      </td>
     </tr>`).join('');
   } catch(_){ tb.innerHTML = '<tr><td colspan="6" style="color:#ff4060;padding:20px;text-align:center">Could not load maps.</td></tr>'; }
+}
+
+async function deleteMyMap(id, name){
+  if(!confirm('Delete "'+name+'"? This removes it permanently.')) return;
+  const author = (session && (session.username || session.name) || '');
+  try {
+    const r = await fetch('/api/maps', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ action:'delete', id, author }) });
+    const j = await r.json().catch(()=>({}));
+    if(j && j.ok) loadMyMaps();
+    else alert('Delete failed: ' + (j&&j.error||'try again'));
+  } catch(_){ alert('Network error.'); }
 }
 
 async function loadAdminMaps(){

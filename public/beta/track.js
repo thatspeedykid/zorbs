@@ -41,7 +41,7 @@ const ZTRACK = (() => {
   // We bias every move to lose a little height (downhill).
   const WIDTH = 7.0;          // track half-width baseline
   const STEP = 1.3;           // finer spacing = smaller facets, smoother look
-  const DROP_PER_STEP = 0.42; // average descent per node (the "downhill")
+  const DROP_PER_STEP = 0.30; // average descent per node (the "downhill") — gentle so straights aren't steep
 
   // COURSE DIRECTOR: instead of rolling a random move every time a segment ends, pre-compose a
   // deliberate SEQUENCE of sections — intro straight → snaking sweeps (alternating direction, the
@@ -121,9 +121,10 @@ const ZTRACK = (() => {
     // customPlan may be a bare sections array OR the full map object {sections, obstacles}
     const rawSections = Array.isArray(customPlan) ? customPlan : (customPlan && Array.isArray(customPlan.sections) ? customPlan.sections : null);
     if (rawSections && rawSections.length) {
+      // CUSTOM MAP: lay EXACTLY the authored sections — no injected funnel, no extra straight.
+      // The finish line is marked on the last authored node after the loop (see below), so the
+      // photo-finish line exists without adding any geometry the creator didn't place.
       plan = rawSections.map(s => Object.assign({}, s));
-      if (!plan.some(s => s.isFinish)) plan.push({ kind: 'funnel', len: 24, min: 0.46, isFinish: true });
-      if (plan[plan.length - 1].kind !== 'straight' || plan[plan.length - 1].isFinish) plan.push({ kind: 'straight', len: 18 });
     } else {
       plan = buildPlan(rng, targetNodes);   // course director: deliberate section sequence
     }
@@ -209,9 +210,9 @@ const ZTRACK = (() => {
           funnelLen = sec.len;
         } else if (sec.kind === 'spiral') {
           moveKind = 'spiral';
-          spiralTurn = sec.dir * (0.045 + rng() * 0.015);
+          spiralTurn = sec.dir * 0.030;
           targetTurn = spiralTurn;
-          targetBank = sec.dir * 0.22;
+          targetBank = sec.dir * 0.18;
           extraDrop = 0.3 + rng() * 0.18;
           segLeft = sec.len;
           spiralLen = sec.len;
@@ -321,6 +322,12 @@ const ZTRACK = (() => {
       if (curFinish && !finishMarked && moveKind === 'funnel' && funnelPos >= 0.5) { node.finishLine = true; finishMarked = true; }
       nodes.push(node);
       segLeft--;
+    }
+    // CUSTOM MAP: no finish-funnel throat, so mark the last real track node as the finish line.
+    if (rawSections && rawSections.length && !finishMarked) {
+      for (let i = nodes.length - 1; i >= 0; i--) {
+        if (!nodes[i].isPlatform) { nodes[i].finishLine = true; break; }
+      }
     }
     return nodes;
   }
@@ -801,13 +808,15 @@ const ZTRACK = (() => {
         const px = nd.pos.x + nd.right.x * off, py = nd.pos.y, pz = nd.pos.z + nd.right.z * off;
         const realIdx = platStart + ni;
         if (co.kind === 'bumper') {
+          const rad = Math.max(0.35, Math.min(1.6, co.size || 0.65));
           if (!obstacles.some(o => Math.abs(o.pos.x - px) < 0.5 && Math.abs(o.pos.z - pz) < 0.5))
-            obstacles.push({ pos: {x:px, y:py, z:pz}, radius: 0.65, height: 2.8, idx: realIdx });
+            obstacles.push({ pos: {x:px, y:py, z:pz}, radius: rad, height: 2.8, idx: realIdx });
         } else if (co.kind === 'spinner') {
+          const rate = Math.max(0.8, Math.min(5, co.speed || 2.5));
           spinners.push({ pos: {x:px, y:py, z:pz}, armLen: Math.min(nd.halfW * 0.6, 4.5), armHeight: 0.85,
-            rate: 2.5, dir: co.dir || 1, up: nd.up, fwd: nd.dir, idx: realIdx });
+            rate, dir: co.dir || 1, up: nd.up, fwd: nd.dir, idx: realIdx });
         } else if (co.kind === 'boost') {
-          const bl = 14;
+          const bl = Math.max(6, Math.min(28, (co.length || 14) | 0));
           let ok = true;
           for (let k = 0; k < bl && ok; k++) { if (!nodes[realIdx + k] || nodes[realIdx + k].boost) ok = false; }
           if (ok) {

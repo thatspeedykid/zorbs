@@ -147,7 +147,7 @@
 // ---- PALETTE DATA ----
 const TRACK_PIECES = [
   { kind:'straight', name:'Straight',  desc:'flat run',          color:'#5b7cff', def:{len:30} },
-  { kind:'sweep',    name:'Turn',      desc:'banked curve',      color:'#39c8e0', def:{len:40,dir:1,sharp:0.045} },
+  { kind:'sweep',    name:'Turn',      desc:'banked curve',      color:'#39c8e0', def:{len:40,dir:1,sharp:0.028} },
   { kind:'funnel',   name:'Funnel',    desc:'wide → narrow',     color:'#ffb020', def:{len:22,min:0.45} },
   { kind:'narrower', name:'Narrower',  desc:'bottleneck',        color:'#ff7a45', def:{len:20,min:0.38} },
   { kind:'moguls',   name:'Moguls',    desc:'washboard bumps',   color:'#b06bff', def:{len:28} },
@@ -192,8 +192,8 @@ function buildPath(){
     sectionStarts.push(pts.length);
     const s=sections[si], len=s.len|0;
     let target=0;
-    if(s.kind==='sweep')  target=(s.dir||1)*(s.sharp||0.045);
-    if(s.kind==='spiral') target=(s.dir||1)*0.048;
+    if(s.kind==='sweep')  target=(s.dir||1)*(s.sharp||0.028);
+    if(s.kind==='spiral') target=(s.dir||1)*0.030;
     if(s.kind==='tunnel') target=(s.dir||1)*0.012;
     for(let i=0;i<len;i++){
       turn+=(target-turn)*0.12; ang+=turn;
@@ -670,7 +670,8 @@ function renderSelPanel(){
       <div class="p-ic" style="width:30px;height:30px;background:${p.color}22;border:1px solid ${p.color}55">${glyph(s.kind,p.color)}</div>
       <div><div style="font-weight:700">${p.name}</div><div style="font-size:10px;color:var(--dim)">piece ${selIdx+1}/${sections.length}</div></div></div>`;
     h+=slider('Length','len',s.len,6,120,1);
-    if('sharp' in s) h+=slider('Sharpness','sharp',s.sharp,0.02,0.10,0.005);
+    if('sharp' in s){ h+=slider('Sharpness','sharp',s.sharp,0.012,0.055,0.002);
+      h+=`<div id="turn-deg" style="font-size:10px;color:var(--dim);margin:-4px 0 8px">≈ ${Math.round(s.sharp*s.len*0.92*180/Math.PI)}° of turn</div>`; }
     if('min'   in s) h+=slider('Throat width','min',s.min,0.25,0.85,0.01);
     if('drop'  in s) h+=slider('Steepness','drop',s.drop,0.4,3,0.1);
     if('dir'   in s) h+=dirseg(s.dir);
@@ -681,6 +682,8 @@ function renderSelPanel(){
       r.addEventListener('input',()=>{
         sections[selIdx][r.dataset.k]=parseFloat(r.value);
         r.parentElement.querySelector('.rval').textContent=fmt(r.dataset.k,r.value);
+        const td=selPanel.querySelector('#turn-deg'); const sc=sections[selIdx];
+        if(td&&'sharp'in sc) td.textContent='≈ '+Math.round(sc.sharp*sc.len*0.92*180/Math.PI)+'° of turn';
         draw(); validate();
       });
       r.addEventListener('change',pushUndo);
@@ -700,8 +703,11 @@ function renderSelPanel(){
       <div><div style="font-weight:700">${ob.name}</div><div style="font-size:10px;color:var(--dim)">obstacle ${selIdx+1}/${obstacles.length}</div></div></div>`;
     h+=slider('Track position','t',o.t,0,1,0.01);
     h+=slider('Side offset','side',o.side||0,-1,1,0.05);
-    if(o.kind==='spinner') h+=`<div class="field"><label>Spin direction</label><div class="seg" id="obsdirseg">
-      <button data-v="-1" class="${(o.dir||1)<0?'on':''}">◀ Left</button><button data-v="1" class="${(o.dir||1)>0?'on':''}">Right ▶</button></div></div>`;
+    if(o.kind==='bumper') h+=slider('Post size','size',o.size||0.65,0.35,1.6,0.05);
+    if(o.kind==='spinner'){ h+=slider('Spin speed','speed',o.speed||2.5,0.8,5,0.1);
+      h+=`<div class="field"><label>Spin direction</label><div class="seg" id="obsdirseg">
+      <button data-v="-1" class="${(o.dir||1)<0?'on':''}">◀ Left</button><button data-v="1" class="${(o.dir||1)>0?'on':''}">Right ▶</button></div></div>`; }
+    if(o.kind==='boost') h+=slider('Pad length','length',o.length||14,6,28,1);
     h+=`<button class="danger" style="width:100%;margin-top:8px" onclick="removeObstacle(${selIdx})">Delete obstacle</button>`;
     selPanel.innerHTML=h;
     selPanel.querySelectorAll('input[type=range]').forEach(r=>{
@@ -721,7 +727,7 @@ function slider(label,key,val,min,max,step){
     <input type="range" data-k="${key}" min="${min}" max="${max}" step="${step}" value="${val}">
     <span class="rval">${fmt(key,val)}</span></div></div>`;
 }
-function fmt(k,v){ return k==='len'?String(v|0):(+v).toFixed(k==='t'||k==='side'||k==='min'||k==='sharp'?2:1); }
+function fmt(k,v){ return (k==='len'||k==='length')?String(v|0):(+v).toFixed(k==='t'||k==='side'||k==='min'||k==='sharp'?2:1); }
 function dirseg(dir){
   return `<div class="field"><label>Direction</label><div class="seg" id="dirseg">
     <button data-v="-1" class="${dir<0?'on':''}">◀ Left</button>
@@ -781,6 +787,35 @@ function currentMap(){
   };
 }
 
+// ---- THUMBNAIL ---- top-down PNG snapshot of the authored centerline (stored with the map).
+function makeThumb(){
+  try{
+    const p=buildPath(); const pts=p.pts; if(!pts.length) return '';
+    let minx=Infinity,maxx=-Infinity,minz=Infinity,maxz=-Infinity;
+    for(const q of pts){ if(q.x<minx)minx=q.x; if(q.x>maxx)maxx=q.x; if(q.z<minz)minz=q.z; if(q.z>maxz)maxz=q.z; }
+    const W=320,H=200,pad=16;
+    const c=document.createElement('canvas'); c.width=W; c.height=H;
+    const g=c.getContext('2d');
+    g.fillStyle='#0c0f1a'; g.fillRect(0,0,W,H);
+    const sx=(W-pad*2)/Math.max(1,maxx-minx), sz=(H-pad*2)/Math.max(1,maxz-minz);
+    const sc=Math.min(sx,sz);
+    const ox=pad+( (W-pad*2)-(maxx-minx)*sc )/2, oz=pad+( (H-pad*2)-(maxz-minz)*sc )/2;
+    const X=q=>ox+(q.x-minx)*sc, Y=q=>H-(oz+(q.z-minz)*sc);
+    // track ribbon
+    g.lineCap='round'; g.lineJoin='round';
+    g.strokeStyle='#2a3358';
+    g.beginPath();
+    for(let i=0;i<pts.length;i++){ const q=pts[i]; if(i===0)g.moveTo(X(q),Y(q)); else g.lineTo(X(q),Y(q)); }
+    g.lineWidth=Math.max(3,WIDTH*sc*1.4); g.stroke();
+    g.strokeStyle='#4cd6ff'; g.lineWidth=2; g.stroke();
+    // obstacles
+    for(const o of obstacles){ const pi=tToPathIdx(o.t); const q=pts[pi]; if(!q)continue;
+      g.fillStyle=o.kind==='boost'?'#ffd34c':o.kind==='spinner'?'#ff5db0':o.kind==='launch'?'#2ec27e':'#ff7a59';
+      g.beginPath(); g.arc(X(q),Y(q),3,0,7); g.fill(); }
+    return c.toDataURL('image/png');
+  }catch(_){ return ''; }
+}
+
 // ---- TEST ----
 document.getElementById('btn-test').onclick=()=>{
   if(sections.length<2) return;
@@ -795,7 +830,7 @@ document.getElementById('btn-submit').onclick=async()=>{
   const btn=document.getElementById('btn-submit'); btn.disabled=true; btn.textContent='Submitting…';
   try{
     const r=await fetch('/api/maps',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({action:'submit',map:currentMap()})});
+      body:JSON.stringify({action:'submit',map:Object.assign(currentMap(),{thumb:makeThumb()})})});
     const j=await r.json().catch(()=>({}));
     if(j&&j.ok) toast('✓ Submitted! An admin will review it soon.');
     else toast('Submit failed: '+(j&&j.error||'try again'));
@@ -813,14 +848,14 @@ document.getElementById('btn-clear').onclick=()=>{
 function seedStarter(){
   sections=[
     {kind:'straight',  len:28},
-    {kind:'sweep',     len:38, dir:1,  sharp:0.038},
-    {kind:'funnel',    len:20, min:0.48},
-    {kind:'straight',  len:80, split:true},
-    {kind:'sweep',     len:36, dir:-1, sharp:0.035},
+    {kind:'sweep',     len:40, dir:1,  sharp:0.024},
+    {kind:'straight',  len:30},
+    {kind:'straight',  len:72, split:true},
+    {kind:'sweep',     len:40, dir:-1, sharp:0.024},
     {kind:'moguls',    len:26},
-    {kind:'narrower',  len:20, min:0.40},
-    {kind:'sweep',     len:34, dir:1,  sharp:0.042},
-    {kind:'drop',      len:16, drop:1.1},
+    {kind:'straight',  len:26},
+    {kind:'sweep',     len:38, dir:1,  sharp:0.022},
+    {kind:'straight',  len:30},
   ];
   obstacles=[
     {kind:'bumper', t:0.38, side:0.5,  dir:1},

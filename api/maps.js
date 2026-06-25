@@ -87,12 +87,25 @@ const OBSTACLE_KINDS = ['bumper', 'spinner', 'boost', 'launch'];
 function sanitizeObstacle(o) {
   if (!o || typeof o !== 'object') return null;
   if (!OBSTACLE_KINDS.includes(o.kind)) return null;
-  return {
+  const out = {
     kind: o.kind,
     t: Math.max(0, Math.min(1, +o.t || 0)),
     side: Math.max(-1, Math.min(1, +o.side || 0)),
     dir: o.dir < 0 ? -1 : 1,
   };
+  // optional per-obstacle tuning (clamped to the same ranges the generator enforces)
+  if (o.kind === 'bumper' && o.size != null) out.size = Math.max(0.35, Math.min(1.6, +o.size || 0.65));
+  if (o.kind === 'spinner' && o.speed != null) out.speed = Math.max(0.8, Math.min(5, +o.speed || 2.5));
+  if (o.kind === 'boost' && o.length != null) out.length = Math.max(6, Math.min(28, (o.length | 0) || 14));
+  return out;
+}
+
+// thumbnail: a small top-down PNG data URL snapshot from the editor. Kept short so a single oversized
+// payload can't bloat the store; dropped if it isn't a reasonable data: image URL.
+function sanitizeThumb(t) {
+  if (typeof t !== 'string') return '';
+  if (!/^data:image\/(png|jpeg|webp);base64,/.test(t)) return '';
+  return t.length <= 200000 ? t : '';
 }
 
 function sanitizeMap(raw) {
@@ -109,6 +122,7 @@ function sanitizeMap(raw) {
     description: clean(raw.description, 140),
     theme: clean(raw.theme, 20),
     tags: Array.isArray(raw.tags) ? raw.tags.slice(0, 6).map(t => clean(t, 16)) : [],
+    thumb: sanitizeThumb(raw.thumb),
     sections, obstacles,
   };
 }
@@ -124,6 +138,7 @@ function meta(m) {
     id: m.id, name: m.name, author: m.author, difficulty: m.difficulty,
     description: m.description, tags: m.tags, theme: m.theme,
     status: m.status, plays: m.plays || 0, rating: m.rating || 0, votes: m.votes || 0,
+    up: m.up || 0, down: m.down || 0, thumb: m.thumb || '',
     featured: !!m.featured, sectionCount: (m.sections || []).length, created: m.created,
   };
 }
@@ -191,7 +206,7 @@ export default async function handler(req, res) {
       m.id = newId();
       m.status = 'pending';
       m.created = Date.now();
-      m.plays = 0; m.rating = 0; m.votes = 0; m.featured = false;
+      m.plays = 0; m.rating = 0; m.votes = 0; m.up = 0; m.down = 0; m.featured = false;
       await pipeline([
         ['SET', 'zmap:' + m.id, JSON.stringify(m)],
         ['ZADD', 'zmaps:pending', String(m.created), m.id],
@@ -225,6 +240,44 @@ export default async function handler(req, res) {
       m.featured = !m.featured;
       await pipeline([['SET', 'zmap:' + id, JSON.stringify(m)]]);
       return res.status(200).json({ ok: true, featured: m.featured });
+    }
+
+    if (action === 'rate') {
+      // post-race thumbs up/down. Anonymous + best-effort (no per-user dedupe), so a single rating
+      // nudges the score; `rating` is the up-share (0..1) used to rank the best community maps.
+      const id = clean(body.id, 24);
+      const raw = await redis(['GET', 'zmap:' + id]);
+      let m = null; if (raw) { try { m = JSON.parse(raw); } catch (_) {} }
+      if (!m || m.status !== 'approved') return res.status(404).json({ ok: false, error: 'not found' });
+      const up = body.vote === 'up' || body.vote === 1 || body.up === true;
+      if (up) m.up = (m.up || 0) + 1; else m.down = (m.down || 0) + 1;
+      m.votes = (m.up || 0) + (m.down || 0);
+      m.rating = m.votes ? +((m.up || 0) / m.votes).toFixed(3) : 0;
+      await pipeline([
+        ['SET', 'zmap:' + id, JSON.stringify(m)],
+        // rank approved maps by a wilson-ish score so well-liked maps surface first
+        ['ZADD', 'zmaps:approved', String(Math.round(m.rating * 1000) + m.votes), id],
+      ]);
+      return res.status(200).json({ ok: true, up: m.up, down: m.down, rating: m.rating });
+    }
+
+    if (action === 'delete') {
+      // a creator may delete their OWN map; an admin may delete any.
+      const id = clean(body.id, 24);
+      const raw = await redis(['GET', 'zmap:' + id]);
+      let m = null; if (raw) { try { m = JSON.parse(raw); } catch (_) {} }
+      if (!m) return res.status(404).json({ ok: false, error: 'not found' });
+      const requester = clean(body.author, 24).toLowerCase();
+      const admin = isAdmin(clean(body.admin, 80));
+      if (!admin && (!requester || requester !== String(m.author || '').toLowerCase()))
+        return res.status(403).json({ ok: false, error: 'not your map' });
+      await pipeline([
+        ['DEL', 'zmap:' + id],
+        ['ZREM', 'zmaps:pending', id],
+        ['ZREM', 'zmaps:approved', id],
+        ['ZREM', 'zmaps:by:' + String(m.author || '').toLowerCase(), id],
+      ]);
+      return res.status(200).json({ ok: true, deleted: id });
     }
 
     return res.status(400).json({ ok: false, error: 'unknown action' });
