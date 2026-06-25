@@ -611,6 +611,21 @@ const ZTRACK = (() => {
           end: rejoinNode };
         forks.push(fork);
         forkAtIdx.set(forkNodeIdx, fork);
+
+        // Remove inner walls at the junction so balls can flow into branches without
+        // getting jammed. Tag a window of main-track nodes around the fork point and
+        // the first nodes of every branch with noWallL+noWallR — buildMesh and
+        // buildColliderBuffers both respect these flags.
+        const OPEN = 10; // nodes on each side of fork to open up
+        for (let k = Math.max(0, forkNodeIdx - OPEN); k < Math.min(nodes.length, forkNodeIdx + OPEN); k++) {
+          nodes[k].noWallL = true; nodes[k].noWallR = true;
+        }
+        for (const bid of branchIds) {
+          const bnodes = branches[bid];
+          for (let k = 0; k < Math.min(OPEN * 2, bnodes.length); k++) {
+            bnodes[k].noWallL = true; bnodes[k].noWallR = true;
+          }
+        }
       }
     }
 

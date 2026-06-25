@@ -83,6 +83,7 @@
     padding:10px 18px;border-radius:9px;z-index:99;opacity:0;transition:.22s;pointer-events:none}
   .toast.show{opacity:1}
 </style>
+<script src="/beta/telemetry.js?v=b14"></script>
 </head>
 <body>
 <div class="app">
@@ -296,32 +297,20 @@ function nearestPathPoint(wx,wz){
   return best>=0?{idx:best,d:Math.sqrt(bestD)}:null;
 }
 
-// nearest section boundary (gap between sections): returns insert index
+// nearest section insert position: finds the nearest path point, reads which
+// section it belongs to, and returns "insert AFTER that section" (sIdx+1).
+// This means dropping anywhere on a section inserts right after it, which is
+// far more intuitive than the old boundary-midpoint approach that could pick
+// the end of the track when you dropped on the side of a section.
 function nearestInsertIdx(wx,wz){
-  if(!_path||!_path.sectionStarts.length) return 0;
-  const ss=_path.sectionStarts;
-  let best=0,bestD=Infinity;
-  // check "before section 0" boundary = end of platform
-  if(ss.length){
-    const p=_path.pts[ss[0]-1]||_path.pts[0];
-    const d=(p.x-wx)**2+(p.z-wz)**2;
-    if(d<bestD){bestD=d;best=0;}
-  }
-  for(let i=0;i<ss.length-1;i++){
-    // midpoint between end of section i and start of section i+1
-    const pa=_path.pts[ss[i+1]-1], pb=_path.pts[ss[i+1]];
-    if(!pa||!pb) continue;
-    const mx=(pa.x+pb.x)/2, mz=(pa.z+pb.z)/2;
-    const d=(mx-wx)**2+(mz-wz)**2;
-    if(d<bestD){bestD=d;best=i+1;}
-  }
-  // after last section
-  const last=_path.pts[_path.pts.length-1];
-  if(last){
-    const d=(last.x-wx)**2+(last.z-wz)**2;
-    if(d<bestD){best=ss.length;}
-  }
-  return best;
+  if(!_path||!_path.sectionStarts.length) return sections.length;
+  const near=nearestPathPoint(wx,wz);
+  if(!near) return sections.length;
+  const p=_path.pts[near.idx];
+  if(!p) return sections.length;
+  // platform nodes have no sIdx; insert before section 0
+  if(p.sIdx==null) return 0;
+  return p.sIdx + 1;
 }
 
 // convert path index to t=0..1 along track (non-platform only)

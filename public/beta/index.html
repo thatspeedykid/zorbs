@@ -331,6 +331,7 @@
 <script src="/beta/physics.js?v=b14"></script>
 <script src="/beta/cosmetics.js?v=b14"></script>
 <script src="/beta/maps.js?v=b14"></script>
+<script src="/beta/telemetry.js?v=b14"></script>
 <script>
 // ---------------------------------------------------------------------------
 // ZORBS v2 game page. Clean loop: build track -> spawn balls -> drive+collide.
@@ -377,33 +378,7 @@ if (!_DEBUG) { const _bt = document.getElementById('buildtag'); if (_bt) _bt.rem
 })();
 
 // ---- ERROR LOGGER: phone runtime errors home (/api/log) so we can fix the game from real
-// data as it runs in the wild. Deduped + capped so it never spams. Pure additive safety net.
-const ZLOG = (() => {
-  const seen = new Map(); let sent = 0;
-  const safe = (fn) => { try { return fn(); } catch (_) { return ''; } };
-  function report(kind, msg, stack, extra) {
-    try {
-      if (sent > 40) return;                                  // cap per page load
-      const key = kind + '|' + String(msg || '').slice(0, 120) + '|' + ((extra && extra.line) || 0);
-      const now = Date.now();
-      if (seen.get(key) && now - seen.get(key) < 10000) return; // dedupe within 10s
-      seen.set(key, now); sent++;
-      const payload = Object.assign({
-        kind, msg: String(msg || ''), stack: String(stack || ''),
-        build: safe(() => BUILD) || '?',
-        raceId: safe(() => _raceId) || '',
-        phase: safe(() => phase) || '',
-        url: location.href,
-      }, extra || {});
-      const data = JSON.stringify(payload);
-      if (navigator.sendBeacon) navigator.sendBeacon('/api/log', new Blob([data], { type: 'application/json' }));
-      else fetch('/api/log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: data, keepalive: true }).catch(() => {});
-    } catch (_) {}
-  }
-  window.addEventListener('error', e => report('error', e.message, e.error && e.error.stack, { line: e.lineno, col: e.colno, url: e.filename || location.href }));
-  window.addEventListener('unhandledrejection', e => { const r = e.reason; report('promise', (r && r.message) || String(r), r && r.stack); });
-  return { report };
-})();
+// ZLOG is defined by telemetry.js (loaded above) — ZTELEM alias for new game-specific hooks.
 const leaderEl = document.getElementById('leader');
 function setStatus(txt, ok) {
   statusEl.textContent = txt;
@@ -1868,7 +1843,12 @@ function loop(now) {
     while (spawnQueue.length && spawnTimer >= spawnQueue[0].delay) {
       spawnOne(spawnQueue.shift());
     }
-    if (!spawnQueue.length) phase = 'racing';
+    if (!spawnQueue.length) {
+      phase = 'racing';
+      // start ball-stuck telemetry monitor
+      if (typeof ZTELEM !== 'undefined') ZTELEM.game.startStuckWatch(
+        () => ZPHYSICS.snapshot(), () => _raceId);
+    }
   }
 
   if (phase === 'racing' && ZPHYSICS.isReady()) {
@@ -1906,7 +1886,9 @@ function loop(now) {
     // end the race a few seconds after the winner (lets stragglers place), or when all done
     const total = zorbs.size;
     if (winner && ((now - _winAt > 4000) || (_finishedSet.size + _fellSet.size >= total))) {
-      phase = 'done'; reportResult(); showEndCard();
+      phase = 'done';
+      if (typeof ZTELEM !== 'undefined') ZTELEM.game.stopStuckWatch();
+      reportResult(); showEndCard();
       // FRESH MODE: queue the next race on a brand-new random track
       if (_freshMode && !_freshQueued) { _freshQueued = true; setTimeout(() => { _freshQueued = false; startFreshRace(); }, 5000); }
       // CUSTOM MAP preview: re-run the same authored track so it loops for testing. In RANDOMIZER
