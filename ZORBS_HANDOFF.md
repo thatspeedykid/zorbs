@@ -237,5 +237,35 @@ needs an orientation-aware physics path).
 
 ---
 
+## 9. FUTURE TASKS
+
+### Auto-generation: reuse the editor's branch/junction system
+The map editor now creates branches through **port dots** on each section, and the
+custom-branch path in `track.js` (`buildCustomBranchNodes` + the custom-branch block in
+`generate()`) builds real fork geometry from authored data: it picks a fork node, builds
+branch centerlines, wires per-branch rejoin-vs-finish, and **opens only the inner divider
+walls** at the junction (main wall on the branch's side + branch entrance wall facing main,
+outer walls kept) so balls flow in without jamming or falling off.
+
+The seeded auto-generator (`buildPlan` + `_ZFORK.buildForks`) still uses the OLD seeded fork
+set-pieces (wells/sorters/vortex), which is why it was gated `!_isCustom`. **Task:** make
+auto-gen emit the SAME `{sections, branches}` data shape the editor produces and run it
+through the custom-branch path, so generated maps get:
+  - clean port-aligned branch attach points (known position/angle/width per section)
+  - the smooth inner-divider junctions we just built (no stuck balls, no fall-off)
+  - per-branch rejoin/finish variety
+Then the seeded well/sorter/vortex pieces become OPTIONAL flavor on top, not the only way to
+fork. One junction code path for both editor maps and auto-gen = consistent feel + we only fix
+junction bugs once.
+
+### Self-healing telemetry (now live — keep using it)
+`telemetry.js` + `/beta/diagnostics.html` capture JS errors, WebGL context loss, track-build
+failures, and **ball-stuck events** into a localStorage ring buffer (+ POST to `/api/log`).
+When Adrian says "check for errors," load `/beta/diagnostics.html` headlessly and read the
+events. Use stuck-ball reports (ballId/hint/raceId/mapId) to find bad junction/obstacle
+geometry on specific maps and tune it.
+
+---
+
 *Generated end of session. The handoff + map-plan docs live in the repo root so any new chat can
 read them directly.*
