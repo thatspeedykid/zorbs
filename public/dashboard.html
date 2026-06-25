@@ -483,7 +483,17 @@ body{background:#05050f;color:#fff;font-family:'Courier New',monospace;min-heigh
           <button class="btn btn-cyan" onclick="openMapEditor()">+ NEW MAP</button>
           <span style="font-size:11px;color:rgba(255,255,255,0.4)">Build a track in the editor, then submit it. Admins review before it joins the community rotation.</span>
         </div>
+        <div class="card" style="margin-bottom:20px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <h3 style="margin:0;font-size:11px;letter-spacing:2px">💾 SAVED DRAFTS</h3>
+            <span style="font-size:9px;color:rgba(255,255,255,0.3)">In-progress builds — open in editor to continue</span>
+          </div>
+          <div id="drafts-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px">
+            <div style="color:rgba(255,255,255,0.3);font-size:11px;padding:12px 0">Loading…</div>
+          </div>
+        </div>
         <div class="card">
+          <h3 style="margin-bottom:10px;font-size:11px;letter-spacing:2px">📋 SUBMITTED MAPS</h3>
           <table class="tbl">
             <thead><tr><th>NAME</th><th>DIFFICULTY</th><th>PIECES</th><th>STATUS</th><th>PLAYS</th><th></th></tr></thead>
             <tbody id="mymaps-table">
@@ -699,7 +709,7 @@ function showPage(id){
   if(id === 'leaderboard') loadGlobalLeaderboard();
   if(id === 'obs') { fillLobbyLinks(); initCustom(); connectLobby(); loadLobbyMapOptions(); }
   if(id === 'marketplace') buildDashSkinGrid();
-  if(id === 'mymaps') loadMyMaps();
+  if(id === 'mymaps'){ loadMyMaps(); loadMyDrafts(); }
   if(id === 'community') loadCommunityMaps();
   if(id === 'admin-maps') loadAdminMaps();
 }
@@ -739,6 +749,47 @@ function adminKey(){
 function mapStatusBadge(st){
   const cls = st==='approved'?'live':st==='denied'?'idle':'admin';
   return `<span class="badge ${cls}">${(st||'pending').toUpperCase()}</span>`;
+}
+
+async function loadMyDrafts(){
+  const grid = document.getElementById('drafts-grid');
+  const author = (session && (session.username || session.name) || '').toLowerCase();
+  if(!author){ grid.innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:11px;padding:8px 0">Sign in to see your saved drafts.</div>'; return; }
+  try{
+    const r = await fetch('/api/maps?list=drafts&author='+encodeURIComponent(author));
+    const j = await r.json().catch(()=>({}));
+    const drafts = (j && j.drafts) || [];
+    if(!drafts.length){ grid.innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:11px;padding:8px 0">No saved drafts — use 💾 Save Draft in the map editor to save work-in-progress.</div>'; return; }
+    grid.innerHTML = drafts.map(d => {
+      const when = d.updated ? new Date(d.updated).toLocaleDateString() : '';
+      const img = d.thumb
+        ? `<img src="${d.thumb}" alt="" style="width:100%;height:80px;object-fit:cover;border-radius:6px 6px 0 0;background:#0c0f1a;display:block">`
+        : `<div style="width:100%;height:80px;background:#0c0f1a;border-radius:6px 6px 0 0;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.15);font-size:11px">no preview</div>`;
+      return `<div style="background:#0f1422;border:1px solid #1e2740;border-radius:8px;overflow:hidden">
+        ${img}
+        <div style="padding:8px">
+          <div style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(d.name||'Untitled Draft')}</div>
+          <div style="font-size:9px;color:rgba(255,255,255,0.35);margin:2px 0 8px">${d.sectionCount} pieces · ${when}</div>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-cyan" style="flex:1;font-size:10px;padding:5px 0" onclick="resumeDraft('${d.id}')">✏️ EDIT</button>
+            <button class="btn btn-red" style="font-size:10px;padding:5px 8px" onclick="deleteDraft('${d.id}','${esc(d.name||'').replace(/'/g,'')}')">🗑</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  }catch(_){ grid.innerHTML = '<div style="color:#ff4060;font-size:11px;padding:8px 0">Could not load drafts.</div>'; }
+}
+function resumeDraft(id){
+  window.open('/beta/map-editor.html?draft='+encodeURIComponent(id),'_blank');
+}
+async function deleteDraft(id, name){
+  if(!confirm('Delete draft "'+name+'"?')) return;
+  const author = (session && (session.username || session.name) || '').toLowerCase();
+  try{
+    await fetch('/api/maps',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'draft-delete',id,author})});
+    loadMyDrafts();
+  }catch(_){}
 }
 
 async function loadMyMaps(){

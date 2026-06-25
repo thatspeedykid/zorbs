@@ -954,6 +954,39 @@ function seedStarter(){
     {kind:'boost',  t:0.78, side:0,    dir:1},
   ];
 }
+// ---- AUTO-SAVE ---- periodically save draft to account (every 90s if signed in and track has content)
+let _autoSaveTimer = null;
+function scheduleAutoSave(){
+  clearTimeout(_autoSaveTimer);
+  _autoSaveTimer = setTimeout(async ()=>{
+    if(!author || !sections.length) return;
+    try{
+      const map=Object.assign(currentMap(),{thumb:makeThumb()});
+      const r=await fetch('/api/maps',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({action:'draft-save',map,id:currentDraftId||undefined})});
+      const j=await r.json().catch(()=>({}));
+      if(j&&j.ok) currentDraftId=j.id;
+    }catch(_){}
+    scheduleAutoSave();
+  }, 90000);
+}
+// restart timer on any edit
+const _origPushUndo = pushUndo;
+function pushUndo(){ _origPushUndo(); scheduleAutoSave(); }
+scheduleAutoSave();
+
+// ---- LOAD DRAFT FROM URL ---- so the dashboard "EDIT" button deep-links to the right draft
+(async()=>{
+  const p=new URLSearchParams(location.search);
+  const draftId=p.get('draft');
+  if(!draftId||!author) return;
+  try{
+    const r=await fetch('/api/maps?draft='+encodeURIComponent(draftId)+'&author='+encodeURIComponent(author));
+    const j=await r.json().catch(()=>({}));
+    if(j&&j.ok&&j.draft){ applyMap(j.draft); currentDraftId=draftId; toast('📂 Draft loaded — keep building.'); }
+  }catch(_){}
+})();
+
 seedStarter();
 resize(); setTimeout(fit,50); refresh();
 </script>
