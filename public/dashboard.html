@@ -746,8 +746,16 @@ function adminToken(){
   try { const s = session || JSON.parse(localStorage.getItem('zorbs_session')||'null'); return (s && s.accessToken) || ''; }
   catch(_){ return ''; }
 }
+// The signed session blob — api/maps.js verifies its HMAC signature (no live Kick call).
+function adminSession(){
+  try {
+    const s = session || JSON.parse(localStorage.getItem('zorbs_session')||'null');
+    if(!s) return '';
+    return btoa(unescape(encodeURIComponent(JSON.stringify(s))));
+  } catch(_){ return ''; }
+}
 function adminHeaders(extra){
-  return Object.assign({ 'x-kick-token': adminToken() }, extra || {});
+  return Object.assign({ 'x-zorbs-session': adminSession(), 'x-kick-token': adminToken() }, extra || {});
 }
 // legacy key fallback (only prompts if explicitly needed)
 function adminKey(){ return localStorage.getItem('zorbs_admin_key') || ''; }

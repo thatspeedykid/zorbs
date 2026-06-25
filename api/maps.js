@@ -19,6 +19,8 @@
 //
 // No-ops gracefully (configured:false) until a DB is connected, so nothing breaks.
 
+import crypto from 'crypto';
+
 function kvEnv() {
   let url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
     || process.env.STORAGE_REDIS_REST_URL || process.env.STORAGE_KV_REST_API_URL
@@ -71,14 +73,42 @@ function isAdmin(key) {
   return !!k && key === k;
 }
 
-// Allowlist of admin Kick usernames (must match api/kick-auth.js ADMIN_USERNAMES).
+// Allowlist of admin Kick usernames (must match api/kick-auth.js ADMIN_USERNAMES). Add admins
+// via the ZORBS_ADMIN_USERNAMES env var (comma-separated) — no code change needed per admin.
 const ADMIN_USERNAMES = (process.env.ZORBS_ADMIN_USERNAMES || 'marsscumbags')
   .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 
-// Identity-based admin check: verify the caller's Kick access token against Kick's API and
-// confirm the resolved username is in the admin allowlist. The session blob handed to the
-// browser is only base64 (forgeable), so we never trust its `role` field — we re-verify the
-// token with Kick here, which can't be spoofed without a real admin login.
+// Signed-session verification (the reliable path). At login api/kick-auth.js stamps the session
+// with an HMAC over username|role|kickId|ts using a server secret. Here we recompute that HMAC
+// and compare — if it matches, the role field is trustworthy (it was set server-side from the
+// admin allowlist and can't be forged without the secret). No live Kick call, so it can't fail
+// from token expiry / Kick downtime, and it scales to any number of admins automatically.
+const SIGN_SECRET = process.env.ZORBS_SESSION_SECRET
+  || process.env.KICK_CLIENT_SECRET
+  || 'c4daf86f9492d0ac466af921c8846e5ed00b6bea0dc4fcda78607db5c0f93ad8';
+const SESSION_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 60;  // 60 days
+
+function signSession(o) {
+  return crypto.createHmac('sha256', SIGN_SECRET)
+    .update(`${o.username}|${o.role}|${o.kickId}|${o.ts}`).digest('hex');
+}
+
+function isAdminSession(sessionB64) {
+  if (!sessionB64) return false;
+  try {
+    const o = JSON.parse(Buffer.from(sessionB64, 'base64').toString('utf8'));
+    if (!o || o.role !== 'admin' || !o.sig) return false;
+    if (!o.ts || Date.now() - o.ts > SESSION_MAX_AGE_MS) return false;   // stale session
+    const expected = signSession(o);
+    // timing-safe compare
+    const a = Buffer.from(String(o.sig)), b = Buffer.from(expected);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return false;
+    // belt + suspenders: role must correspond to an allowlisted admin username
+    return ADMIN_USERNAMES.includes(String(o.username || '').toLowerCase());
+  } catch (_) { return false; }
+}
+
+// Fallback identity check via live Kick token (kept for older unsigned sessions).
 async function isAdminToken(token) {
   if (!token) return false;
   try {
@@ -94,11 +124,14 @@ async function isAdminToken(token) {
   } catch (_) { return false; }
 }
 
-// Combined gate used by every admin endpoint: pass if EITHER a valid admin Kick token
-// (preferred — no shared secret to type) OR the legacy admin key is supplied.
+// Combined gate used by every admin endpoint. Priority:
+//   1. Signed session (x-zorbs-session header) — reliable, no external call
+//   2. Live Kick token (x-kick-token header)   — fallback for unsigned sessions
+//   3. Legacy ZORBS_ADMIN_KEY                   — last resort
 async function adminOK(req, bodyAdmin) {
-  const token = (req.headers && (req.headers['x-kick-token'] || req.headers['x-kick-token'.toLowerCase()])) || '';
-  if (await isAdminToken(clean(token, 4000))) return true;
+  const H = (req.headers) || {};
+  if (isAdminSession(clean(H['x-zorbs-session'] || '', 6000))) return true;
+  if (await isAdminToken(clean(H['x-kick-token'] || '', 4000))) return true;
   return isAdmin(clean(bodyAdmin, 80));
 }
 
