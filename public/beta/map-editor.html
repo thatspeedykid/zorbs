@@ -196,6 +196,7 @@ let _clip = [];            // clipboard of copied obstacle objects
 let _pendingKind = null;   // palette piece kind waiting for a canvas click to place it
 let _boxSel = null;        // {x0,z0,x1,z1} world-space rect during shift-drag box select
 let _hoverPort = null;     // {si, pi} — section index + port index currently hovered
+let selBranchPiece = -1;   // when editing a branch: which piece within it is open for editing
 let difficulty = 'medium';
 let undoStack = [], redoStack = [];
 const author = (() => { try { const s=JSON.parse(localStorage.getItem('zorbs_session')||'{}'); return s.username||s.name||''; } catch(_){return '';} })();
@@ -989,8 +990,11 @@ function deleteSelObs(){
   deselect(); pushUndo(); refresh();
 }
 
-function select(type,idx){ selType=type; selIdx=idx; selObs=(type==='obstacle'&&idx>=0)?[idx]:[]; renderSelPanel(); draw(); }
-function deselect(){ selType=null; selIdx=-1; selObs=[]; renderSelPanel(); draw(); }
+function select(type,idx){
+  if(!(type==='branch'&&idx===selIdx)) selBranchPiece=-1;  // reset piece editor unless re-selecting same branch
+  selType=type; selIdx=idx; selObs=(type==='obstacle'&&idx>=0)?[idx]:[]; renderSelPanel(); draw();
+}
+function deselect(){ selType=null; selIdx=-1; selObs=[]; selBranchPiece=-1; renderSelPanel(); draw(); }
 
 // ---- BRANCH EDITING — inline, no mode-swap ----
 function addBranch(fromSection){
@@ -1007,7 +1011,13 @@ function deleteBranch(idx){
 function addBranchPiece(bi, kind){
   const p=byKind(kind); if(!p) return;
   branches[bi].sections.push(Object.assign({kind},JSON.parse(JSON.stringify(p.def))));
+  selBranchPiece=branches[bi].sections.length-1;   // open the new piece for editing
   pushUndo(); renderSelPanel(); draw();
+}
+// open/close a branch piece's property editor
+function toggleBranchPiece(si){
+  selBranchPiece = (selBranchPiece===si) ? -1 : si;
+  renderSelPanel(); draw();
 }
 // Drop a track piece onto a port dot.
 //   CENTER port (pi===1) = MAIN line → insert the piece into the main track here.
@@ -1031,6 +1041,7 @@ function dropPieceOnPort(pt, kind){
 }
 function removeBranchPiece(bi, si){
   branches[bi].sections.splice(si,1);
+  if(selBranchPiece===si) selBranchPiece=-1; else if(selBranchPiece>si) selBranchPiece--;
   pushUndo(); renderSelPanel(); draw();
 }
 // stub kept for any lingering onclick references
@@ -1062,6 +1073,35 @@ addEventListener('keydown',e=>{
     else if(selType==='obstacle'&&selIdx>=0){ e.preventDefault(); removeObstacle(selIdx); }
   }
 });
+
+// ---- shared section-property controls (used by both main sections and branch pieces) ----
+// Returns the slider/direction HTML for a section-like object `s`.
+function sectionPropsHTML(s){
+  let h=slider('Length','len',s.len,6,120,1);
+  if('sharp' in s){ h+=slider('Sharpness','sharp',s.sharp,0.012,0.055,0.002);
+    h+=`<div class="turn-deg" style="font-size:10px;color:var(--dim);margin:-4px 0 8px">≈ ${Math.round(s.sharp*s.len*0.92*180/Math.PI)}° of turn</div>`; }
+  if('min'   in s) h+=slider('Throat width','min',s.min,0.25,0.85,0.01);
+  if('drop'  in s) h+=slider('Steepness','drop',s.drop,0.4,3,0.1);
+  if('steps' in s) h+=slider('Tiers','steps',s.steps,2,8,1);
+  if('w'     in s) h+=slider('Arena width','w',s.w,8,30,1);
+  if('dir'   in s) h+=dirseg(s.dir);
+  return h;
+}
+// Wire slider + direction events for a property block, writing back into target `s`.
+function wireSectionProps(root, s, onChange){
+  root.querySelectorAll('input[type=range]').forEach(r=>{
+    r.addEventListener('input',()=>{
+      s[r.dataset.k]=parseFloat(r.value);
+      r.parentElement.querySelector('.rval').textContent=fmt(r.dataset.k,r.value);
+      const td=root.querySelector('.turn-deg');
+      if(td&&'sharp'in s) td.textContent='≈ '+Math.round(s.sharp*s.len*0.92*180/Math.PI)+'° of turn';
+      draw(); validate();
+    });
+    r.addEventListener('change',pushUndo);
+  });
+  const ds=root.querySelector('#dirseg');
+  if(ds) ds.querySelectorAll('button').forEach(b=>b.onclick=()=>{ s.dir=+b.dataset.v; pushUndo(); if(onChange)onChange(); });
+}
 
 // ---- SELECTED PIECE PROPERTIES PANEL ----
 const selPanel=document.getElementById('sel-panel');
@@ -1136,17 +1176,24 @@ function renderSelPanel(){
       <button data-v="rejoin" class="${!isFinish?'on':''}">↩ Rejoin main</button>
       <button data-v="finish" class="${isFinish?'on':''}">🏁 Own finish</button>
     </div>`;
-    // section list
+    // section list — each piece is clickable to open its full editor (like main sections)
+    if(selBranchPiece>=br.sections.length) selBranchPiece=-1;
     if(br.sections.length){
-      h+=`<div style="font-size:10px;color:var(--dim);margin-bottom:4px">BRANCH PIECES</div>`;
+      h+=`<div style="font-size:10px;color:var(--dim);margin-bottom:4px">BRANCH PIECES — click to edit</div>`;
       br.sections.forEach((s,si)=>{
         const pc=byKind(s.kind);
-        h+=`<div style="display:flex;align-items:center;gap:6px;padding:5px 7px;margin-bottom:4px;
-              background:#141b30;border:1px solid var(--line);border-radius:7px">
-          <div style="flex:1;font-size:11px;color:${pc?.color||'#fff'}">${pc?.name||s.kind}</div>
-          <div style="font-size:10px;color:var(--dim)">len ${s.len||'?'}</div>
-          <button class="danger" style="padding:2px 7px;font-size:10px" onclick="removeBranchPiece(${bi},${si})">✕</button>
-        </div>`;
+        const open=(si===selBranchPiece);
+        h+=`<div style="margin-bottom:4px;border:1px solid ${open?(pc?.color||'#cc77ff'):'var(--line)'};border-radius:7px;overflow:hidden">
+          <div style="display:flex;align-items:center;gap:6px;padding:6px 8px;cursor:pointer;background:${open?'#1a2236':'#141b30'}" onclick="toggleBranchPiece(${si})">
+            <div class="p-ic" style="width:22px;height:22px;background:${pc?.color||'#888'}22;border:1px solid ${pc?.color||'#888'}55">${glyph(s.kind,pc?.color||'#fff')}</div>
+            <div style="flex:1;font-size:11px;color:${pc?.color||'#fff'}">${pc?.name||s.kind}</div>
+            <div style="font-size:10px;color:var(--dim)">${open?'▼':'▶'} len ${s.len||'?'}</div>
+            <button class="danger" style="padding:2px 7px;font-size:10px" onclick="event.stopPropagation();removeBranchPiece(${bi},${si})">✕</button>
+          </div>`;
+        if(open){
+          h+=`<div class="bp-props" style="padding:8px 10px;background:#0e1322">${sectionPropsHTML(s)}</div>`;
+        }
+        h+=`</div>`;
       });
     } else {
       h+=`<div style="font-size:11px;color:var(--dim);margin-bottom:8px">No pieces yet — add some below</div>`;
@@ -1164,6 +1211,11 @@ function renderSelPanel(){
     selPanel.querySelector('#brend-seg').querySelectorAll('button').forEach(b=>b.onclick=()=>{
       branches[bi].end=b.dataset.v; pushUndo(); refresh();
     });
+    // wire the open piece's property controls
+    if(selBranchPiece>=0 && br.sections[selBranchPiece]){
+      const bp=selPanel.querySelector('.bp-props');
+      if(bp) wireSectionProps(bp, br.sections[selBranchPiece], ()=>renderSelPanel());
+    }
     return;
   } else if(selType==='obstacle'&&selObs.length>1){
     // MULTI-SELECT group panel
