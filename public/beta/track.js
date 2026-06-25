@@ -366,7 +366,45 @@ const ZTRACK = (() => {
   // Turn the centerline into a triangle mesh (floor + two walls), welded seam-to-seam.
   // Returns { positions:Float32Array, indices:Uint32Array } in a single buffer,
   // plus separate arrays the renderer can use for materials if desired.
-  function buildMesh(nodes) {
+  // OUTER-PERIMETER occupancy tester. Given every ribbon in the track network (main + all
+  // branches), returns covered(x,y,z,selfTag) -> true if that world point sits on some OTHER
+  // ribbon's floor. Walls then spawn only on edges whose outward side is NOT covered — i.e.
+  // the true outer silhouette of the whole network. Interior seams at junctions self-open.
+  function buildOccupancy(groups) {
+    const CELL = 6;
+    const grid = new Map();
+    for (const g of groups) {
+      for (const n of g.nodes) {
+        if (!n || n.meshSkip) continue;
+        const gx = Math.floor(n.pos.x / CELL), gz = Math.floor(n.pos.z / CELL);
+        const k = gx + ',' + gz;
+        let arr = grid.get(k); if (!arr) { arr = []; grid.set(k, arr); }
+        arr.push({ n, tag: g.tag });
+      }
+    }
+    return function covered(px, py, pz, selfTag) {
+      const gx = Math.floor(px / CELL), gz = Math.floor(pz / CELL);
+      for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+        const arr = grid.get((gx + dx) + ',' + (gz + dz));
+        if (!arr) continue;
+        for (const it of arr) {
+          if (it.tag === selfTag) continue;   // never let a ribbon cover its own edge
+          const n = it.n;
+          const ex = px - n.pos.x, ey = py - n.pos.y, ez = pz - n.pos.z;
+          if (Math.abs(ey) > 4) continue;
+          const lat = ex * n.right.x + ez * n.right.z;
+          const along = ex * n.dir.x + ez * n.dir.z;
+          if (Math.abs(lat) <= n.halfW - 0.3 && Math.abs(along) <= 1.6) return true;
+        }
+      }
+      return false;
+    };
+  }
+
+  function buildMesh(nodes, opts) {
+    const occupancy = opts && opts.occupancy;
+    const selfTag = opts && opts.selfTag;
+    const PROBE = 1.0;   // how far past a floor edge to look for neighbouring track
     const floorPos = [];
     const floorUV = [];
     const wallPos = [];
@@ -387,8 +425,18 @@ const ZTRACK = (() => {
       const rc = add(rf, scale(bankUp, 4.5));          // right ceiling
       const ld = add(lf, scale(bankUp, -2.2));         // left underside (skirt hides bumpers)
       const rd = add(rf, scale(bankUp, -2.2));         // right underside
+      // Outer-perimeter test: a wall belongs on an edge only if NO other ribbon's floor
+      // sits just beyond it. Probe a little past each floor edge; if covered, it's an
+      // interior seam (a junction) and the wall is dropped automatically.
+      let nwL = !!(n.noWalls || n.noWallL), nwR = !!(n.noWalls || n.noWallR);
+      if (occupancy) {
+        const lp = add(lf, scale(n.right, -PROBE));
+        const rp = add(rf, scale(n.right, PROBE));
+        if (occupancy(lp.x, lp.y, lp.z, selfTag)) nwL = true;
+        if (occupancy(rp.x, rp.y, rp.z, selfTag)) nwR = true;
+      }
       return { lf, rf, lw, rw, lc, rc, ld, rd, tunnel: !!n.tunnel,
-        noWallL: !!(n.noWalls || n.noWallL), noWallR: !!(n.noWalls || n.noWallR) };
+        noWallL: nwL, noWallR: nwR };
     }
     function applyBank(n) {
       // rotate the up vector around the heading by the bank angle
@@ -448,8 +496,8 @@ const ZTRACK = (() => {
   // Build collider buffers. We make TWO: the full one (unused now) and a WALLS+ROOF
   // ONLY one. The floor is handled analytically (smooth height follow) so balls glide
   // instead of catching on floor triangle seams. Walls stay real physics.
-  function buildColliderBuffers(nodes) {
-    const m = buildMesh(nodes);
+  function buildColliderBuffers(nodes, opts) {
+    const m = buildMesh(nodes, opts);
     const positions = [];
     const indices = [];
     let base = 0;
@@ -611,32 +659,10 @@ const ZTRACK = (() => {
           end: rejoinNode };
         forks.push(fork);
         forkAtIdx.set(forkNodeIdx, fork);
-
-        // Open ONLY the inner divider walls at the junction so balls flow into branches
-        // without getting jammed — never the OUTER walls (that would let balls fall off).
-        // For each branch we work out which side of the main heading it peels off to
-        // (using the fork node's right vector), then open the MAIN wall on that side and
-        // the BRANCH wall facing back toward the main track. Outer walls stay intact.
-        const OPEN = 8;
-        const fr = forkNode.right;
-        for (const bid of branchIds) {
-          const bnodes = branches[bid];
-          if (!bnodes.length) continue;
-          // sample a node a little way in to read the peel direction robustly
-          const probe = bnodes[Math.min(6, bnodes.length - 1)];
-          const dx = probe.pos.x - forkNode.pos.x, dz = probe.pos.z - forkNode.pos.z;
-          const sideDot = dx * fr.x + dz * fr.z;       // >0 = peels toward +right, <0 = toward left
-          const peelRight = sideDot >= 0;
-          // MAIN: open only the wall on the branch's side, for a short window past the fork
-          for (let k = forkNodeIdx; k < Math.min(nodes.length, forkNodeIdx + OPEN); k++) {
-            if (peelRight) nodes[k].noWallR = true; else nodes[k].noWallL = true;
-          }
-          // BRANCH: open the inner wall (the one facing the main track) at the entrance.
-          // A branch peeling RIGHT has the main track on its LEFT, so open its left wall.
-          for (let k = 0; k < Math.min(OPEN, bnodes.length); k++) {
-            if (peelRight) bnodes[k].noWallL = true; else bnodes[k].noWallR = true;
-          }
-        }
+        // NOTE: inner junction walls are no longer opened by guessing a peel direction.
+        // The outer-perimeter wall pass (buildOccupancy + buildMesh) drops any wall edge
+        // that has other track floor beyond it, so junction seams open automatically and
+        // only the true outside of the whole network keeps its walls.
       }
     }
 
@@ -825,11 +851,30 @@ const ZTRACK = (() => {
       }
     }
 
+    // OUTER-PERIMETER occupancy: gather every full-width ribbon (main + authored branches)
+    // so buildMesh can drop wall edges that have other track floor beyond them. Only built
+    // when there are real branch ribbons to consider (authored custom maps); auto-gen forks
+    // are lanesOnly / scripted and keep the legacy per-node wall flags untouched.
+    let occ = null;
+    {
+      const groups = [{ tag: '__main__', nodes }];
+      for (const f of forks) {
+        if (f.lanesOnly) continue;
+        for (const bid in f.branches) {
+          if (f.branches[bid] && f.branches[bid].length >= 2) {
+            groups.push({ tag: bid, nodes: f.branches[bid] });
+          }
+        }
+      }
+      if (groups.length > 1) occ = buildOccupancy(groups);
+    }
+    const mainMeshOpts = occ ? { occupancy: occ, selfTag: '__main__' } : undefined;
+
     // Build mesh for the main path, then add each fork's geometry.
     // lanesOnly forks (v2.1) live INSIDE the widened main corridor, so the main mesh
     // already covers their floor and outer walls — they only contribute the DIVIDER
     // wall. (Legacy ribbon-style forks would build full branch meshes.)
-    const mesh = buildMesh(nodes);
+    const mesh = buildMesh(nodes, mainMeshOpts);
     const branchMeshes = [];
     for (const f of forks) {
       if (f.lanesOnly) {
@@ -839,7 +884,8 @@ const ZTRACK = (() => {
       } else {
         for (const bid in f.branches) {
           if (!f.branches[bid] || f.branches[bid].length < 2) continue;
-          branchMeshes.push({ branchId: bid, mesh: buildMesh(f.branches[bid]) });
+          branchMeshes.push({ branchId: bid,
+            mesh: buildMesh(f.branches[bid], occ ? { occupancy: occ, selfTag: bid } : undefined) });
         }
         // SORTER CONE SURFACE: the radial cone mesh (built in forks.js) that gives the
         // funnel its actual curved, narrowing shape — this is what makes it LOOK like a
@@ -879,7 +925,7 @@ const ZTRACK = (() => {
     // Branches with NO wall/roof geometry (e.g. the sorter's '_holes' entry, which is
     // floor-only visual cosmetics) are skipped entirely — an empty trimesh buffer crashes
     // Rapier's collider constructor.
-    const collider = buildColliderBuffers(nodes);
+    const collider = buildColliderBuffers(nodes, mainMeshOpts);
     const branchColliders = branchMeshes.map(bm => ({
       branchId: bm.branchId,
       buffers: (() => {
