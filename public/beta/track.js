@@ -737,6 +737,7 @@ const ZTRACK = (() => {
     // Own rng seed so the rest of the layout is untouched.
     const spinners = [];
     const pendulums = [];
+    const vortexDiscs = [];
     if (!_isCustom) {
       const srng = mulberry32((seed ^ 0x1a2b3c4d) >>> 0);
       // SPACING RULE: a spinner must never land right next to a bumper post — back-to-back
@@ -834,11 +835,15 @@ const ZTRACK = (() => {
           spinners.push({ pos: {x:px, y:py, z:pz}, armLen: Math.min(nd.halfW * 0.6, 4.5), armHeight: 0.85,
             rate, dir: co.dir || 1, up: nd.up, fwd: nd.dir, idx: realIdx });
         } else if (co.kind === 'pendulum') {
-          // a bob that swings laterally across the lane, pivoting from a bar overhead.
-          // swing AXIS = track forward; the bob sweeps left↔right (and dips) across the width.
-          const rate = Math.max(0.5, Math.min(3.5, co.speed || 1.6));   // swing speed (rad/s phase)
+          const rate = Math.max(0.5, Math.min(3.5, co.speed || 1.6));
           pendulums.push({ pos: {x:px, y:py, z:pz}, up: nd.up, fwd: nd.dir,
             rate, swing: 0.95, idx: realIdx });
+        } else if (co.kind === 'vortex') {
+          const radius = Math.max(1.5, Math.min(nd.halfW * 0.85, 5.5));
+          const revolutions = Math.max(1, Math.min(4, co.revolutions || 1.5));
+          const duration = Math.max(0.8, Math.min(3.0, co.duration || 1.4));
+          vortexDiscs.push({ pos: {x:px, y:py, z:pz}, radius, revolutions, duration,
+            dir: co.dir || 1, idx: realIdx });
         } else if (co.kind === 'boost') {
           const bl = Math.max(6, Math.min(28, (co.length || 14) | 0));
           let ok = true;
@@ -859,7 +864,7 @@ const ZTRACK = (() => {
       }
     }
 
-    return { seed, nodes, mesh, collider, start, finish, boosts, obstacles, spinners, pendulums, launchPins,
+    return { seed, nodes, mesh, collider, start, finish, boosts, obstacles, spinners, pendulums, vortexDiscs, launchPins,
       platform: { startIdx: 0, endIdx: platStart },
       forks, forkAtIdx, branchMeshes, branchColliders };
   }

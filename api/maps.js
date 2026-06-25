@@ -90,7 +90,7 @@ function sanitizeSection(s) {
   return out;
 }
 
-const OBSTACLE_KINDS = ['bumper', 'spinner', 'boost', 'launch', 'pendulum'];
+const OBSTACLE_KINDS = ['bumper', 'spinner', 'boost', 'launch', 'pendulum', 'vortex'];
 function sanitizeObstacle(o) {
   if (!o || typeof o !== 'object') return null;
   if (!OBSTACLE_KINDS.includes(o.kind)) return null;
@@ -105,6 +105,10 @@ function sanitizeObstacle(o) {
   if (o.kind === 'spinner' && o.speed != null) out.speed = Math.max(0.8, Math.min(5, +o.speed || 2.5));
   if (o.kind === 'boost' && o.length != null) out.length = Math.max(6, Math.min(28, (o.length | 0) || 14));
   if (o.kind === 'pendulum' && o.speed != null) out.speed = Math.max(0.5, Math.min(3.5, +o.speed || 1.6));
+  if (o.kind === 'vortex') {
+    if (o.revolutions != null) out.revolutions = Math.max(1, Math.min(4, +o.revolutions || 1.5));
+    if (o.duration != null) out.duration = Math.max(0.8, Math.min(3.0, +o.duration || 1.4));
+  }
   return out;
 }
 

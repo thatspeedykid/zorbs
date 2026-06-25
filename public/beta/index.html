@@ -623,7 +623,7 @@ let _planet = null, _clouds = null;
 })();
 
 // ---- build the course ----
-let track = null, trackMeshes = [], _bumperVis = [], _spinnerVis = [], _launchVis = [], _pendulumVis = [];
+let track = null, trackMeshes = [], _bumperVis = [], _spinnerVis = [], _launchVis = [], _pendulumVis = [], _vortexVis = [];
 let _pulse = null;                  // streaking-pulse animation state (set in buildCourse)
 let _boostMats = [];                // boost-pad chevron textures (scrolled each frame)
 const _tmpV = new THREE.Vector3();  // scratch vector reused each frame (no per-frame alloc)
@@ -736,7 +736,7 @@ function applyMapTheme(t) {
 
 function buildCourse(seed) {
   trackMeshes.forEach(m => scene.remove(m)); trackMeshes = [];
-  _bumperVis = []; _spinnerVis = []; _launchVis = []; _pendulumVis = [];
+  _bumperVis = []; _spinnerVis = []; _launchVis = []; _pendulumVis = []; _vortexVis = [];
   // CUSTOM MAP (map editor / community map): when one is loaded, its hand-authored section plan
   // replaces the seeded course and its chosen theme (if any) overrides the seed theme.
   const _cmap = window._zorbsCustomMap || null;
@@ -1100,6 +1100,55 @@ function buildCourse(seed) {
       scene.add(grp); trackMeshes.push(grp);
       _pendulumVis.push({ grp, shell, core, ring, baseEmissive: 1.0, hit: 0,
         bobL: L, bobR: R, baseShellColor: shell.material.color.clone() });
+    }
+  }
+
+  // VORTEX DISCS — futuristic spinning disc obstacle. Visual: a flat torus ring with
+  // swirling inner fins, a bright plasma centre, and a rotating field ring. Colour palette:
+  // electric violet → cyan so it reads distinctly from the pendulum (cyan/blue).
+  _vortexVis = [];
+  if (track.vortexDiscs && track.vortexDiscs.length && ZPHYSICS.getVortexDiscs) {
+    const physVDs = ZPHYSICS.getVortexDiscs();
+    for (let i = 0; i < track.vortexDiscs.length; i++) {
+      const vd = physVDs[i]; if (!vd) continue;
+      const grp = new THREE.Group();
+      grp.position.set(vd.cx, vd.cy, vd.cz);
+      const R = vd.rOuter;
+      // outer torus ring
+      const outerRing = new THREE.Mesh(
+        new THREE.TorusGeometry(R, 0.18, 10, 48),
+        new THREE.MeshStandardMaterial({ color: 0x8833ff, emissive: 0x6611dd, emissiveIntensity: 1.6, metalness: 0.5, roughness: 0.2 }));
+      outerRing.rotation.x = Math.PI / 2;
+      grp.add(outerRing);
+      // 6 inner fins radiating from centre (flat triangular blades)
+      const finMat = new THREE.MeshStandardMaterial({ color: 0xcc77ff, emissive: 0xaa44ff, emissiveIntensity: 1.0, metalness: 0.3, roughness: 0.3 });
+      const fins = new THREE.Group();
+      for (let f = 0; f < 6; f++) {
+        const fin = new THREE.Mesh(new THREE.BoxGeometry(R * 0.82, 0.07, 0.18), finMat);
+        fin.rotation.y = (f / 6) * Math.PI * 2;
+        fin.position.x = R * 0.41;
+        fins.add(fin);
+      }
+      grp.add(fins);
+      // plasma core (bright centre)
+      const core = new THREE.Mesh(
+        new THREE.SphereGeometry(0.38, 16, 12),
+        new THREE.MeshBasicMaterial({ color: 0xeeccff }));
+      grp.add(core);
+      // rotating field ring (spins fast to signal "active")
+      const fieldRing = new THREE.Mesh(
+        new THREE.TorusGeometry(R * 0.55, 0.06, 6, 32),
+        new THREE.MeshBasicMaterial({ color: 0xff88ff, transparent: true, opacity: 0.55 }));
+      fieldRing.rotation.x = Math.PI / 2;
+      grp.add(fieldRing);
+      // capture burst ring (hidden, expands on ball capture)
+      const burst = new THREE.Mesh(
+        new THREE.TorusGeometry(R * 0.4, 0.05, 6, 28),
+        new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0 }));
+      burst.rotation.x = Math.PI / 2;
+      grp.add(burst);
+      scene.add(grp); trackMeshes.push(grp);
+      _vortexVis.push({ grp, fins, fieldRing, core, burst, vd, captureFlash: 0 });
     }
   }
 
@@ -1673,7 +1722,7 @@ function startRace(seed, names) {
   _mapView = null;   // re-frame the overhead map cam for the new track
   buildCourse(seed);
   ZPHYSICS.clearBalls();
-  ZPHYSICS.setTrack(track.collider, track.nodes, { forks: track.forks, branchColliders: track.branchColliders, obstacles: track.obstacles, spinners: track.spinners, pendulums: track.pendulums });  // new track each race
+  ZPHYSICS.setTrack(track.collider, track.nodes, { forks: track.forks, branchColliders: track.branchColliders, obstacles: track.obstacles, spinners: track.spinners, pendulums: track.pendulums, vortexDiscs: track.vortexDiscs });  // new track each race
   zorbs.forEach(z => { scene.remove(z.mesh); if(z.ring) scene.remove(z.ring); if(z.ringGlow) scene.remove(z.ringGlow); if(z.trail) scene.remove(z.trail); if(z.streak) scene.remove(z.streak); if(z.label) scene.remove(z.label); });
   _explosions.forEach(e => { scene.remove(e.pts); scene.remove(e.flash); }); _explosions.length = 0;
   _resultSent = false; _officialOrder = null; _officialSlot = -1; _boostQueue.length = 0;
@@ -1965,6 +2014,7 @@ function loop(now) {
   updateBumpers();
   updateSpinners();
   updatePendulums();
+  updateVortexDiscs();
   updateLaunchPins(now);
   updateSkyFollow();
 
@@ -2054,6 +2104,35 @@ function updateSpinners() {
     }
   }
 }
+// VORTEX DISCS — spin the fins + field ring continuously; burst on ball capture.
+function updateVortexDiscs() {
+  if (!_vortexVis.length || !ZPHYSICS.getVortexDiscs) return;
+  const now = performance.now() * 0.001;
+  const physVDs = ZPHYSICS.getVortexDiscs();
+  // detect balls currently in orbit for capture-flash trigger
+  const inOrbit = new Set();
+  if (typeof zorbs !== 'undefined') {
+    for (const z of zorbs) { if (z.body && z.body._inVortex) inOrbit.add(z.body._inVortex.vd); }
+  }
+  for (let k = 0; k < _vortexVis.length; k++) {
+    const vis = _vortexVis[k], vd = physVDs[k]; if (!vd) continue;
+    // spin the fins and field ring
+    vis.fins.rotation.y = now * (1.8 + k * 0.3);
+    vis.fieldRing.rotation.z = now * 2.4;
+    vis.core.material.color.setHSL(0.8 + Math.sin(now * 3 + k) * 0.05, 0.9, 0.85);
+    // capture flash
+    if (vis.captureFlash > 0) {
+      vis.captureFlash = Math.max(0, vis.captureFlash - 0.04);
+      vis.burst.material.opacity = vis.captureFlash;
+      vis.burst.scale.setScalar(1 + (1 - vis.captureFlash) * 4);
+    } else {
+      vis.burst.material.opacity = 0;
+      // idle pulse
+      vis.fieldRing.material.opacity = 0.35 + Math.sin(now * 2 + k) * 0.18;
+    }
+  }
+}
+
 // PENDULUMS — sync the swing to physics, then fire a futuristic impact burst when a ball is
 // caught near the bob: the core flashes white, the shell pulses, and an energy ring expands.
 const _tmpBob = new THREE.Vector3();
@@ -2587,7 +2666,7 @@ async function boot() {
   const seed = await fetchRaceSeed();
   buildCourse(seed);
   // give the physics the track collider
-  ZPHYSICS.setTrack(track.collider, track.nodes, { forks: track.forks, branchColliders: track.branchColliders, obstacles: track.obstacles, spinners: track.spinners, pendulums: track.pendulums });
+  ZPHYSICS.setTrack(track.collider, track.nodes, { forks: track.forks, branchColliders: track.branchColliders, obstacles: track.obstacles, spinners: track.spinners, pendulums: track.pendulums, vortexDiscs: track.vortexDiscs });
   // demo: spawn a field of test balls and race. A few are given the premium skins so
   // Galaxy / Lava / Glass / Chrome are actually visible in the demo (they were all
   // Classic before, so the paid skins never showed on screen).

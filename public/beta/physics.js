@@ -31,6 +31,8 @@ const ZPHYSICS = (() => {
   let spinners = [];
   // pendulums: kinematic bobs swinging laterally across the lane on an overhead pivot
   let pendulums = [];
+  // vortexDiscs: mini-well that captures a ball in a flat orbital spin then flings it forward
+  let vortexDiscs = [];
 
   // ---- load Rapier from CDN (browser) or require (node) ----
   async function load() {
@@ -269,6 +271,24 @@ const ZPHYSICS = (() => {
           body, pivot, baseQuat,
           rate: pn.rate || 1.6, swing: pn.swing || 0.95,
           bobL: BOB_L, bobR: BOB_R, phase: Math.random() * Math.PI * 2, angle: 0,
+        });
+      }
+    }
+    // VORTEX DISCS: flat mini-wells placed as obstacles. Each captures a ball in a short
+    // horizontal orbital spin then flings it forward — no branching, no descent.
+    vortexDiscs = [];
+    if (forkData && forkData.vortexDiscs) {
+      for (const vd of forkData.vortexDiscs) {
+        const nd = nodes[vd.idx] || nodes[nodes.length - 1];
+        vortexDiscs.push({
+          cx: vd.pos.x, cy: vd.pos.y + 0.6, cz: vd.pos.z,  // disc sits slightly above floor
+          rOuter: vd.radius,
+          revolutions: 1.5 + (vd.revolutions || 0),         // fast spin count
+          duration: vd.duration || 1.4,
+          dir: vd.dir || 1,
+          exitDir: nd.dir,    // fling direction = track forward at this node
+          exitIdx: vd.idx,
+          _nextBranch: 0,
         });
       }
     }
@@ -566,6 +586,39 @@ const ZPHYSICS = (() => {
     return { r: well.rThroat + (well.rPlatform - well.rThroat) * e, y: well.yThroat + (well.yBottom - well.yThroat) * e };
   }
 
+  // VORTEX DISC: flat spin (constant Y) that shrinks to centre then flings forward on exit.
+  function processVortexOrbit(b, dt) {
+    const V = b.inVortex; V.t += dt;
+    const vd = V.vd;
+    const u = Math.min(1, V.t / vd.duration);
+    const sstep = (x) => { const c = Math.max(0, Math.min(1, x)); return c*c*(3-2*c); };
+    // radius spirals inward: outer → 0 over first half, stays near 0 the rest
+    const rDecay = sstep(Math.min(1, u * 2));
+    const radius = V.r0 * (1 - rDecay * 0.96) + 0.15;
+    const ang = V.ang0 + vd.dir * vd.revolutions * 6.2832 * u;
+    const x = vd.cx + Math.cos(ang) * radius;
+    const z = vd.cz + Math.sin(ang) * radius;
+    const y = vd.cy;
+    // forward-step velocity
+    const u2 = Math.min(1, (V.t + dt) / vd.duration);
+    const rDecay2 = sstep(Math.min(1, u2 * 2));
+    const r2 = V.r0 * (1 - rDecay2 * 0.96) + 0.15;
+    const ang2 = V.ang0 + vd.dir * vd.revolutions * 6.2832 * u2;
+    const x2 = vd.cx + Math.cos(ang2) * r2, z2 = vd.cz + Math.sin(ang2) * r2;
+    b.body.setTranslation({ x, y, z }, true);
+    b.body.setLinvel({ x: (x2-x)/dt, y: 0, z: (z2-z)/dt }, true);
+    if (u >= 1) {
+      // fling the ball forward along the track direction with a speed burst
+      const ed = vd.exitDir;
+      const spd = 9;
+      b.body.setTranslation({ x: vd.cx, y: vd.cy, z: vd.cz }, true);
+      b.body.setLinvel({ x: ed.x*spd, y: ed.y*spd, z: ed.z*spd }, true);
+      b.hint = Math.max(0, vd.exitIdx - 2);
+      b.collider.setEnabled(true);
+      b.inVortex = null;
+    }
+  }
+
   function processWellOrbit(b, dt) {
     const W = b.inWell;
     W.t += dt;
@@ -641,6 +694,23 @@ const ZPHYSICS = (() => {
       if (b.inWell) {
         processWellOrbit(b, dt);
         continue;   // skip the rest of this ball's normal step entirely while spiraling
+      }
+      // VORTEX DISC: same scripted-orbit approach as the well, flat disc variant (no descent)
+      if (b.inVortex) {
+        processVortexOrbit(b, dt);
+        continue;
+      }
+      if (!b.inVortex && vortexDiscs.length) {
+        for (const vd of vortexDiscs) {
+          const dx = t.x - vd.cx, dz = t.z - vd.cz;
+          if (Math.hypot(dx, dz) < vd.rOuter && Math.abs(t.y - vd.cy) < 2.5) {
+            const ang0 = Math.atan2(dz, dx);
+            b.collider.setEnabled(false);
+            b.inVortex = { vd, ang0, t: 0, r0: Math.min(vd.rOuter * 0.9, Math.hypot(dx, dz) || vd.rOuter * 0.5) };
+            break;
+          }
+        }
+        if (b.inVortex) continue;
       }
       if (!b.branch && forks) {
         // DISTANCE-BASED ENTRY: hint-based checks miss fast balls (hint can jump ±40 nodes/frame,
@@ -1038,6 +1108,7 @@ const ZPHYSICS = (() => {
     getBumpers: () => bumpers,
     getSpinners: () => spinners,
     getPendulums: () => pendulums,
+    getVortexDiscs: () => vortexDiscs,
     step, snapshot, eliminate, checkFalls, leader,
     nearestNode,
     isReady: () => ready,
