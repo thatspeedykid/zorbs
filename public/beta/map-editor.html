@@ -570,8 +570,17 @@ function computePorts(pts, sectionStarts){
     indices.forEach((idx,end)=>{
       if(idx==null) return;
       const p = pts[idx]; if(!p) return;
-      const b = pts[Math.min(idx+1,pts.length-1)];
-      const dx=b.x-p.x, dz=b.z-p.z, l=Math.hypot(dx,dz)||1;
+      // tangent for the side-port spread. At the very last point there is no next
+      // point, so fall back to the previous point's direction — otherwise dx=dz=0
+      // and all three dots collapse onto the center (the "missing FINISH dots" bug).
+      let dx, dz;
+      if(idx+1 <= pts.length-1 && idx+1 !== idx){
+        const b = pts[idx+1]; dx=b.x-p.x; dz=b.z-p.z;
+      }
+      if(Math.hypot(dx||0,dz||0) < 1e-6){
+        const a = pts[Math.max(0,idx-1)]; dx=p.x-a.x; dz=p.z-a.z;
+      }
+      const l=Math.hypot(dx,dz)||1;
       const rx=dz/l, rz=-dx/l;
       // a branch peels off the END of a section; an ENTRY port (end===0) is the
       // boundary = end of the previous section, so it branches from si-1.
