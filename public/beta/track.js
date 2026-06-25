@@ -533,9 +533,12 @@ const ZTRACK = (() => {
     const platformEnd = nodes.findIndex(n => !n.isPlatform);
     const platStart = platformEnd < 0 ? 0 : platformEnd;
 
-    // FORKS: build split routes as a post-pass (deterministic via the same seed stream)
+    // FORKS: build split routes as a post-pass (deterministic via the same seed stream).
+    // Custom maps build their OWN forks from editor branches below — the seeded fork builder
+    // (wells/sorters/vortex set-pieces) must NOT run, or it scans the custom centerline for
+    // 'split' zones and injects gravity wells/vortex cones the author never placed.
     let forks = [], forkAtIdx = new Map();
-    if (_ZFORK) {
+    if (_ZFORK && !_isCustom) {
       const rng = mulberry32((seed ^ 0x9e3779b9) >>> 0);
       const built = _ZFORK.buildForks(nodes, platStart, rng);
       forks = built.forks; forkAtIdx = built.forkAtIdx;

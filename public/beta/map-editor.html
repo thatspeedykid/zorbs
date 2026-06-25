@@ -583,11 +583,14 @@ function computePorts(pts, sectionStarts){
       const b = pts[Math.min(idx+1,pts.length-1)];
       const dx=b.x-p.x, dz=b.z-p.z, l=Math.hypot(dx,dz)||1;
       const rx=dz/l, rz=-dx/l;
+      // a branch peels off the END of a section; an ENTRY port (end===0) is the
+      // boundary = end of the previous section, so it branches from si-1.
+      const branchFrom = end===1 ? si : Math.max(0, si-1);
       // 3 ports: left edge, center, right edge
       [-0.7, 0, 0.7].forEach((off,pi)=>{
         const wx=p.x+rx*p.w*off, wz=p.z+rz*p.w*off;
         const s=W2S(wx,wz);
-        ports.push({si,pi,end,sx:s.x,sy:s.y,wx,wz});
+        ports.push({si,pi,end,branchFrom,sx:s.x,sy:s.y,wx,wz});
       });
     });
   }
@@ -597,14 +600,22 @@ let _cachedPorts = [];
 
 function drawPorts(pts, sectionStarts){
   _cachedPorts = computePorts(pts, sectionStarts);
-  const PR = 5.5*devicePixelRatio;
+  // while a track piece is being dragged (or armed for click-place) the dots become
+  // bigger, glowing drop-targets so it's obvious you can drop onto them.
+  const dragging = (_palDrag && _palDrag.paltype==='track') || !!_pendingKind;
+  const PR = (dragging ? 8 : 5.5)*devicePixelRatio;
   _cachedPorts.forEach(pt=>{
-    const hov = _hoverPort && _hoverPort.si===pt.si && _hoverPort.pi===pt.pi;
-    const hasBranch = branches.some(b=>b.fromSection===pt.si);
+    const hov = _hoverPort && _hoverPort.si===pt.si && _hoverPort.pi===pt.pi && _hoverPort.end===pt.end;
+    const hasBranch = branches.some(b=>b.fromSection===pt.branchFrom);
+    // glow halo when dragging
+    if(dragging){
+      ctx.beginPath(); ctx.arc(pt.sx,pt.sy,PR+(hov?6:3)*devicePixelRatio,0,7);
+      ctx.fillStyle = hov ? 'rgba(46,194,126,0.30)' : 'rgba(46,194,126,0.12)'; ctx.fill();
+    }
     ctx.beginPath(); ctx.arc(pt.sx,pt.sy,PR,0,7);
-    ctx.fillStyle = hov ? 'rgba(46,194,126,0.9)' : hasBranch ? 'rgba(204,119,255,0.7)' : 'rgba(46,194,126,0.35)';
+    ctx.fillStyle = hov ? 'rgba(46,194,126,0.95)' : hasBranch ? 'rgba(204,119,255,0.7)' : dragging ? 'rgba(46,194,126,0.6)' : 'rgba(46,194,126,0.35)';
     ctx.strokeStyle = hov ? '#2ec27e' : hasBranch ? '#cc77ff' : 'rgba(46,194,126,0.7)';
-    ctx.lineWidth = (hov?2:1.2)*devicePixelRatio;
+    ctx.lineWidth = (hov?2.5:1.2)*devicePixelRatio;
     ctx.fill(); ctx.stroke();
     // plus icon
     ctx.strokeStyle = hov ? '#fff' : hasBranch ? '#fff' : 'rgba(46,194,126,0.9)';
@@ -616,13 +627,15 @@ function drawPorts(pts, sectionStarts){
 }
 
 function hitPort(cx,cz){
-  // radius in world units: port is 5.5px on screen, hit radius = 8px
-  const hitR = 8 / view.scale;
+  // hit radius in world units — generous while dragging so dots are easy to target
+  const dragging = (_palDrag && _palDrag.paltype==='track') || !!_pendingKind;
+  const hitR = (dragging ? 14 : 8) / view.scale;
+  let best=null, bestD=Infinity;
   for(const pt of _cachedPorts){
     const d=Math.hypot(cx-pt.wx, cz-pt.wz);
-    if(d<hitR) return pt;
+    if(d<hitR && d<bestD){ bestD=d; best=pt; }
   }
-  return null;
+  return best;
 }
 
 // ---- FIT / ZOOM ----
@@ -727,7 +740,10 @@ cv.addEventListener('dragover', e=>{
   const c=S2C(e.clientX,e.clientY);
   if(!_path) buildPath();
   if(_palDrag&&_palDrag.paltype==='track'){
-    _hoverInsert=nearestInsertIdx(c.x,c.z); _hoverT=-1;
+    // hovering a port dot → branch placement; otherwise normal main-track insert
+    const pt=hitPort(c.x,c.z);
+    if(pt){ _hoverPort={si:pt.si,pi:pt.pi,end:pt.end}; _hoverInsert=-1; _hoverT=-1; }
+    else { _hoverPort=null; _hoverInsert=nearestInsertIdx(c.x,c.z); _hoverT=-1; }
   } else if(_palDrag&&_palDrag.paltype==='obs'){
     const near=nearestPathPoint(c.x,c.z);
     _hoverT=near?pathIdxToT(near.idx):-1; _hoverInsert=-1;
@@ -738,10 +754,10 @@ cv.addEventListener('dragover', e=>{
 // `drop`, so nulling the active-drag state on leave dropped the very first placement (the
 // drop then had no kind and silently no-op'd → "place twice" bug). Only clear the hover
 // cursor here; _palDrag is cleared on `dragend` (a real end of the gesture) instead.
-cv.addEventListener('dragleave',()=>{ _hoverInsert=-1; _hoverT=-1; draw(); });
+cv.addEventListener('dragleave',()=>{ _hoverInsert=-1; _hoverT=-1; _hoverPort=null; draw(); });
 // Trust the in-page JS drag state first (reliable same-page); dataTransfer custom types are
 // flaky across browsers and were the other half of the place-twice bug.
-window.addEventListener('dragend',()=>{ _palDrag=null; _hoverInsert=-1; _hoverT=-1; draw(); });
+window.addEventListener('dragend',()=>{ _palDrag=null; _hoverInsert=-1; _hoverT=-1; _hoverPort=null; draw(); });
 cv.addEventListener('drop',e=>{
   e.preventDefault();
   const paltype=(_palDrag&&_palDrag.paltype)||e.dataTransfer.getData('paltype')||'';
@@ -750,8 +766,9 @@ cv.addEventListener('drop',e=>{
   if(!kind){ draw(); return; }
   const c=S2C(e.clientX,e.clientY);
   if(paltype==='track'){
-    const at=nearestInsertIdx(c.x,c.z);
-    addPiece(kind,at);
+    const pt=hitPort(c.x,c.z);
+    if(pt){ _hoverPort=null; dropPieceOnPort(pt,kind); }
+    else { const at=nearestInsertIdx(c.x,c.z); addPiece(kind,at); }
   } else if(paltype==='obs'){
     const near=nearestPathPoint(c.x,c.z);
     if(near&&near.idx>=(_path.platEnd||0)){
@@ -776,10 +793,12 @@ cv.addEventListener('pointerdown',e=>{
   if(!e.shiftKey){
     const pt=hitPort(c.x,c.z);
     if(pt){
-      // if branch already exists on this section, select it; otherwise create new
-      const existing=branches.findIndex(b=>b.fromSection===pt.si);
+      // if a pending palette piece is armed, drop it onto this port as a branch
+      if(_pendingKind){ const k=_pendingKind; _pendingKind=null; _hoverInsert=-1; updateModeHint(); dropPieceOnPort(pt,k); return; }
+      // if branch already exists from here, select it; otherwise create new
+      const existing=branches.findIndex(b=>b.fromSection===pt.branchFrom);
       if(existing>=0) select('branch',existing);
-      else addBranch(pt.si);
+      else addBranch(pt.branchFrom);
       return;
     }
   }
@@ -990,6 +1009,19 @@ function addBranchPiece(bi, kind){
   const p=byKind(kind); if(!p) return;
   branches[bi].sections.push(Object.assign({kind},JSON.parse(JSON.stringify(p.def))));
   pushUndo(); renderSelPanel(); draw();
+}
+// Drop a track piece onto a port dot: find (or create) the branch from that
+// section, append the piece, and select the branch.
+function dropPieceOnPort(pt, kind){
+  const p=byKind(kind); if(!p) return;
+  const from=pt.branchFrom;
+  let bi=branches.findIndex(b=>b.fromSection===from);
+  if(bi<0){
+    branches.push({id:Date.now(), fromSection:from, end:'rejoin', sections:[], obstacles:[]});
+    bi=branches.length-1;
+  }
+  branches[bi].sections.push(Object.assign({kind},JSON.parse(JSON.stringify(p.def))));
+  pushUndo(); select('branch',bi);
 }
 function removeBranchPiece(bi, si){
   branches[bi].sections.splice(si,1);
