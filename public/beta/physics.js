@@ -750,7 +750,14 @@ const ZPHYSICS = (() => {
           // so a ball can be resolved to "stay on main" once — guard against re-binning.
           if (f.keepMain && b._forkDone && b._forkDone[f.id]) continue;
           const commitIdx = (f.throatIdx != null) ? f.throatIdx : f.splitIdx;
-          if (b.hint >= commitIdx - 1 && b.hint <= commitIdx + 1) {
+          // Custom (keepMain) forks edge-trigger the moment the ball reaches the split and
+          // stay armed past it — a fast ball's hint can jump tens of nodes in one frame and
+          // skip a tight ±1 window entirely, which left everyone uncommitted and running
+          // straight down main (the "splits don't actually split" bug). Seeded forks
+          // (sorter/well/fan) keep their original exact ±1 throat window untouched.
+          const within = f.keepMain ? (b.hint >= commitIdx - 1)
+                                    : (b.hint >= commitIdx - 1 && b.hint <= commitIdx + 1);
+          if (within) {
             const sn = nodes[commitIdx];
             const latv = (t.x - sn.pos.x)*sn.right.x + (t.z - sn.pos.z)*sn.right.z;
             const order = f.branchOrder;
@@ -761,15 +768,28 @@ const ZPHYSICS = (() => {
               // be wider than the throat's own narrow visual halfW — fall back to halfW for
               // legacy fan forks where the two are the same thing.
               const hw = sn.commitHalfW || sn.halfW || 7;
-              let frac = (latv / hw + 1) / 2;            // 0 (far left) .. 1 (far right)
+              const latFrac = Math.max(0, Math.min(0.99999, (latv / hw + 1) / 2));
+              let frac = latFrac;                        // 0 (far left) .. 1 (far right)
+              if (f.keepMain) {
+                // DISTRIBUTE the field across every lane. Pure lateral binning fails for
+                // authored splits because the pack funnels to the centre before the fork,
+                // so almost everyone lands in the middle (main) lane and the branches get
+                // no traffic. Blend a stable per-ball roll (mostly) with lateral position
+                // (a little lean) so marbles genuinely fan out across main + all branches,
+                // deterministically (no Math.random — same field every replay of a seed).
+                const roll = ((b._id * 2654435761) >>> 0) / 4294967296;
+                frac = 0.82 * roll + 0.18 * latFrac;
+              }
               frac = Math.max(0, Math.min(0.99999, frac));
               chosen = order[Math.floor(frac * order.length)];
             } else {
               chosen = latv < 0 ? f.id+'_A' : f.id+'_B';   // legacy two-lane fallback
             }
-            // keepMain forks include a '__main__' sentinel lane: a ball binned there simply
-            // continues on the main centerline (no branch commit, hint untouched).
-            if (f.keepMain && !branchNodes[chosen]) {
+            // Stay on main when binned to the '__main__' sentinel, OR (keepMain only) when
+            // we armed late and the ball is already well past the split — don't yank it
+            // backward onto a branch start it physically can't reach.
+            const tooLate = f.keepMain && b.hint > commitIdx + 12;
+            if (tooLate || (f.keepMain && !branchNodes[chosen])) {
               b._forkDone = b._forkDone || {}; b._forkDone[f.id] = true;
               break;
             }
