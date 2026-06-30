@@ -674,9 +674,12 @@ const ZTRACK = (() => {
           }
         }
         // Insert the main sentinel in the MIDDLE of the lane order so the main path stays
-        // centered and authored branches peel off to either side.
+        // centered and authored branches peel off to either side. EXCEPT a 2-way split
+        // (noMiddle) has no straight-through lane, so every marble bins to a real branch.
+        const noMiddle = !!customPlan.noMiddle;
         const mid = Math.floor(branchIds.length / 2);
-        const branchOrder = branchIds.slice(0, mid).concat(['__main__'], branchIds.slice(mid));
+        const branchOrder = noMiddle ? branchIds.slice()
+          : branchIds.slice(0, mid).concat(['__main__'], branchIds.slice(mid));
         const fork = { id: forkId, splitIdx: forkNodeIdx, flavor: 'divergent', keepMain: true,
           rejoin: anyRejoin, branchRejoin, rejoinIdx, branches, branchOrder, laneCount: brs.length + 1,
           ends: branchIds.map(bid => branches[bid][branches[bid].length-1] || forkNode),

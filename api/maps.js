@@ -210,6 +210,7 @@ function sanitizeDraft(raw) {
     description: clean(raw.description, 140),
     theme: clean(raw.theme, 20),
     thumb: sanitizeThumb(raw.thumb),
+    noMiddle: raw.noMiddle === true,
     sections, obstacles, branches,
   };
 }
@@ -249,6 +250,7 @@ function sanitizeMap(raw) {
     theme: clean(raw.theme, 20),
     tags: Array.isArray(raw.tags) ? raw.tags.slice(0, 6).map(t => clean(t, 16)) : [],
     thumb: sanitizeThumb(raw.thumb),
+    noMiddle: raw.noMiddle === true,
     sections, obstacles, branches,
   };
 }

@@ -114,18 +114,48 @@
       <div class="bases">
         <div class="baseCard" data-base="single">
           <h3>Single path</h3>
-          <p>One straight run from start to finish. Add any pieces you like.</p>
+          <p>One run from start to finish. Add any pieces you like.</p>
           <svg viewBox="0 0 200 120"><rect x="90" y="10" width="20" height="100" rx="4" fill="#1c2742" stroke="#39c8e0"/></svg>
         </div>
         <div class="baseCard" data-base="split3">
           <h3>Split into 3</h3>
-          <p>A trunk that splits into Left / Middle / Right lanes — fill each with any track, then rejoin or give it its own finish.</p>
+          <p>Trunk → Left / Middle / Right lanes.</p>
           <svg viewBox="0 0 200 120">
             <rect x="90" y="6" width="20" height="34" rx="3" fill="#1c2742" stroke="#39c8e0"/>
             <rect x="40" y="46" width="20" height="68" rx="3" fill="#16261c" stroke="#2ec27e"/>
             <rect x="90" y="46" width="20" height="68" rx="3" fill="#1a2240" stroke="#5b7cff"/>
             <rect x="140" y="46" width="20" height="68" rx="3" fill="#261a14" stroke="#ff7a45"/>
             <path d="M100 40 L50 46 M100 40 L100 46 M100 40 L150 46" stroke="#39c8e0" fill="none"/>
+          </svg>
+        </div>
+        <div class="baseCard" data-base="split2">
+          <h3>Split into 2</h3>
+          <p>Trunk → Left / Right lanes (no straight middle).</p>
+          <svg viewBox="0 0 200 120">
+            <rect x="90" y="6" width="20" height="34" rx="3" fill="#1c2742" stroke="#39c8e0"/>
+            <rect x="52" y="46" width="20" height="68" rx="3" fill="#16261c" stroke="#2ec27e"/>
+            <rect x="128" y="46" width="20" height="68" rx="3" fill="#261a14" stroke="#ff7a45"/>
+            <path d="M100 40 L62 46 M100 40 L138 46" stroke="#39c8e0" fill="none"/>
+          </svg>
+        </div>
+        <div class="baseCard" data-base="splitML">
+          <h3>Middle + Left</h3>
+          <p>Main keeps going straight; one lane branches left.</p>
+          <svg viewBox="0 0 200 120">
+            <rect x="90" y="6" width="20" height="34" rx="3" fill="#1c2742" stroke="#39c8e0"/>
+            <rect x="52" y="46" width="20" height="68" rx="3" fill="#16261c" stroke="#2ec27e"/>
+            <rect x="90" y="46" width="20" height="68" rx="3" fill="#1a2240" stroke="#5b7cff"/>
+            <path d="M100 40 L62 46 M100 40 L100 46" stroke="#39c8e0" fill="none"/>
+          </svg>
+        </div>
+        <div class="baseCard" data-base="splitMR">
+          <h3>Middle + Right</h3>
+          <p>Main keeps going straight; one lane branches right.</p>
+          <svg viewBox="0 0 200 120">
+            <rect x="90" y="6" width="20" height="34" rx="3" fill="#1c2742" stroke="#39c8e0"/>
+            <rect x="90" y="46" width="20" height="68" rx="3" fill="#1a2240" stroke="#5b7cff"/>
+            <rect x="128" y="46" width="20" height="68" rx="3" fill="#261a14" stroke="#ff7a45"/>
+            <path d="M100 40 L100 46 M100 40 L138 46" stroke="#39c8e0" fill="none"/>
           </svg>
         </div>
       </div>
@@ -203,9 +233,18 @@ const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
 let view = { panx:0, pany:0, scale:6 };
 
 // ---- LANE HELPERS ----
-function laneList(){ return model.base==='split3' ? ['trunk','left','middle','right'] : ['main']; }
+// Each split type declares which lanes it has. 'middle' = the main line continuing
+// straight through the split; 'left'/'right' are side branches. split2 has NO middle
+// (a true 2-way), so marbles only ever bin left or right.
+const LANES_FOR = {
+  single:['main'], split3:['trunk','left','middle','right'], split2:['trunk','left','right'],
+  splitML:['trunk','left','middle'], splitMR:['trunk','middle','right'],
+};
+function laneListFor(type){ return LANES_FOR[type] || ['main']; }
+function laneList(){ return laneListFor(model.base); }
 function laneLabel(l){ return {trunk:'Trunk',left:'◀ Left',middle:'Middle',right:'Right ▶',main:'Main'}[l]||l; }
 function laneArr(l){ return model.lanes[l] || (model.lanes[l]=[]); }
+function mkPiece(kind){ return Object.assign({kind},clone(byKind(kind).def)); }
 
 // ---- BASE SETUP ----
 function startBase(base){
@@ -213,9 +252,12 @@ function startBase(base){
     model = { base:'single', lanes:{ main:[] }, laneEnd:{} };
     activeLane='main';
   } else {
-    // a trunk straight anchors the split; lanes start empty for the author to fill
-    model = { base:'split3', lanes:{ trunk:[ Object.assign({kind:'straight'},clone(byKind('straight').def)) ], left:[], middle:[], right:[] }, laneEnd:{ left:'rejoin', right:'rejoin' } };
-    activeLane='left';
+    // a trunk straight anchors the split; side lanes start empty for the author to fill.
+    // split2 has no middle, so it needs a 2-piece trunk to be a valid (>=2 section) main line.
+    const lanes={ trunk: base==='split2' ? [mkPiece('straight'),mkPiece('straight')] : [mkPiece('straight')] };
+    laneListFor(base).forEach(l=>{ if(l!=='trunk') lanes[l]=[]; });
+    model = { base, lanes, laneEnd:{ left:'rejoin', right:'rejoin' } };
+    activeLane = base==='splitMR' ? 'right' : 'left';
   }
   passObstacles=[]; openPiece=-1; currentDraftId=null;
   undoStack=[]; redoStack=[];
@@ -278,35 +320,40 @@ function buildPreview(){
     finishPt=r.pts[r.pts.length-1]||{x:0,z:0};
     return {paths,finishPt};
   }
-  // split3: trunk, then 3 lanes from the trunk end
+  // split variants: trunk, then the lanes this type has, fanning out PARALLEL to the trunk
+  // (matches the engine), so the split reads as a widening corridor — no angled wedge gaps.
+  const lanes=laneList();
   const tr=layLane(laneArr('trunk'),0,0,0,'trunk');
   paths.push({lane:'trunk',pts:tr.pts});
   const e=tr.end;
   const rx=Math.cos(e.ang), rz=-Math.sin(e.ang);   // right-hand normal
-  const mid=layLane(laneArr('middle'),e.x,e.z,e.ang,'middle');
-  paths.push({lane:'middle',pts:mid.pts});
-  // lanes ease out PARALLEL to the trunk into their own channels (matches the engine's
-  // fan-out), so the split reads as a widening corridor — not angled wedges with gaps.
-  const offL=laneArr('left').length, offR=laneArr('right').length;
-  if(offL){ const L=layLane(laneArr('left'), e.x+rx*WIDTH*-0.95, e.z+rz*WIDTH*-0.95, e.ang, 'left'); paths.push({lane:'left',pts:L.pts}); }
-  if(offR){ const R=layLane(laneArr('right'), e.x+rx*WIDTH* 0.95, e.z+rz*WIDTH* 0.95, e.ang, 'right'); paths.push({lane:'right',pts:R.pts}); }
-  const mpts=mid.pts.length?mid.pts:tr.pts;
-  finishPt=mpts[mpts.length-1]||{x:0,z:0};
+  let mainEnd=tr.pts;
+  if(lanes.includes('middle')){
+    const mid=layLane(laneArr('middle'),e.x,e.z,e.ang,'middle');
+    paths.push({lane:'middle',pts:mid.pts});
+    if(mid.pts.length) mainEnd=mid.pts;
+  }
+  if(lanes.includes('left') && laneArr('left').length){ const L=layLane(laneArr('left'), e.x+rx*WIDTH*-0.95, e.z+rz*WIDTH*-0.95, e.ang, 'left'); paths.push({lane:'left',pts:L.pts}); }
+  if(lanes.includes('right') && laneArr('right').length){ const R=layLane(laneArr('right'), e.x+rx*WIDTH* 0.95, e.z+rz*WIDTH* 0.95, e.ang, 'right'); paths.push({lane:'right',pts:R.pts}); }
+  finishPt=mainEnd[mainEnd.length-1]||{x:0,z:0};
   return {paths,finishPt};
 }
 
 // ---- EXPORT to engine shape ----
 function exportData(){
   if(model.base==='single'){
-    return { sections: clone(laneArr('main')), branches: [] };
+    return { sections: clone(laneArr('main')), branches: [], noMiddle:false };
   }
-  const trunk=clone(laneArr('trunk')), middle=clone(laneArr('middle'));
+  const lanes=laneList();
+  const trunk=clone(laneArr('trunk'));
+  const middle=lanes.includes('middle')?clone(laneArr('middle')):[];
   const sections=trunk.concat(middle);
   const fromSection=Math.max(0, trunk.length-1);
   const branches=[];
-  if(laneArr('left').length)  branches.push({ id:1, fromSection, side:-1, end:model.laneEnd.left==='finish'?'finish':'rejoin', sections:clone(laneArr('left')), obstacles:[] });
-  if(laneArr('right').length) branches.push({ id:2, fromSection, side: 1, end:model.laneEnd.right==='finish'?'finish':'rejoin', sections:clone(laneArr('right')), obstacles:[] });
-  return { sections, branches };
+  if(lanes.includes('left')  && laneArr('left').length)  branches.push({ id:1, fromSection, side:-1, end:model.laneEnd.left==='finish'?'finish':'rejoin', sections:clone(laneArr('left')), obstacles:[] });
+  if(lanes.includes('right') && laneArr('right').length) branches.push({ id:2, fromSection, side: 1, end:model.laneEnd.right==='finish'?'finish':'rejoin', sections:clone(laneArr('right')), obstacles:[] });
+  // split2 = true 2-way, no straight middle lane: marbles only ever bin left/right.
+  return { sections, branches, noMiddle: model.base==='split2' };
 }
 
 // ---- IMPORT (reconstruct lanes from a saved map) ----
@@ -320,9 +367,17 @@ function importMap(d){
     const trunk=sections.slice(0, fromSection+1);
     const middle=sections.slice(fromSection+1);
     const left=sideBranches.find(b=>b.side===-1), right=sideBranches.find(b=>b.side===1);
-    model={ base:'split3',
-      lanes:{ trunk, middle, left:left?clone(left.sections):[], right:right?clone(right.sections):[] },
-      laneEnd:{ left:left&&left.end==='finish'?'finish':'rejoin', right:right&&right.end==='finish'?'finish':'rejoin' } };
+    // figure out which split type this was from which sides exist (+ the noMiddle flag)
+    let base;
+    if(d.noMiddle) base='split2';
+    else if(left&&right) base='split3';
+    else if(left) base='splitML';
+    else base='splitMR';
+    const lanes={ trunk };
+    if(laneListFor(base).includes('middle')) lanes.middle=middle;
+    if(left)  lanes.left=clone(left.sections);
+    if(right) lanes.right=clone(right.sections);
+    model={ base, lanes, laneEnd:{ left:left&&left.end==='finish'?'finish':'rejoin', right:right&&right.end==='finish'?'finish':'rejoin' } };
     activeLane='trunk';
   } else {
     model={ base:'single', lanes:{ main:sections }, laneEnd:{} };
@@ -526,13 +581,13 @@ function validate(){
 
 // ---- MAP DATA ----
 function currentMap(){
-  const {sections,branches}=exportData();
+  const {sections,branches,noMiddle}=exportData();
   return {
     name:document.getElementById('m-name').value.trim()||'Untitled Track',
     description:document.getElementById('m-desc').value.trim(),
     difficulty, theme:document.getElementById('m-theme').value,
     author:author||'anon',
-    sections, branches, obstacles:passObstacles,
+    sections, branches, obstacles:passObstacles, noMiddle:!!noMiddle,
   };
 }
 function makeThumb(){
