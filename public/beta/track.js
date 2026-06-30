@@ -513,17 +513,31 @@ const ZTRACK = (() => {
   // Mirrors the core of buildCenterline but with no platform or seeded randomness.
   function buildCustomBranchNodes(startNode, sections, branchId, side) {
     const nodes = [];
-    // Side-aware start (matches the editor preview): left branches (side<0) peel off the
-    // left edge, right branches off the right edge, with the initial heading angled outward
-    // so two branches at the same fork clearly diverge instead of starting coincident.
     side = side || 0;
-    const sr = startNode.right;
-    let pos = { x: startNode.pos.x + sr.x*startNode.halfW*side*0.6, y: startNode.pos.y,
-                z: startNode.pos.z + sr.z*startNode.halfW*side*0.6 };
+    let pos = { x: startNode.pos.x, y: startNode.pos.y, z: startNode.pos.z };
     let heading = norm({ x: startNode.dir.x, y: startNode.dir.y, z: startNode.dir.z });
+    // FAN-OUT: instead of angling the lane off a single point (which tears an empty wedge
+    // between lanes and drops balls), ease this lane sideways into its own channel while
+    // staying PARALLEL to the trunk. Parallel lanes have adjacent/overlapping floors, so the
+    // split reads as a corridor widening into channels — no gaps, nothing to fall through.
+    // The trunk is widened over the same span (in the fork builder) so the floor is solid.
     if (side) {
-      const a = side*0.5, c = Math.cos(a), s = Math.sin(a);
-      heading = norm({ x: heading.x*c - heading.z*s, y: heading.y, z: heading.x*s + heading.z*c });
+      const FAN = 20;
+      const targetOff = side * WIDTH * 0.95;       // final channel offset from trunk centerline
+      for (let k = 1; k <= FAN; k++) {
+        const e0 = k / FAN, ease = e0*e0*(3-2*e0); // smoothstep 0..1
+        heading.y += ((-(DROP_PER_STEP)/STEP) - heading.y) * 0.10; heading = norm(heading);
+        pos = add(pos, scale(heading, STEP));
+        const right = norm(cross(heading, worldUp));
+        const up = norm(cross(right, heading));
+        const off = targetOff * ease;
+        nodes.push({ pos:{ x: pos.x + right.x*off, y: pos.y, z: pos.z + right.z*off },
+          dir:{x:heading.x,y:heading.y,z:heading.z}, right, up,
+          halfW: WIDTH, bank:0, kind:'fork', tunnel:false, branchId });
+      }
+      // hand the authored pieces a start position already shifted into the channel
+      const right = norm(cross(heading, worldUp));
+      pos = { x: pos.x + right.x*targetOff, y: pos.y, z: pos.z + right.z*targetOff };
     }
     let turn = 0;
     let funnelMin = 0.45, funnelLen = 1;
@@ -669,10 +683,24 @@ const ZTRACK = (() => {
           end: rejoinNode };
         forks.push(fork);
         forkAtIdx.set(forkNodeIdx, fork);
-        // NOTE: inner junction walls are no longer opened by guessing a peel direction.
-        // The outer-perimeter wall pass (buildOccupancy + buildMesh) drops any wall edge
-        // that has other track floor beyond it, so junction seams open automatically and
-        // only the true outside of the whole network keeps its walls.
+        // WIDEN THE TRUNK over the fan-out span so its floor reaches under the lanes as they
+        // ease apart — no wedge gap, nothing to fall through. The lanes fan to ~WIDTH*0.95 on
+        // each side over ~20 nodes, so the corridor needs to roughly double through that span.
+        // Easing 1->0 after the fan blends back to the normal main width.
+        const FAN = 20, sideCount = branchIds.length;
+        if (sideCount) {
+          for (let k = 0; k <= FAN + 6; k++) {
+            const nd = nodes[forkNodeIdx + k]; if (!nd) break;
+            if (nd._baseHalfW == null) nd._baseHalfW = nd.halfW;
+            const e0 = Math.min(1, k / FAN);                 // 0..1 across the fan
+            const ease = e0 * e0 * (3 - 2 * e0);
+            const grow = 1 + 0.95 * ease;                    // up to ~1.95x at full spread
+            nd.halfW = Math.max(nd.halfW, nd._baseHalfW * grow);
+          }
+        }
+        // NOTE: inner junction walls are opened by the outer-perimeter wall pass
+        // (buildOccupancy + buildMesh) — any wall edge with other track floor beyond it is
+        // dropped, so the widened trunk and the parallel lanes merge into one clean corridor.
       }
     }
 

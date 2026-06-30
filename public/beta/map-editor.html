@@ -285,9 +285,11 @@ function buildPreview(){
   const rx=Math.cos(e.ang), rz=-Math.sin(e.ang);   // right-hand normal
   const mid=layLane(laneArr('middle'),e.x,e.z,e.ang,'middle');
   paths.push({lane:'middle',pts:mid.pts});
+  // lanes ease out PARALLEL to the trunk into their own channels (matches the engine's
+  // fan-out), so the split reads as a widening corridor — not angled wedges with gaps.
   const offL=laneArr('left').length, offR=laneArr('right').length;
-  if(offL){ const L=layLane(laneArr('left'), e.x+rx*WIDTH*-0.6, e.z+rz*WIDTH*-0.6, e.ang-0.5, 'left'); paths.push({lane:'left',pts:L.pts}); }
-  if(offR){ const R=layLane(laneArr('right'), e.x+rx*WIDTH* 0.6, e.z+rz*WIDTH* 0.6, e.ang+0.5, 'right'); paths.push({lane:'right',pts:R.pts}); }
+  if(offL){ const L=layLane(laneArr('left'), e.x+rx*WIDTH*-0.95, e.z+rz*WIDTH*-0.95, e.ang, 'left'); paths.push({lane:'left',pts:L.pts}); }
+  if(offR){ const R=layLane(laneArr('right'), e.x+rx*WIDTH* 0.95, e.z+rz*WIDTH* 0.95, e.ang, 'right'); paths.push({lane:'right',pts:R.pts}); }
   const mpts=mid.pts.length?mid.pts:tr.pts;
   finishPt=mpts[mpts.length-1]||{x:0,z:0};
   return {paths,finishPt};
