@@ -676,7 +676,9 @@ const ZTRACK = (() => {
         // Insert the main sentinel in the MIDDLE of the lane order so the main path stays
         // centered and authored branches peel off to either side. EXCEPT a 2-way split
         // (noMiddle) has no straight-through lane, so every marble bins to a real branch.
-        const noMiddle = !!customPlan.noMiddle;
+        // Read it PER GROUP (off this group's branches) so different splits in one track can be
+        // 2-way or 3-way independently; fall back to the map-level flag for older maps.
+        const noMiddle = brs.some(b => b.noMiddle) || !!customPlan.noMiddle;
         const mid = Math.floor(branchIds.length / 2);
         const branchOrder = noMiddle ? branchIds.slice()
           : branchIds.slice(0, mid).concat(['__main__'], branchIds.slice(mid));

@@ -6,12 +6,12 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-<title>ZORBS — Map Editor (v0.5)</title>
+<title>ZORBS — Map Editor (v0.6)</title>
 <style>
   :root{
     --bg:#0a0e1a; --panel:#121829; --panel2:#0e1322; --line:#23304d;
     --txt:#dfe8ff; --dim:#7f8cad; --accent:#39c8e0; --accent2:#ff8800;
-    --good:#2ec27e; --bad:#ff4d5e; --mid:#5b7cff; --left:#2ec27e; --right:#ff7a45;
+    --good:#2ec27e; --bad:#ff4d5e; --mid:#5b7cff; --left:#2ec27e; --right:#ff7a45; --splitc:#ffcc00;
   }
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font-family:system-ui,Segoe UI,Roboto,sans-serif;overflow:hidden}
@@ -25,15 +25,17 @@
   #top button.pri{background:var(--accent);color:#04141a;border:0;font-weight:700}
   #top button:disabled{opacity:.4;cursor:not-allowed}
   #main{display:flex;height:calc(100% - 50px)}
-  #palette{width:170px;background:var(--panel);border-right:1px solid var(--line);padding:10px;overflow-y:auto}
+  #palette{width:182px;background:var(--panel);border-right:1px solid var(--line);padding:10px;overflow-y:auto}
   #stage{flex:1;position:relative;background:radial-gradient(circle at 50% 40%,#0d1326,#070a13)}
   #cv{width:100%;height:100%;display:block;touch-action:none}
-  #side{width:312px;background:var(--panel);border-left:1px solid var(--line);padding:12px;overflow-y:auto}
+  #side{width:330px;background:var(--panel);border-left:1px solid var(--line);padding:12px;overflow-y:auto}
   .sectitle{font-size:10px;letter-spacing:1px;color:var(--dim);margin:2px 0 8px}
-  .palItem{display:flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:6px;cursor:pointer;user-select:none}
+  .palItem{display:flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:6px;cursor:grab;user-select:none}
   .palItem:hover{border-color:var(--accent)}
   .palItem:active{transform:scale(.98)}
-  .sw{width:18px;height:18px;border-radius:5px;flex:0 0 auto}
+  .palItem.split{border-style:dashed;border-color:var(--splitc)}
+  .palItem.split:hover{border-color:#ffe066}
+  .sw{width:18px;height:18px;border-radius:5px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:11px}
   .palItem .nm{font-size:12px;font-weight:600}
   .palItem .ds{font-size:10px;color:var(--dim)}
   .field{margin-bottom:9px}
@@ -43,41 +45,38 @@
   .seg{display:flex;gap:4px}
   .seg button{flex:1;background:var(--panel2);border:1px solid var(--line);color:var(--dim);border-radius:7px;padding:6px;font-size:11px}
   .seg button.on{background:var(--accent);color:#04141a;border-color:var(--accent);font-weight:700}
-  .tabs{display:flex;gap:4px;margin-bottom:10px;flex-wrap:wrap}
-  .tab{flex:1;min-width:60px;background:var(--panel2);border:1px solid var(--line);color:var(--dim);border-radius:8px;padding:8px 4px;font-size:11px;font-weight:600;text-align:center}
+  .tabs{display:flex;gap:4px;margin:6px 0}
+  .tab{flex:1;background:var(--panel2);border:1px solid var(--line);color:var(--dim);border-radius:7px;padding:6px 4px;font-size:11px;font-weight:600;text-align:center}
   .tab.on{color:#04141a;font-weight:800}
-  .tab.t-trunk.on,.tab.t-main.on{background:var(--accent);border-color:var(--accent)}
-  .tab.t-middle.on{background:var(--mid);border-color:var(--mid)}
   .tab.t-left.on{background:var(--left);border-color:var(--left)}
   .tab.t-right.on{background:var(--right);border-color:var(--right)}
-  .pieceRow{border:1px solid var(--line);border-radius:8px;margin-bottom:6px;overflow:hidden}
-  .pieceHd{display:flex;align-items:center;gap:7px;padding:7px 9px;cursor:pointer;background:var(--panel2)}
-  .pieceHd .nm{flex:1;font-size:12px}
-  .pieceHd .mini{font-size:10px;color:var(--dim)}
-  .pieceHd button{background:transparent;border:0;color:var(--dim);font-size:13px;padding:2px 5px}
-  .pieceHd button:hover{color:var(--txt)}
-  .pieceBody{padding:8px 10px;background:var(--panel2);border-top:1px solid var(--line)}
+  .addhere{font-size:10px;color:var(--accent);margin:0 0 6px}
+  .item{border:1px solid var(--line);border-radius:8px;margin-bottom:6px;overflow:hidden}
+  .item.sel{border-color:var(--accent)}
+  .item.split{border-color:var(--splitc)}
+  .itemHd{display:flex;align-items:center;gap:7px;padding:7px 9px;cursor:pointer;background:var(--panel2)}
+  .itemHd .nm{flex:1;font-size:12px}
+  .itemHd .mini{font-size:10px;color:var(--dim)}
+  .itemHd button{background:transparent;border:0;color:var(--dim);font-size:13px;padding:2px 5px}
+  .itemHd button:hover{color:var(--txt)}
+  .itemBody{padding:8px 10px;background:var(--panel2);border-top:1px solid var(--line)}
+  .lanebox{border:1px solid var(--line);border-radius:7px;padding:7px;margin-top:7px}
   .rng{display:flex;align-items:center;gap:8px;margin-bottom:6px}
-  .rng label{font-size:10px;color:var(--dim);width:60px}
+  .rng label{font-size:10px;color:var(--dim);width:62px}
   .rng input[type=range]{flex:1}
   .rng .v{font-size:11px;width:42px;text-align:right;color:var(--accent)}
   .hint{font-size:11px;color:var(--dim);line-height:1.5}
-  .danger{background:#3a1622!important;border:1px solid #5a2030!important;color:#ff8a9c!important;border-radius:7px;padding:7px;font-size:12px}
+  .danger{background:#3a1622!important;border:1px solid #5a2030!important;color:#ff8a9c!important}
   .full{width:100%}
-  .endToggle{margin:8px 0}
-  /* base picker overlay */
-  #picker{position:absolute;inset:0;background:rgba(7,10,19,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;z-index:20}
-  #picker h2{margin:0;font-weight:800;letter-spacing:.5px}
-  #picker .sub{color:var(--dim);font-size:13px;margin-top:-8px}
-  .bases{display:flex;gap:18px;flex-wrap:wrap;justify-content:center}
-  .baseCard{width:240px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;cursor:pointer;transition:.12s}
-  .baseCard:hover{border-color:var(--accent);transform:translateY(-3px)}
-  .baseCard h3{margin:0 0 6px;font-size:15px}
-  .baseCard p{margin:0 0 12px;font-size:12px;color:var(--dim);line-height:1.5}
-  .baseCard svg{width:100%;height:120px;background:var(--panel2);border-radius:8px}
+  .mainTargetBtn{width:100%;border:1px dashed var(--line);background:transparent;color:var(--dim);border-radius:8px;padding:8px;font-size:11px;margin-bottom:8px}
+  .mainTargetBtn.on{border-color:var(--accent);color:var(--accent)}
+  #emptyHint{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--dim);pointer-events:none;text-align:center}
+  #emptyHint h2{margin:0;color:var(--txt);font-weight:800}
   #toast{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);background:#10203a;border:1px solid var(--accent);color:var(--txt);padding:10px 16px;border-radius:10px;font-size:13px;opacity:0;transition:.2s;pointer-events:none;z-index:30}
   #toast.show{opacity:1}
-  /* draft modal */
+  #dropring{position:absolute;inset:0;border:0;pointer-events:none;display:none;align-items:center;justify-content:center;z-index:5}
+  #dropring.on{display:flex}
+  #dropring .r{border:3px dashed var(--accent);border-radius:18px;width:60%;height:60%;display:flex;align-items:center;justify-content:center;color:var(--accent);font-size:15px;background:rgba(57,200,224,.06)}
   #draftModal{position:absolute;inset:0;background:rgba(7,10,19,.85);display:none;align-items:center;justify-content:center;z-index:25}
   #draftBox{background:var(--panel);border:1px solid var(--line);border-radius:14px;width:520px;max-width:92%;max-height:80%;overflow:auto;padding:18px}
   #draftBox h3{margin:0 0 12px}
@@ -91,10 +90,10 @@
 </head>
 <body>
 <div id="top">
-  <span class="logo">ZORBS</span><span class="ver">editor v0.5</span>
+  <span class="logo">ZORBS</span><span class="ver">editor v0.6</span>
   <input id="m-name" maxlength="40" placeholder="Track name" />
   <span class="sp"></span>
-  <button id="btn-restart">↻ New</button>
+  <button id="btn-clear">↻ Clear</button>
   <button id="btn-load">📂 Load</button>
   <button id="btn-save">💾 Save</button>
   <button id="btn-test">▶ Test</button>
@@ -103,67 +102,21 @@
 <div id="main">
   <div id="palette">
     <div class="sectitle">TRACK PIECES</div>
-    <div class="hint" id="pal-hint" style="margin-bottom:8px">Pick a base to start →</div>
     <div id="pal-list"></div>
+    <div class="sectitle" style="margin-top:12px">SPLITS</div>
+    <div class="hint" style="margin-bottom:6px">Drag (or click) a split into your track to fork the marbles.</div>
+    <div id="pal-splits"></div>
   </div>
   <div id="stage">
     <canvas id="cv"></canvas>
-    <div id="picker">
-      <h2>Start a new track</h2>
-      <div class="sub">Pick a base layout — you fill in the rest.</div>
-      <div class="bases">
-        <div class="baseCard" data-base="single">
-          <h3>Single path</h3>
-          <p>One run from start to finish. Add any pieces you like.</p>
-          <svg viewBox="0 0 200 120"><rect x="90" y="10" width="20" height="100" rx="4" fill="#1c2742" stroke="#39c8e0"/></svg>
-        </div>
-        <div class="baseCard" data-base="split3">
-          <h3>Split into 3</h3>
-          <p>Trunk → Left / Middle / Right lanes.</p>
-          <svg viewBox="0 0 200 120">
-            <rect x="90" y="6" width="20" height="34" rx="3" fill="#1c2742" stroke="#39c8e0"/>
-            <rect x="40" y="46" width="20" height="68" rx="3" fill="#16261c" stroke="#2ec27e"/>
-            <rect x="90" y="46" width="20" height="68" rx="3" fill="#1a2240" stroke="#5b7cff"/>
-            <rect x="140" y="46" width="20" height="68" rx="3" fill="#261a14" stroke="#ff7a45"/>
-            <path d="M100 40 L50 46 M100 40 L100 46 M100 40 L150 46" stroke="#39c8e0" fill="none"/>
-          </svg>
-        </div>
-        <div class="baseCard" data-base="split2">
-          <h3>Split into 2</h3>
-          <p>Trunk → Left / Right lanes (no straight middle).</p>
-          <svg viewBox="0 0 200 120">
-            <rect x="90" y="6" width="20" height="34" rx="3" fill="#1c2742" stroke="#39c8e0"/>
-            <rect x="52" y="46" width="20" height="68" rx="3" fill="#16261c" stroke="#2ec27e"/>
-            <rect x="128" y="46" width="20" height="68" rx="3" fill="#261a14" stroke="#ff7a45"/>
-            <path d="M100 40 L62 46 M100 40 L138 46" stroke="#39c8e0" fill="none"/>
-          </svg>
-        </div>
-        <div class="baseCard" data-base="splitML">
-          <h3>Middle + Left</h3>
-          <p>Main keeps going straight; one lane branches left.</p>
-          <svg viewBox="0 0 200 120">
-            <rect x="90" y="6" width="20" height="34" rx="3" fill="#1c2742" stroke="#39c8e0"/>
-            <rect x="52" y="46" width="20" height="68" rx="3" fill="#16261c" stroke="#2ec27e"/>
-            <rect x="90" y="46" width="20" height="68" rx="3" fill="#1a2240" stroke="#5b7cff"/>
-            <path d="M100 40 L62 46 M100 40 L100 46" stroke="#39c8e0" fill="none"/>
-          </svg>
-        </div>
-        <div class="baseCard" data-base="splitMR">
-          <h3>Middle + Right</h3>
-          <p>Main keeps going straight; one lane branches right.</p>
-          <svg viewBox="0 0 200 120">
-            <rect x="90" y="6" width="20" height="34" rx="3" fill="#1c2742" stroke="#39c8e0"/>
-            <rect x="90" y="46" width="20" height="68" rx="3" fill="#1a2240" stroke="#5b7cff"/>
-            <rect x="128" y="46" width="20" height="68" rx="3" fill="#261a14" stroke="#ff7a45"/>
-            <path d="M100 40 L100 46 M100 40 L138 46" stroke="#39c8e0" fill="none"/>
-          </svg>
-        </div>
-      </div>
-    </div>
+    <div id="dropring"><div class="r">Drop to add to your track</div></div>
+    <div id="emptyHint"><h2>Build your track</h2><div>Click or drag a piece from the left. Add a <b style="color:#ffcc00">Split</b> wherever you want the marbles to fork.</div></div>
     <div id="toast"></div>
   </div>
   <div id="side">
-    <div id="laneArea"></div>
+    <div class="sectitle">YOUR TRACK — start → finish</div>
+    <button class="mainTargetBtn on" id="mainTarget">▸ Adding to MAIN line</button>
+    <div id="trackArea"></div>
     <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
     <div class="sectitle">MAP DETAILS</div>
     <div class="field"><label>Description</label><textarea id="m-desc" maxlength="140" placeholder="What makes this track fun?"></textarea></div>
@@ -189,14 +142,13 @@
 <script src="/beta/telemetry.js?v=b14"></script>
 <script>
 // ============================================================================
-// ZORBS Map Editor v0.5 — base-template + lane-fill model.
-// A track is authored as named LANES the user fills with pieces. On export the
-// lanes are flattened into the engine's {sections, branches} shape:
-//   single  -> sections = main lane,  branches = []
-//   split3  -> sections = trunk + middle lane (middle continues the main line),
-//              branches = [ {side:-1,...left}, {side:+1,...right} ] peeling off
-//              the LAST trunk section. Each branch can rejoin or own-finish.
-// The middle lane IS the main line, so it always runs to the shared finish.
+// ZORBS Map Editor v0.6 — INLINE track list. A track is a flat list of pieces;
+// a SPLIT is just another piece you drop in that forks the marbles right there.
+// Export to the engine's {sections, branches}:
+//   sections = every NORMAL piece in order (the main line / through path)
+//   each SPLIT contributes branches peeling from the section just before it:
+//     left -> side -1, right -> side +1, each rejoin OR own-finish.
+//   split2 carries noMiddle so the engine drops the straight-through lane.
 // ============================================================================
 
 const STEP = 1.3, WIDTH = 7.0;
@@ -212,19 +164,26 @@ const TRACK_PIECES = [
   { kind:'spiral',   name:'Spiral',    desc:'helix descent',     color:'#ff5db0', def:{len:32,dir:1} },
   { kind:'tunnel',   name:'Tunnel',    desc:'enclosed run',      color:'#7f8cad', def:{len:20,dir:1} },
 ];
+// SPLIT piece presets: which side lanes exist + whether a straight middle survives.
+const SPLIT_PIECES = [
+  { type:'split3',  name:'Split into 3', desc:'left · middle · right', sides:['left','right'], noMiddle:false, icon:'⅄' },
+  { type:'split2',  name:'Split into 2', desc:'left · right (no mid)', sides:['left','right'], noMiddle:true,  icon:'Y' },
+  { type:'splitML', name:'Middle + Left',  desc:'straight + left lane', sides:['left'],  noMiddle:false, icon:'⌐' },
+  { type:'splitMR', name:'Middle + Right', desc:'straight + right lane', sides:['right'], noMiddle:false, icon:'¬' },
+];
 const byKind = k => TRACK_PIECES.find(p => p.kind === k);
+const bySplit = t => SPLIT_PIECES.find(p => p.type === t);
 const clone = o => JSON.parse(JSON.stringify(o));
 const author = (() => { try { const s=JSON.parse(localStorage.getItem('zorbs_session')||'{}'); return (s.username||s.name||'').toLowerCase(); } catch(_){return '';} })();
 
 // ---- MODEL ----
-// base: 'none' | 'single' | 'split3'
-// lanes for single:  { main: [pieces] }
-// lanes for split3:  { trunk:[pieces], left:[pieces], middle:[pieces], right:[pieces] }
-// laneEnd: { left:'rejoin'|'finish', right:'rejoin'|'finish' }
-let model = { base:'none', lanes:{}, laneEnd:{ left:'rejoin', right:'rejoin' } };
-let activeLane = 'main';
-let openPiece = -1;            // index of expanded piece in the active lane
-let passObstacles = [];        // obstacles carried through from a loaded map (not edited in v1)
+// track: ordered list. A normal item = {kind,len,...}. A split item =
+//   {kind:'split', type, sides:['left','right'], lanes:{left:[],right:[]},
+//    end:{left:'rejoin',right:'rejoin'}, noMiddle:bool}
+let track = [];
+let addTarget = { type:'main' };       // {type:'main'} | {type:'lane', idx, lane}
+let openItem = -1;                      // which main-list item is expanded
+let passObstacles = [];
 let difficulty = 'medium';
 let undoStack = [], redoStack = [];
 let currentDraftId = null;
@@ -232,68 +191,61 @@ let currentDraftId = null;
 const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
 let view = { panx:0, pany:0, scale:6 };
 
-// ---- LANE HELPERS ----
-// Each split type declares which lanes it has. 'middle' = the main line continuing
-// straight through the split; 'left'/'right' are side branches. split2 has NO middle
-// (a true 2-way), so marbles only ever bin left or right.
-const LANES_FOR = {
-  single:['main'], split3:['trunk','left','middle','right'], split2:['trunk','left','right'],
-  splitML:['trunk','left','middle'], splitMR:['trunk','middle','right'],
-};
-function laneListFor(type){ return LANES_FOR[type] || ['main']; }
-function laneList(){ return laneListFor(model.base); }
-function laneLabel(l){ return {trunk:'Trunk',left:'◀ Left',middle:'Middle',right:'Right ▶',main:'Main'}[l]||l; }
-function laneArr(l){ return model.lanes[l] || (model.lanes[l]=[]); }
 function mkPiece(kind){ return Object.assign({kind},clone(byKind(kind).def)); }
-
-// ---- BASE SETUP ----
-function startBase(base){
-  if(base==='single'){
-    model = { base:'single', lanes:{ main:[] }, laneEnd:{} };
-    activeLane='main';
-  } else {
-    // a trunk straight anchors the split; side lanes start empty for the author to fill.
-    // split2 has no middle, so it needs a 2-piece trunk to be a valid (>=2 section) main line.
-    const lanes={ trunk: base==='split2' ? [mkPiece('straight'),mkPiece('straight')] : [mkPiece('straight')] };
-    laneListFor(base).forEach(l=>{ if(l!=='trunk') lanes[l]=[]; });
-    model = { base, lanes, laneEnd:{ left:'rejoin', right:'rejoin' } };
-    activeLane = base==='splitMR' ? 'right' : 'left';
-  }
-  passObstacles=[]; openPiece=-1; currentDraftId=null;
-  undoStack=[]; redoStack=[];
-  document.getElementById('picker').style.display='none';
-  document.getElementById('pal-hint').textContent='Click a piece to add it to the selected lane.';
-  buildPalette(); refresh(); fit();
+function mkSplit(type){
+  const sp=bySplit(type); const lanes={}, end={};
+  sp.sides.forEach(s=>{ lanes[s]=[]; end[s]='rejoin'; });
+  return { kind:'split', type, sides:sp.sides.slice(), lanes, end, noMiddle:sp.noMiddle };
 }
 
 // ---- PALETTE ----
 function buildPalette(){
-  const host=document.getElementById('pal-list');
-  host.innerHTML = TRACK_PIECES.map(p=>`
-    <div class="palItem" data-kind="${p.kind}">
+  document.getElementById('pal-list').innerHTML = TRACK_PIECES.map(p=>`
+    <div class="palItem" draggable="true" data-kind="${p.kind}">
       <div class="sw" style="background:${p.color}"></div>
       <div><div class="nm">${p.name}</div><div class="ds">${p.desc}</div></div>
     </div>`).join('');
-  host.querySelectorAll('.palItem').forEach(el=>el.onclick=()=>addPiece(el.dataset.kind));
+  document.getElementById('pal-splits').innerHTML = SPLIT_PIECES.map(p=>`
+    <div class="palItem split" draggable="true" data-split="${p.type}">
+      <div class="sw" style="background:#2a2410;color:#ffcc00;border:1px solid #ffcc00">${p.icon}</div>
+      <div><div class="nm">${p.name}</div><div class="ds">${p.desc}</div></div>
+    </div>`).join('');
+  document.querySelectorAll('#pal-list .palItem').forEach(el=>{
+    el.onclick=()=>addPiece(el.dataset.kind);
+    el.ondragstart=e=>{ dragItem={kind:el.dataset.kind}; e.dataTransfer.effectAllowed='copy'; };
+  });
+  document.querySelectorAll('#pal-splits .palItem').forEach(el=>{
+    el.onclick=()=>addSplit(el.dataset.split);
+    el.ondragstart=e=>{ dragItem={split:el.dataset.split}; e.dataTransfer.effectAllowed='copy'; };
+  });
 }
+let dragItem=null;
 
+function targetArr(){
+  if(addTarget.type==='lane'){ const it=track[addTarget.idx]; if(it&&it.kind==='split') return it.lanes[addTarget.lane]||(it.lanes[addTarget.lane]=[]); }
+  return null;
+}
 function addPiece(kind){
-  if(model.base==='none') return;
-  const p=byKind(kind); if(!p) return;
-  const arr=laneArr(activeLane);
-  arr.push(Object.assign({kind},clone(p.def)));
-  openPiece=arr.length-1;
+  const arr=targetArr();
+  if(arr){ arr.push(mkPiece(kind)); }
+  else { track.push(mkPiece(kind)); openItem=track.length-1; }
+  pushUndo(); refresh();
+}
+function addSplit(type){
+  // a split must have a trunk before it; if the track is empty, seed one straight
+  if(!track.some(t=>t.kind!=='split')) track.push(mkPiece('straight'));
+  track.push(mkSplit(type));
+  const idx=track.length-1; openItem=idx;
+  addTarget={ type:'lane', idx, lane:track[idx].sides[0] };
   pushUndo(); refresh();
 }
 
-// ---- 2D PATH (preview + validation; engine builds the real 3D) ----
-// Lay one lane's pieces from a start position/heading. Returns {pts,end} where
-// end = {x,z,ang} so branches can start where the trunk ended.
+// ---- 2D PATH (preview only) ----
 function layLane(pieces, x, z, ang, laneId){
   const pts=[]; let turn=0;
-  for(let si=0; si<pieces.length; si++){
-    const s=pieces[si], len=s.len|0;
-    let target=0;
+  for(const s of pieces){
+    if(s.kind==='split') continue;
+    const len=s.len|0; let target=0;
     if(s.kind==='sweep')  target=(s.dir||1)*(s.sharp||0.028);
     if(s.kind==='spiral') target=(s.dir||1)*0.030;
     if(s.kind==='tunnel') target=(s.dir||1)*0.012;
@@ -305,103 +257,84 @@ function layLane(pieces, x, z, ang, laneId){
       if(s.kind==='narrower') w=WIDTH*(t<0.5?1-(1-(s.min||0.38))*(t*2):(s.min||0.38));
       if(s.kind==='tunnel')   w=WIDTH*0.8;
       if(s.kind==='arena'){ const r=Math.min(1,t/0.15,(1-t)/0.15); const e=r*r*(3-2*r); w=WIDTH*(1+((s.w||14)/WIDTH-1)*Math.max(0,e)); }
-      pts.push({x,z,w,kind:s.kind,lane:laneId,si});
+      pts.push({x,z,w,kind:s.kind,lane:laneId});
     }
   }
   return { pts, end:{x,z,ang} };
 }
-
-// Build all lane preview paths. Returns {paths:[{lane,pts}], finishPt}.
+// Walk the track: lay the main spine piece-by-piece; at each split, branch the side lanes.
 function buildPreview(){
-  const paths=[]; let finishPt=null;
-  if(model.base==='single'){
-    const r=layLane(laneArr('main'),0,0,0,'main');
-    paths.push({lane:'main',pts:r.pts});
-    finishPt=r.pts[r.pts.length-1]||{x:0,z:0};
-    return {paths,finishPt};
+  const paths=[]; let x=0,z=0,ang=0,turn=0;
+  let spine=[];
+  for(let idx=0; idx<track.length; idx++){
+    const it=track[idx];
+    if(it.kind!=='split'){
+      const r=layLane([it],x,z,ang,'main'); // lay one piece continuing the spine
+      // continue heading using last turn state: re-derive ang from last two pts
+      if(r.pts.length){ spine=spine.concat(r.pts); const e=r.end; x=e.x; z=e.z; ang=e.ang; }
+      continue;
+    }
+    // split: fan side lanes parallel from current spine point
+    const rx=Math.cos(ang), rz=-Math.sin(ang);
+    if(it.sides.includes('left') && it.lanes.left.length){ const L=layLane(it.lanes.left, x+rx*WIDTH*-0.95, z+rz*WIDTH*-0.95, ang, 'left'); paths.push({lane:'left',pts:L.pts,idx}); }
+    if(it.sides.includes('right')&& it.lanes.right.length){ const R=layLane(it.lanes.right, x+rx*WIDTH* 0.95, z+rz*WIDTH* 0.95, ang, 'right'); paths.push({lane:'right',pts:R.pts,idx}); }
   }
-  // split variants: trunk, then the lanes this type has, fanning out PARALLEL to the trunk
-  // (matches the engine), so the split reads as a widening corridor — no angled wedge gaps.
-  const lanes=laneList();
-  const tr=layLane(laneArr('trunk'),0,0,0,'trunk');
-  paths.push({lane:'trunk',pts:tr.pts});
-  const e=tr.end;
-  const rx=Math.cos(e.ang), rz=-Math.sin(e.ang);   // right-hand normal
-  let mainEnd=tr.pts;
-  if(lanes.includes('middle')){
-    const mid=layLane(laneArr('middle'),e.x,e.z,e.ang,'middle');
-    paths.push({lane:'middle',pts:mid.pts});
-    if(mid.pts.length) mainEnd=mid.pts;
-  }
-  if(lanes.includes('left') && laneArr('left').length){ const L=layLane(laneArr('left'), e.x+rx*WIDTH*-0.95, e.z+rz*WIDTH*-0.95, e.ang, 'left'); paths.push({lane:'left',pts:L.pts}); }
-  if(lanes.includes('right') && laneArr('right').length){ const R=layLane(laneArr('right'), e.x+rx*WIDTH* 0.95, e.z+rz*WIDTH* 0.95, e.ang, 'right'); paths.push({lane:'right',pts:R.pts}); }
-  finishPt=mainEnd[mainEnd.length-1]||{x:0,z:0};
+  paths.unshift({lane:'main',pts:spine});
+  const finishPt=spine[spine.length-1]||{x:0,z:0};
   return {paths,finishPt};
 }
 
-// ---- EXPORT to engine shape ----
+// ---- EXPORT ----
 function exportData(){
-  if(model.base==='single'){
-    return { sections: clone(laneArr('main')), branches: [], noMiddle:false };
+  const sections=[]; const branches=[]; let bid=1;
+  for(const it of track){
+    if(it.kind!=='split'){ sections.push(clone(it)); continue; }
+    const fromSection=Math.max(0, sections.length-1);
+    if(it.sides.includes('left') && it.lanes.left.length)
+      branches.push({ id:bid++, fromSection, side:-1, end:it.end.left==='finish'?'finish':'rejoin', noMiddle:!!it.noMiddle, sections:clone(it.lanes.left), obstacles:[] });
+    if(it.sides.includes('right') && it.lanes.right.length)
+      branches.push({ id:bid++, fromSection, side: 1, end:it.end.right==='finish'?'finish':'rejoin', noMiddle:!!it.noMiddle, sections:clone(it.lanes.right), obstacles:[] });
   }
-  const lanes=laneList();
-  const trunk=clone(laneArr('trunk'));
-  const middle=lanes.includes('middle')?clone(laneArr('middle')):[];
-  const sections=trunk.concat(middle);
-  const fromSection=Math.max(0, trunk.length-1);
-  const branches=[];
-  if(lanes.includes('left')  && laneArr('left').length)  branches.push({ id:1, fromSection, side:-1, end:model.laneEnd.left==='finish'?'finish':'rejoin', sections:clone(laneArr('left')), obstacles:[] });
-  if(lanes.includes('right') && laneArr('right').length) branches.push({ id:2, fromSection, side: 1, end:model.laneEnd.right==='finish'?'finish':'rejoin', sections:clone(laneArr('right')), obstacles:[] });
-  // split2 = true 2-way, no straight middle lane: marbles only ever bin left/right.
-  return { sections, branches, noMiddle: model.base==='split2' };
+  const noMiddle=branches.some(b=>b.noMiddle);
+  return { sections, branches, noMiddle };
 }
 
-// ---- IMPORT (reconstruct lanes from a saved map) ----
+// ---- IMPORT (reconstruct inline track from a saved map) ----
 function importMap(d){
   const sections=Array.isArray(d.sections)?clone(d.sections):[];
   const branches=Array.isArray(d.branches)?clone(d.branches):[];
   passObstacles=Array.isArray(d.obstacles)?clone(d.obstacles):[];
-  const sideBranches=branches.filter(b=>b.side===-1||b.side===1);
-  if(sideBranches.length){
-    const fromSection=Math.max(0, sideBranches[0].fromSection|0);
-    const trunk=sections.slice(0, fromSection+1);
-    const middle=sections.slice(fromSection+1);
-    const left=sideBranches.find(b=>b.side===-1), right=sideBranches.find(b=>b.side===1);
-    // figure out which split type this was from which sides exist (+ the noMiddle flag)
-    let base;
-    if(d.noMiddle) base='split2';
-    else if(left&&right) base='split3';
-    else if(left) base='splitML';
-    else base='splitMR';
-    const lanes={ trunk };
-    if(laneListFor(base).includes('middle')) lanes.middle=middle;
-    if(left)  lanes.left=clone(left.sections);
-    if(right) lanes.right=clone(right.sections);
-    model={ base, lanes, laneEnd:{ left:left&&left.end==='finish'?'finish':'rejoin', right:right&&right.end==='finish'?'finish':'rejoin' } };
-    activeLane='trunk';
-  } else {
-    model={ base:'single', lanes:{ main:sections }, laneEnd:{} };
-    activeLane='main';
+  const byFrom=new Map();
+  branches.filter(b=>b.side===-1||b.side===1).forEach(b=>{ const k=Math.max(0,b.fromSection|0); (byFrom.get(k)||byFrom.set(k,[]).get(k)).push(b); });
+  track=[];
+  for(let i=0;i<sections.length;i++){
+    track.push(sections[i]);
+    if(byFrom.has(i)){
+      const brs=byFrom.get(i);
+      const left=brs.find(b=>b.side===-1), right=brs.find(b=>b.side===1);
+      const noMiddle = brs.some(b=>b.noMiddle) || d.noMiddle===true;
+      const sides=[]; if(left)sides.push('left'); if(right)sides.push('right');
+      const type = noMiddle?'split2' : (left&&right?'split3' : left?'splitML':'splitMR');
+      track.push({ kind:'split', type, sides, noMiddle,
+        lanes:{ left:left?clone(left.sections):[], right:right?clone(right.sections):[] },
+        end:{ left:left&&left.end==='finish'?'finish':'rejoin', right:right&&right.end==='finish'?'finish':'rejoin' } });
+    }
   }
   document.getElementById('m-name').value = d.name && !/^untitled/i.test(d.name) ? d.name : '';
   document.getElementById('m-desc').value = d.description||'';
   difficulty=['easy','medium','hard'].includes(d.difficulty)?d.difficulty:'medium';
   document.getElementById('m-diff').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.d===difficulty));
   document.getElementById('m-theme').value=d.theme||'';
-  openPiece=-1; undoStack=[]; redoStack=[];
-  document.getElementById('picker').style.display='none';
-  document.getElementById('pal-hint').textContent='Click a piece to add it to the selected lane.';
-  buildPalette(); refresh(); fit();
+  addTarget={type:'main'}; openItem=-1; undoStack=[]; redoStack=[];
+  refresh(); fit();
 }
 
 // ---- CANVAS ----
 function resize(){ const r=cv.getBoundingClientRect(); cv.width=r.width*devicePixelRatio; cv.height=r.height*devicePixelRatio; draw(); }
 function W2S(wx,wz){ return { x:wx*view.scale+view.panx, y:cv.height-(wz*view.scale+view.pany) }; }
-const laneColor={trunk:'#39c8e0',main:'#39c8e0',middle:'#5b7cff',left:'#2ec27e',right:'#ff7a45'};
-
+const laneColor={main:'#39c8e0',left:'#2ec27e',right:'#ff7a45'};
 function fit(){
-  const {paths}=buildPreview();
-  let pts=[]; paths.forEach(p=>pts=pts.concat(p.pts));
+  const {paths}=buildPreview(); let pts=[]; paths.forEach(p=>pts=pts.concat(p.pts));
   if(!pts.length){ view={panx:cv.width/2,pany:cv.height/2,scale:6}; draw(); return; }
   let minx=1e9,maxx=-1e9,minz=1e9,maxz=-1e9;
   pts.forEach(p=>{minx=Math.min(minx,p.x);maxx=Math.max(maxx,p.x);minz=Math.min(minz,p.z);maxz=Math.max(maxz,p.z);});
@@ -411,16 +344,15 @@ function fit(){
   view.pany=cv.height/2-((minz+maxz)/2)*view.scale;
   draw();
 }
-
 function draw(){
   ctx.clearRect(0,0,cv.width,cv.height);
-  if(model.base==='none') return;
+  document.getElementById('emptyHint').style.display = track.length? 'none':'flex';
+  if(!track.length) return;
   const {paths,finishPt}=buildPreview();
-  // ribbons
   paths.forEach(({lane,pts})=>{
     if(pts.length<2) return;
     const col=laneColor[lane]||'#39c8e0';
-    const sel=(lane===activeLane);
+    const sel=(addTarget.type==='lane'&&lane===addTarget.lane)||(addTarget.type==='main'&&lane==='main');
     const left=[],right=[];
     for(let i=0;i<pts.length;i++){
       const a=pts[i],b=pts[Math.min(i+1,pts.length-1)];
@@ -428,117 +360,111 @@ function draw(){
       const nx=-dz,nz=dx;
       left.push(W2S(a.x+nx*a.w,a.z+nz*a.w)); right.push(W2S(a.x-nx*a.w,a.z-nz*a.w));
     }
-    ctx.beginPath();
-    left.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));
+    ctx.beginPath(); left.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));
     for(let i=right.length-1;i>=0;i--) ctx.lineTo(right[i].x,right[i].y);
-    ctx.closePath();
-    ctx.fillStyle=sel?col+'22':col+'12'; ctx.fill();
+    ctx.closePath(); ctx.fillStyle=sel?col+'26':col+'12'; ctx.fill();
     ctx.strokeStyle=sel?'#fff':col; ctx.lineWidth=(sel?3:2)*devicePixelRatio;
     ctx.beginPath(); left.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.stroke();
     ctx.beginPath(); right.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.stroke();
-    // lane label at midpoint
-    const m=pts[Math.floor(pts.length/2)]; const s=W2S(m.x,m.z);
-    ctx.fillStyle=sel?'#fff':col; ctx.font=`${12*devicePixelRatio}px system-ui`; ctx.textAlign='center';
-    ctx.fillText(laneLabel(lane),s.x,s.y);
+    if(lane!=='main'){ const m=pts[Math.floor(pts.length/2)]; const s=W2S(m.x,m.z);
+      ctx.fillStyle=col; ctx.font=`${12*devicePixelRatio}px system-ui`; ctx.textAlign='center'; ctx.fillText(lane==='left'?'◀ Left':'Right ▶',s.x,s.y); }
   });
-  // empty split slots: draw dashed stubs so you can see where Left/Right go
-  if(model.base==='split3'){
-    const {paths:pp}=buildPreview();
-    const tr=pp.find(p=>p.lane==='trunk');
-    if(tr&&tr.pts.length){
-      ['left','right'].forEach(side=>{
-        if(laneArr(side).length) return; // already drawn
-        const e=tr.pts[tr.pts.length-1];
-        const s0=W2S(e.x,e.z);
-        ctx.fillStyle=(side===activeLane?'#fff':laneColor[side]);
-        ctx.font=`${11*devicePixelRatio}px system-ui`; ctx.textAlign='center';
-        ctx.fillText('('+laneLabel(side)+' empty)',s0.x+(side==='left'?-50:50)*devicePixelRatio,s0.y-18*devicePixelRatio);
-      });
-    }
-  }
-  // start + finish markers
-  const start=paths[0]&&paths[0].pts[0];
-  if(start){ const s=W2S(start.x,start.z); marker(s,'#2ec27e','START'); }
-  if(finishPt){ const s=W2S(finishPt.x,finishPt.z); marker(s,'#ff8800','FINISH'); }
+  const main=paths[0].pts;
+  if(main.length){ marker(W2S(main[0].x,main[0].z),'#2ec27e','START'); }
+  marker(W2S(finishPt.x,finishPt.z),'#ff8800','FINISH');
 }
 function marker(s,col,label){
   ctx.beginPath(); ctx.arc(s.x,s.y,5*devicePixelRatio,0,7); ctx.fillStyle=col; ctx.fill();
   ctx.fillStyle=col; ctx.font=`bold ${11*devicePixelRatio}px system-ui`; ctx.textAlign='left'; ctx.textBaseline='middle';
   ctx.fillText(label,s.x+8*devicePixelRatio,s.y);
 }
-
-// ---- pan / zoom ----
-let drag=null;
-cv.addEventListener('pointerdown',e=>{ drag={x:e.clientX,y:e.clientY,px:view.panx,py:view.pany}; cv.setPointerCapture(e.pointerId); });
-cv.addEventListener('pointermove',e=>{ if(!drag)return; view.panx=drag.px+(e.clientX-drag.x)*devicePixelRatio; view.pany=drag.py-(e.clientY-drag.y)*devicePixelRatio; draw(); });
-cv.addEventListener('pointerup',()=>drag=null);
+// pan / zoom
+let pdrag=null;
+cv.addEventListener('pointerdown',e=>{ pdrag={x:e.clientX,y:e.clientY,px:view.panx,py:view.pany}; cv.setPointerCapture(e.pointerId); });
+cv.addEventListener('pointermove',e=>{ if(!pdrag)return; view.panx=pdrag.px+(e.clientX-pdrag.x)*devicePixelRatio; view.pany=pdrag.py-(e.clientY-pdrag.y)*devicePixelRatio; draw(); });
+cv.addEventListener('pointerup',()=>pdrag=null);
 cv.addEventListener('wheel',e=>{ e.preventDefault(); const f=e.deltaY<0?1.1:0.9; const r=cv.getBoundingClientRect(); const mx=(e.clientX-r.left)*devicePixelRatio,my=(e.clientY-r.top)*devicePixelRatio; const wx=(mx-view.panx)/view.scale, wz=(cv.height-my-view.pany)/view.scale; view.scale*=f; view.panx=mx-wx*view.scale; view.pany=(cv.height-my)-wz*view.scale; draw(); },{passive:false});
 
-// ---- RIGHT PANEL ----
-function refresh(){ renderLanes(); draw(); validate(); }
-
-function renderLanes(){
-  const host=document.getElementById('laneArea');
-  if(model.base==='none'){ host.innerHTML=''; return; }
-  let h='<div class="sectitle">LANES — pick one, then add pieces from the left</div>';
-  h+='<div class="tabs">';
-  laneList().forEach(l=>{
-    const n=laneArr(l).length;
-    h+=`<div class="tab t-${l} ${l===activeLane?'on':''}" data-lane="${l}">${laneLabel(l)}<div style="font-size:9px;opacity:.8">${n} pc</div></div>`;
-  });
-  h+='</div>';
-  // active lane editor
-  const arr=laneArr(activeLane);
-  if(model.base==='split3' && (activeLane==='left'||activeLane==='right')){
-    const end=model.laneEnd[activeLane]||'rejoin';
-    h+=`<div class="endToggle"><div style="font-size:10px;color:var(--dim);margin-bottom:4px">WHERE THIS LANE ENDS</div>
-      <div class="seg" id="endseg">
-        <button data-v="rejoin" class="${end==='rejoin'?'on':''}">↩ Rejoin main</button>
-        <button data-v="finish" class="${end==='finish'?'on':''}">🏁 Own finish</button>
-      </div></div>`;
-  }
-  if(model.base==='split3' && activeLane==='middle'){
-    h+=`<div class="hint" style="margin-bottom:8px">The Middle lane is the main line — it always runs to the shared finish.</div>`;
-  }
-  if(!arr.length){
-    h+=`<div class="hint" style="margin:10px 0">No pieces in ${laneLabel(activeLane)} yet — click a piece on the left to add one.</div>`;
-  } else {
-    arr.forEach((s,i)=>{
-      const pc=byKind(s.kind); const open=(i===openPiece);
-      h+=`<div class="pieceRow">
-        <div class="pieceHd" data-open="${i}">
-          <div class="sw" style="width:16px;height:16px;background:${pc.color}"></div>
-          <div class="nm" style="color:${pc.color}">${pc.name}</div>
-          <div class="mini">${open?'▼':'▶'} len ${s.len}</div>
-          <button data-up="${i}" title="move up">▲</button>
-          <button data-down="${i}" title="move down">▼</button>
-          <button data-del="${i}" title="delete" style="color:var(--bad)">✕</button>
-        </div>`;
-      if(open) h+=`<div class="pieceBody">${propsHTML(s)}</div>`;
-      h+=`</div>`;
-    });
-  }
-  host.innerHTML=h;
-  // wire tabs
-  host.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{ activeLane=t.dataset.lane; openPiece=-1; refresh(); });
-  // wire end toggle
-  const es=host.querySelector('#endseg');
-  if(es) es.querySelectorAll('button').forEach(b=>b.onclick=()=>{ model.laneEnd[activeLane]=b.dataset.v; pushUndo(); refresh(); });
-  // wire piece header buttons
-  host.querySelectorAll('.pieceHd').forEach(hd=>{
-    hd.onclick=e=>{ if(e.target.dataset.del!=null||e.target.dataset.up!=null||e.target.dataset.down!=null) return;
-      const i=+hd.dataset.open; openPiece=(openPiece===i?-1:i); renderLanes(); };
-  });
-  host.querySelectorAll('[data-del]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const i=+b.dataset.del; laneArr(activeLane).splice(i,1); if(openPiece===i)openPiece=-1; else if(openPiece>i)openPiece--; pushUndo(); refresh(); });
-  host.querySelectorAll('[data-up]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const i=+b.dataset.up; if(i>0){ const a=laneArr(activeLane); [a[i-1],a[i]]=[a[i],a[i-1]]; openPiece=i-1; pushUndo(); refresh(); } });
-  host.querySelectorAll('[data-down]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const i=+b.dataset.down; const a=laneArr(activeLane); if(i<a.length-1){ [a[i+1],a[i]]=[a[i],a[i+1]]; openPiece=i+1; pushUndo(); refresh(); } });
-  // wire prop controls
-  wireProps(host);
+// drag-and-drop from palette onto the stage / track panel
+function allowDrop(host){
+  host.addEventListener('dragover',e=>{ if(dragItem){ e.preventDefault(); document.getElementById('dropring').classList.add('on'); } });
+  host.addEventListener('dragleave',()=>document.getElementById('dropring').classList.remove('on'));
+  host.addEventListener('drop',e=>{ e.preventDefault(); document.getElementById('dropring').classList.remove('on');
+    if(!dragItem) return; if(dragItem.split) addSplit(dragItem.split); else if(dragItem.kind) addPiece(dragItem.kind); dragItem=null; });
 }
+allowDrop(document.getElementById('stage'));
+allowDrop(document.getElementById('side'));
 
-function propsHTML(s){
+// ---- RIGHT PANEL (track list) ----
+function refresh(){ renderTrack(); draw(); validate(); }
+function setMainTarget(){ addTarget={type:'main'}; refresh(); }
+document.getElementById('mainTarget').onclick=setMainTarget;
+
+function pieceRow(s,onDel,onUp,onDown,open,onOpen,bodyHTML){
+  const pc=byKind(s.kind);
+  return `<div class="item ${open?'sel':''}">
+    <div class="itemHd" data-open="1">
+      <div class="sw" style="width:16px;height:16px;background:${pc.color}"></div>
+      <div class="nm" style="color:${pc.color}">${pc.name}</div>
+      <div class="mini">${open?'▼':'▶'} len ${s.len}</div>
+      <button data-up="1">▲</button><button data-down="1">▼</button><button data-del="1" style="color:var(--bad)">✕</button>
+    </div>${open?`<div class="itemBody">${bodyHTML}</div>`:''}</div>`;
+}
+function renderTrack(){
+  document.getElementById('mainTarget').classList.toggle('on', addTarget.type==='main');
+  const host=document.getElementById('trackArea');
+  if(!track.length){ host.innerHTML='<div class="hint">Empty — add pieces from the left.</div>'; return; }
   let h='';
-  const rng=(k,label,min,max,step,val)=>`<div class="rng"><label>${label}</label><input type="range" data-k="${k}" min="${min}" max="${max}" step="${step}" value="${val}"><span class="v" id="v-${k}">${val}</span></div>`;
+  track.forEach((it,idx)=>{
+    if(it.kind!=='split'){
+      const open=(openItem===idx);
+      h+=`<div class="item ${open?'sel':''}" data-idx="${idx}">
+        <div class="itemHd" data-open="${idx}">
+          <div class="sw" style="width:16px;height:16px;background:${byKind(it.kind).color}"></div>
+          <div class="nm" style="color:${byKind(it.kind).color}">${byKind(it.kind).name}</div>
+          <div class="mini">${open?'▼':'▶'} len ${it.len}</div>
+          <button data-up="${idx}">▲</button><button data-down="${idx}">▼</button><button data-del="${idx}" style="color:var(--bad)">✕</button>
+        </div>${open?`<div class="itemBody">${propsHTML(it)}</div>`:''}</div>`;
+    } else {
+      const sp=bySplit(it.type);
+      h+=`<div class="item split" data-idx="${idx}">
+        <div class="itemHd">
+          <div class="sw" style="width:16px;height:16px;background:#2a2410;color:#ffcc00;border:1px solid #ffcc00">${sp.icon}</div>
+          <div class="nm" style="color:#ffcc00">${sp.name}</div>
+          <button data-del="${idx}" style="color:var(--bad)">✕</button>
+        </div>
+        <div class="itemBody">
+          <div class="tabs">${it.sides.map(sd=>`<div class="tab t-${sd} ${addTarget.type==='lane'&&addTarget.idx===idx&&addTarget.lane===sd?'on':''}" data-lane="${idx}|${sd}">${sd==='left'?'◀ Left':'Right ▶'} (${it.lanes[sd].length})</div>`).join('')}</div>`;
+      // active lane editor (if this split's lane is the add target)
+      const al=(addTarget.type==='lane'&&addTarget.idx===idx)?addTarget.lane:null;
+      it.sides.forEach(sd=>{
+        if(sd!==al) return;
+        const end=it.end[sd];
+        h+=`<div class="lanebox">
+          <div class="addhere">▸ Click pieces on the left to add to this lane</div>
+          <div class="seg" style="margin-bottom:8px">
+            <button data-end="${idx}|${sd}|rejoin" class="${end==='rejoin'?'on':''}">↩ Rejoin</button>
+            <button data-end="${idx}|${sd}|finish" class="${end==='finish'?'on':''}">🏁 Own finish</button></div>`;
+        if(!it.lanes[sd].length){ h+=`<div class="hint">No pieces yet — add some.</div>`; }
+        else it.lanes[sd].forEach((s,si)=>{
+          h+=`<div class="item"><div class="itemHd" data-lopen="${idx}|${sd}|${si}">
+            <div class="sw" style="width:14px;height:14px;background:${byKind(s.kind).color}"></div>
+            <div class="nm" style="color:${byKind(s.kind).color}">${byKind(s.kind).name}</div>
+            <div class="mini">len ${s.len}</div>
+            <button data-ldel="${idx}|${sd}|${si}" style="color:var(--bad)">✕</button></div>
+            ${(_lopen===idx+'|'+sd+'|'+si)?`<div class="itemBody">${propsHTML(s)}</div>`:''}</div>`;
+        });
+        h+=`</div>`;
+      });
+      h+=`</div></div>`;
+    }
+  });
+  host.innerHTML=h;
+  wireTrack(host);
+}
+let _lopen=null;
+function propsHTML(s){
+  let h=''; const rng=(k,label,min,max,step,val)=>`<div class="rng"><label>${label}</label><input type="range" data-k="${k}" min="${min}" max="${max}" step="${step}" value="${val}"><span class="v" id="v-${k}">${val}</span></div>`;
   h+=rng('len','Length',6,200,1,s.len);
   if(s.kind==='sweep'){ h+=rng('sharp','Sharpness',0.01,0.12,0.002,s.sharp); }
   if(s.kind==='funnel'||s.kind==='narrower'){ h+=rng('min','Throat',0.25,0.9,0.01,s.min); }
@@ -547,60 +473,86 @@ function propsHTML(s){
   if(s.kind==='arena'){ h+=rng('w','Width',8,30,1,s.w); }
   if(s.kind==='sweep'||s.kind==='spiral'||s.kind==='tunnel'){
     h+=`<div style="font-size:10px;color:var(--dim);margin:2px 0 4px">Direction</div>
-        <div class="seg" id="dirseg"><button data-v="-1" class="${(s.dir||1)<0?'on':''}">◀ Left</button><button data-v="1" class="${(s.dir||1)>0?'on':''}">Right ▶</button></div>`;
+        <div class="seg" data-dir="1"><button data-v="-1" class="${(s.dir||1)<0?'on':''}">◀ Left</button><button data-v="1" class="${(s.dir||1)>0?'on':''}">Right ▶</button></div>`;
   }
   return h;
 }
-function wireProps(host){
-  const s=laneArr(activeLane)[openPiece]; if(!s) return;
-  host.querySelectorAll('input[type=range]').forEach(r=>{
-    r.oninput=()=>{ const k=r.dataset.k; s[k]=k==='steps'||k==='len'||k==='w'?(+r.value|0):+r.value; const v=host.querySelector('#v-'+k); if(v)v.textContent=s[k]; draw(); validate(); };
+function wireRange(el,s){
+  el.querySelectorAll('input[type=range]').forEach(r=>{
+    r.oninput=()=>{ const k=r.dataset.k; s[k]=(k==='len'||k==='steps'||k==='w')?(+r.value|0):+r.value; const v=el.querySelector('#v-'+k); if(v)v.textContent=s[k]; draw(); validate(); };
     r.onchange=pushUndo;
   });
-  const ds=host.querySelector('#dirseg');
-  if(ds) ds.querySelectorAll('button').forEach(b=>b.onclick=()=>{ s.dir=+b.dataset.v; pushUndo(); refresh(); });
+  const ds=el.querySelector('[data-dir]'); if(ds) ds.querySelectorAll('button').forEach(b=>b.onclick=()=>{ s.dir=+b.dataset.v; pushUndo(); refresh(); });
+}
+function wireTrack(host){
+  // main item headers (open/up/down/del)
+  host.querySelectorAll('.itemHd[data-open]').forEach(hd=>{
+    hd.onclick=e=>{ if(e.target.dataset.del!=null||e.target.dataset.up!=null||e.target.dataset.down!=null) return;
+      const i=+hd.dataset.open; openItem=(openItem===i?-1:i); renderTrack(); };
+  });
+  host.querySelectorAll('[data-del]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const i=+b.dataset.del;
+    if(addTarget.type==='lane'&&addTarget.idx>=i) addTarget={type:'main'};
+    track.splice(i,1); if(openItem===i)openItem=-1; else if(openItem>i)openItem--; pushUndo(); refresh(); });
+  host.querySelectorAll('[data-up]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const i=+b.dataset.up; if(i>0){ [track[i-1],track[i]]=[track[i],track[i-1]]; openItem=i-1; pushUndo(); refresh(); } });
+  host.querySelectorAll('[data-down]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const i=+b.dataset.down; if(i<track.length-1){ [track[i+1],track[i]]=[track[i],track[i+1]]; openItem=i+1; pushUndo(); refresh(); } });
+  // split lane tabs
+  host.querySelectorAll('.tab[data-lane]').forEach(t=>t.onclick=()=>{ const [i,l]=t.dataset.lane.split('|'); addTarget={type:'lane',idx:+i,lane:l}; _lopen=null; refresh(); });
+  // lane end toggles
+  host.querySelectorAll('[data-end]').forEach(b=>b.onclick=()=>{ const [i,l,v]=b.dataset.end.split('|'); track[+i].end[l]=v; pushUndo(); refresh(); });
+  // lane piece open/delete
+  host.querySelectorAll('[data-lopen]').forEach(hd=>hd.onclick=e=>{ if(e.target.dataset.ldel!=null) return; _lopen=(_lopen===hd.dataset.lopen?null:hd.dataset.lopen); renderTrack(); });
+  host.querySelectorAll('[data-ldel]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const [i,l,si]=b.dataset.ldel.split('|'); track[+i].lanes[l].splice(+si,1); _lopen=null; pushUndo(); refresh(); });
+  // wire range/dir for whichever body is open
+  if(openItem>=0 && track[openItem] && track[openItem].kind!=='split'){ const el=host.querySelectorAll('.item')[mainItemDomIndex(openItem)]; }
+  // simplest: wire every open body to its data object
+  host.querySelectorAll('.itemBody').forEach(body=>{
+    // find the section object this body edits: walk up to .item, match by index/lane
+    const it=body.closest('.item');
+  });
+  // robust prop wiring: re-bind by scanning
+  bindOpenProps(host);
+}
+function mainItemDomIndex(){ return 0; }
+function bindOpenProps(host){
+  // main open piece
+  if(openItem>=0 && track[openItem] && track[openItem].kind!=='split'){
+    const items=[...host.children]; // top-level .item per track entry
+    let di=0;
+    for(let i=0;i<track.length;i++){ if(i===openItem){ const body=items[di].querySelector('.itemBody'); if(body) wireRange(body,track[i]); } di++; }
+  }
+  // open lane piece
+  if(_lopen){ const [i,l,si]=_lopen.split('|'); const s=track[+i]&&track[+i].lanes[l]&&track[+i].lanes[l][+si];
+    if(s){ host.querySelectorAll('.lanebox .itemBody').forEach(body=>wireRange(body,s)); } }
 }
 
 // ---- UNDO ----
-function snapshot(){ return JSON.stringify({model,difficulty}); }
-function pushUndo(){ undoStack.push(snapshot()); if(undoStack.length>80)undoStack.shift(); redoStack=[]; scheduleSave(); refresh(); }
-function restore(s){ const d=JSON.parse(s); model=d.model; difficulty=d.difficulty; refresh(); }
+function snap(){ return JSON.stringify({track,difficulty}); }
+function pushUndo(){ undoStack.push(snap()); if(undoStack.length>80)undoStack.shift(); redoStack=[]; }
+function restore(s){ const d=JSON.parse(s); track=d.track; difficulty=d.difficulty; addTarget={type:'main'}; refresh(); }
 window.addEventListener('keydown',e=>{
-  if((e.ctrlKey||e.metaKey)&&e.key==='z'&&!e.shiftKey){ if(undoStack.length){ redoStack.push(snapshot()); restore(undoStack.pop()); } e.preventDefault(); }
-  else if((e.ctrlKey||e.metaKey)&&(e.key==='y'||(e.key==='z'&&e.shiftKey))){ if(redoStack.length){ undoStack.push(snapshot()); restore(redoStack.pop()); } e.preventDefault(); }
+  if((e.ctrlKey||e.metaKey)&&e.key==='z'&&!e.shiftKey){ if(undoStack.length){ redoStack.push(snap()); restore(undoStack.pop()); } e.preventDefault(); }
+  else if((e.ctrlKey||e.metaKey)&&(e.key==='y'||(e.key==='z'&&e.shiftKey))){ if(redoStack.length){ undoStack.push(snap()); restore(redoStack.pop()); } e.preventDefault(); }
 });
 
 // ---- VALIDATION ----
-function mainLen(){ const d=exportData(); return d.sections.length; }
-function validate(){
-  const ok = model.base!=='none' && mainLen()>=2;
-  document.getElementById('btn-test').disabled=!ok;
-  document.getElementById('btn-submit').disabled=!ok;
-  return ok;
-}
+function mainLen(){ return exportData().sections.length; }
+function validate(){ const ok=mainLen()>=2; document.getElementById('btn-test').disabled=!ok; document.getElementById('btn-submit').disabled=!ok; return ok; }
 
 // ---- MAP DATA ----
 function currentMap(){
   const {sections,branches,noMiddle}=exportData();
-  return {
-    name:document.getElementById('m-name').value.trim()||'Untitled Track',
-    description:document.getElementById('m-desc').value.trim(),
-    difficulty, theme:document.getElementById('m-theme').value,
-    author:author||'anon',
-    sections, branches, obstacles:passObstacles, noMiddle:!!noMiddle,
-  };
+  return { name:document.getElementById('m-name').value.trim()||'Untitled Track',
+    description:document.getElementById('m-desc').value.trim(), difficulty, theme:document.getElementById('m-theme').value,
+    author:author||'anon', sections, branches, obstacles:passObstacles, noMiddle:!!noMiddle };
 }
 function makeThumb(){
-  try{
-    const {paths}=buildPreview(); let pts=[]; paths.forEach(p=>pts=pts.concat(p.pts)); if(!pts.length) return '';
-    let minx=1e9,maxx=-1e9,minz=1e9,maxz=-1e9;
-    pts.forEach(q=>{minx=Math.min(minx,q.x);maxx=Math.max(maxx,q.x);minz=Math.min(minz,q.z);maxz=Math.max(maxz,q.z);});
+  try{ const {paths}=buildPreview(); let pts=[]; paths.forEach(p=>pts=pts.concat(p.pts)); if(!pts.length) return '';
+    let minx=1e9,maxx=-1e9,minz=1e9,maxz=-1e9; pts.forEach(q=>{minx=Math.min(minx,q.x);maxx=Math.max(maxx,q.x);minz=Math.min(minz,q.z);maxz=Math.max(maxz,q.z);});
     const W=320,H=200,pad=16; const c=document.createElement('canvas'); c.width=W;c.height=H; const g=c.getContext('2d');
     g.fillStyle='#0c0f1a'; g.fillRect(0,0,W,H);
     const sc=Math.min((W-pad*2)/Math.max(1,maxx-minx),(H-pad*2)/Math.max(1,maxz-minz));
     const ox=pad+((W-pad*2)-(maxx-minx)*sc)/2, oz=pad+((H-pad*2)-(maxz-minz)*sc)/2;
-    const X=q=>ox+(q.x-minx)*sc, Y=q=>H-(oz+(q.z-minz)*sc);
-    g.lineCap='round'; g.lineJoin='round';
+    const X=q=>ox+(q.x-minx)*sc, Y=q=>H-(oz+(q.z-minz)*sc); g.lineCap='round'; g.lineJoin='round';
     paths.forEach(({lane,pts})=>{ if(pts.length<2)return; g.strokeStyle=laneColor[lane]||'#39c8e0'; g.lineWidth=Math.max(3,WIDTH*sc*1.2);
       g.beginPath(); pts.forEach((q,i)=>i?g.lineTo(X(q),Y(q)):g.moveTo(X(q),Y(q))); g.stroke(); });
     return c.toDataURL('image/png');
@@ -608,95 +560,56 @@ function makeThumb(){
 }
 
 // ---- TOAST ----
-let toastT=null;
-function toast(m){ const el=document.getElementById('toast'); el.textContent=m; el.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove('show'),2600); }
+let toastT=null; function toast(m){ const el=document.getElementById('toast'); el.textContent=m; el.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove('show'),2600); }
 
-// ---- TOP BUTTONS ----
-document.getElementById('btn-restart').onclick=()=>{
-  if(model.base!=='none' && mainLen()>0 && !confirm('Start over? Unsaved changes will be lost.')) return;
-  model={base:'none',lanes:{},laneEnd:{left:'rejoin',right:'rejoin'}}; currentDraftId=null;
-  document.getElementById('picker').style.display='flex';
-  document.getElementById('pal-hint').textContent='Pick a base to start →';
-  document.getElementById('pal-list').innerHTML='';
-  document.getElementById('laneArea').innerHTML='';
-  draw();
-};
-document.getElementById('btn-test').onclick=()=>{
-  if(!validate()) return;
-  try{ sessionStorage.setItem('zorbs_testmap',JSON.stringify(currentMap())); }catch(_){}
-  window.open('/beta/?map=test','_blank');
-};
-document.getElementById('m-diff').querySelectorAll('button').forEach(b=>b.onclick=()=>{
-  difficulty=b.dataset.d; document.getElementById('m-diff').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b)); scheduleSave();
-});
-
-// ---- DRAFTS / SUBMIT (same /api/maps endpoints as before) ----
-let saveT=null; function scheduleSave(){ /* hook for autosave later */ }
+// ---- BUTTONS ----
+document.getElementById('btn-clear').onclick=()=>{ if(track.length && !confirm('Clear the whole track?')) return; track=[]; addTarget={type:'main'}; openItem=-1; currentDraftId=null; refresh(); };
+document.getElementById('btn-test').onclick=()=>{ if(!validate()) return; try{ sessionStorage.setItem('zorbs_testmap',JSON.stringify(currentMap())); }catch(_){}; window.open('/beta/?map=test','_blank'); };
+document.getElementById('m-diff').querySelectorAll('button').forEach(b=>b.onclick=()=>{ difficulty=b.dataset.d; document.getElementById('m-diff').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b)); });
 
 document.getElementById('btn-save').onclick=async()=>{
   if(!author){ toast('Sign in on the dashboard first to save drafts.'); return; }
-  if(mainLen()<1){ toast('Nothing to save yet — add a piece first.'); return; }
+  if(mainLen()<1){ toast('Nothing to save yet.'); return; }
   const btn=document.getElementById('btn-save'); btn.disabled=true; const old=btn.textContent; btn.textContent='Saving…';
-  try{
-    const map=Object.assign(currentMap(),{thumb:makeThumb()});
+  try{ const map=Object.assign(currentMap(),{thumb:makeThumb()});
     const r=await fetch('/api/maps',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'draft-save',map,id:currentDraftId||undefined})});
-    const j=await r.json().catch(()=>({}));
-    if(j&&j.ok){ currentDraftId=j.id; toast('💾 Draft saved.'); } else toast('Save failed: '+(j&&j.error||'try again'));
-  }catch(_){ toast('Network error — try again.'); }
-  btn.textContent=old; btn.disabled=false;
+    const j=await r.json().catch(()=>({})); if(j&&j.ok){ currentDraftId=j.id; toast('💾 Draft saved.'); } else toast('Save failed: '+(j&&j.error||'try again'));
+  }catch(_){ toast('Network error.'); } btn.textContent=old; btn.disabled=false;
 };
 document.getElementById('btn-submit').onclick=async()=>{
-  if(!validate()) return;
-  if(!author){ toast('Sign in on the dashboard first so we can credit your track.'); return; }
+  if(!validate()) return; if(!author){ toast('Sign in on the dashboard first.'); return; }
   const btn=document.getElementById('btn-submit'); btn.disabled=true; const old=btn.textContent; btn.textContent='Submitting…';
-  try{
-    const r=await fetch('/api/maps',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'submit',map:Object.assign(currentMap(),{thumb:makeThumb()})})});
-    const j=await r.json().catch(()=>({}));
-    if(j&&j.ok) toast('✓ Submitted! An admin will review it soon.'); else toast('Submit failed: '+(j&&j.error||'try again'));
-  }catch(_){ toast('Network error — try again.'); }
-  btn.textContent=old; btn.disabled=false; validate();
+  try{ const r=await fetch('/api/maps',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'submit',map:Object.assign(currentMap(),{thumb:makeThumb()})})});
+    const j=await r.json().catch(()=>({})); if(j&&j.ok) toast('✓ Submitted for review!'); else toast('Submit failed: '+(j&&j.error||'try again'));
+  }catch(_){ toast('Network error.'); } btn.textContent=old; btn.disabled=false; validate();
 };
 
 document.getElementById('btn-load').onclick=openDraftModal;
 function closeDraftModal(){ document.getElementById('draftModal').style.display='none'; }
 async function openDraftModal(){
-  if(!author){ toast('Sign in on the dashboard first to load your drafts.'); return; }
+  if(!author){ toast('Sign in on the dashboard first to load drafts.'); return; }
   const modal=document.getElementById('draftModal'), list=document.getElementById('draftList');
   modal.style.display='flex'; list.innerHTML='<div style="color:#9aa6c4;padding:20px;text-align:center">Loading…</div>';
-  try{
-    const r=await fetch('/api/maps?list=drafts&author='+encodeURIComponent(author));
-    const j=await r.json().catch(()=>({}));
+  try{ const r=await fetch('/api/maps?list=drafts&author='+encodeURIComponent(author)); const j=await r.json().catch(()=>({}));
     const drafts=(j&&j.drafts)||[];
-    if(!drafts.length){ list.innerHTML='<div style="color:#9aa6c4;padding:24px;text-align:center">No saved drafts yet.<br><span style="font-size:12px">Build a track and hit 💾 Save.</span></div>'; return; }
-    list.innerHTML=drafts.map(d=>{
-      const when=d.updated?new Date(d.updated).toLocaleString():'';
+    if(!drafts.length){ list.innerHTML='<div style="color:#9aa6c4;padding:24px;text-align:center">No saved drafts yet.</div>'; return; }
+    list.innerHTML=drafts.map(d=>{ const when=d.updated?new Date(d.updated).toLocaleString():'';
       const img=d.thumb?`<img src="${d.thumb}">`:`<div style="width:80px;height:50px;border-radius:6px;background:#0c0f1a;flex:0 0 auto"></div>`;
       const nm=(d.name||'Untitled Draft').replace(/[<>&]/g,'');
-      return `<div class="draftItem">${img}<div class="meta"><div class="t">${nm}</div>
-        <div class="s">${d.sectionCount} pieces · ${d.difficulty||'medium'}</div><div class="s" style="font-size:10px;color:#6b7596">${when}</div></div>
-        <button style="background:#2a6cff;color:#fff" onclick="loadDraft('${d.id}')">Load</button>
-        <button class="danger" onclick="delDraft('${d.id}')">🗑</button></div>`;
+      return `<div class="draftItem">${img}<div class="meta"><div class="t">${nm}</div><div class="s">${d.sectionCount} pieces · ${d.difficulty||'medium'}</div><div class="s" style="font-size:10px;color:#6b7596">${when}</div></div>
+        <button style="background:#2a6cff;color:#fff" onclick="loadDraft('${d.id}')">Load</button><button class="danger" onclick="delDraft('${d.id}')">🗑</button></div>`;
     }).join('');
   }catch(_){ list.innerHTML='<div style="color:#ff8a9c;padding:20px;text-align:center">Couldn’t load drafts.</div>'; }
 }
-async function loadDraft(id){
-  try{
-    const r=await fetch('/api/maps?draft='+encodeURIComponent(id)+'&author='+encodeURIComponent(author));
-    const j=await r.json().catch(()=>({}));
-    if(j&&j.ok&&j.draft){ currentDraftId=id; importMap(j.draft); closeDraftModal(); toast('Loaded draft.'); }
-    else toast('Could not load that draft.');
-  }catch(_){ toast('Network error loading draft.'); }
-}
-async function delDraft(id){
-  if(!confirm('Delete this draft?')) return;
-  try{ await fetch('/api/maps',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'draft-delete',id,author})}); openDraftModal(); }catch(_){}
-}
+async function loadDraft(id){ try{ const r=await fetch('/api/maps?draft='+encodeURIComponent(id)+'&author='+encodeURIComponent(author)); const j=await r.json().catch(()=>({}));
+  if(j&&j.ok&&j.draft){ currentDraftId=id; importMap(j.draft); closeDraftModal(); toast('Loaded draft.'); } else toast('Could not load that draft.'); }catch(_){ toast('Network error.'); } }
+async function delDraft(id){ if(!confirm('Delete this draft?')) return; try{ await fetch('/api/maps',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'draft-delete',id,author})}); openDraftModal(); }catch(_){} }
 window.loadDraft=loadDraft; window.delDraft=delDraft; window.closeDraftModal=closeDraftModal;
 
 // ---- INIT ----
-document.querySelectorAll('.baseCard').forEach(c=>c.onclick=()=>startBase(c.dataset.base));
+buildPalette();
 window.addEventListener('resize',resize);
-resize();
+resize(); refresh();
 </script>
 </body>
 </html>

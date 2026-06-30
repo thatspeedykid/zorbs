@@ -201,7 +201,7 @@ function sanitizeDraft(raw) {
     const bObstacles = Array.isArray(br.obstacles) ? br.obstacles.map(sanitizeObstacle).filter(Boolean).slice(0, 20) : [];
     const end = br.end === 'finish' ? 'finish' : 'rejoin';
     const side = br.side < 0 ? -1 : br.side > 0 ? 1 : 0;
-    return { id: br.id || 0, fromSection: Math.max(0, (br.fromSection | 0)), side, end, sections: bSections, obstacles: bObstacles };
+    return { id: br.id || 0, fromSection: Math.max(0, (br.fromSection | 0)), side, end, noMiddle: br.noMiddle === true, sections: bSections, obstacles: bObstacles };
   }).filter(Boolean) : [];
   return {
     name: clean(raw.name, 40) || 'Untitled Draft',
@@ -240,7 +240,7 @@ function sanitizeMap(raw) {
     const fromSection = Math.max(0, (br.fromSection | 0));
     const end = br.end === 'finish' ? 'finish' : 'rejoin';
     const side = br.side < 0 ? -1 : br.side > 0 ? 1 : 0;
-    return { id: br.id || 0, fromSection, side, end, sections: bSections, obstacles: bObstacles };
+    return { id: br.id || 0, fromSection, side, end, noMiddle: br.noMiddle === true, sections: bSections, obstacles: bObstacles };
   }).filter(Boolean) : [];
   return {
     name: clean(raw.name, 40) || 'Untitled Track',
