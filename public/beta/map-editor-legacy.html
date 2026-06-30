@@ -1,0 +1,1563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>ZORBS — Map Editor (v0.4 beta)</title>
+<style>
+  :root{
+    --bg:#0a0e1a; --panel:#121829; --panel2:#0e1322; --line:#23304d;
+    --txt:#dfe8ff; --dim:#7f8cad; --accent:#39c8e0; --accent2:#ff8800;
+    --good:#2ec27e; --bad:#ff4d5e; --split:#ffcc00;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:var(--bg);color:var(--txt);
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;overflow:hidden}
+  .app{display:grid;grid-template-columns:220px 1fr 260px;grid-template-rows:50px 1fr;height:100%}
+
+  /* header */
+  header{grid-column:1/4;display:flex;align-items:center;gap:12px;padding:0 14px;
+    background:var(--panel);border-bottom:1px solid var(--line)}
+  header h1{font-size:15px;letter-spacing:.4px}
+  header .ver{font-size:10px;color:var(--dim);border:1px solid var(--line);border-radius:20px;padding:2px 7px}
+  header .sp{flex:1}
+  button{font:inherit;color:var(--txt);background:#1b2540;border:1px solid var(--line);
+    border-radius:7px;padding:7px 11px;cursor:pointer;transition:.12s}
+  button:hover:not(:disabled){border-color:var(--accent);background:#22325a}
+  button.pri{background:var(--accent);color:#04121a;border-color:var(--accent);font-weight:700}
+  button.pri:hover{filter:brightness(1.12)}
+  button.warn{background:#200f18;border-color:#5a2030;color:#ffb3bd}
+  button.danger{background:#200f18;border-color:var(--bad);color:var(--bad)}
+  button:disabled{opacity:.35;cursor:not-allowed}
+
+  /* left palette */
+  aside.palette{background:var(--panel2);border-right:1px solid var(--line);overflow-y:auto;padding:10px 8px}
+  .pal-tabs{display:flex;gap:4px;margin-bottom:10px}
+  .pal-tab{flex:1;padding:6px;font-size:10px;letter-spacing:.5px;text-align:center;border-radius:6px;
+    background:#111826;border:1px solid var(--line);cursor:pointer;transition:.12s;color:var(--dim)}
+  .pal-tab.on{background:var(--accent);color:#04121a;border-color:var(--accent);font-weight:700}
+  .pal-section{font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--dim);
+    margin:10px 0 6px 4px}
+  .piece,.obs-item{display:flex;align-items:center;gap:8px;padding:7px 9px;margin-bottom:5px;
+    background:#141b30;border:1px solid var(--line);border-radius:8px;cursor:grab;user-select:none;
+    transition:.12s}
+  .piece:hover,.obs-item:hover{border-color:var(--accent);background:#1a2542}
+  .piece:active,.obs-item:active{cursor:grabbing}
+  .p-ic{width:28px;height:28px;flex:none;border-radius:5px;display:grid;place-items:center}
+  .p-nm{font-size:12px;font-weight:600}
+  .p-ds{font-size:9px;color:var(--dim)}
+
+  /* canvas area */
+  main.stage{position:relative;overflow:hidden;background:
+    radial-gradient(1000px 500px at 50% -5%, #142036 0%, #0a0e1a 70%)}
+  canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+  .stagebar{position:absolute;left:10px;top:10px;display:flex;gap:6px;z-index:5}
+  .stagebar button{padding:5px 9px;font-size:11px}
+  .valid{position:absolute;right:10px;top:10px;z-index:5;font-size:11px;
+    padding:5px 11px;border-radius:7px;border:1px solid var(--line);background:rgba(10,14,26,.9)}
+  .valid.ok{color:var(--good);border-color:#1d5a3e}
+  .valid.bad{color:var(--bad);border-color:#5a2030}
+  .mode-hint{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);
+    background:rgba(10,14,26,.88);border:1px solid var(--line);border-radius:16px;
+    padding:5px 14px;font-size:11px;color:var(--dim);z-index:5;pointer-events:none}
+
+  /* right props */
+  aside.props{background:var(--panel2);border-left:1px solid var(--line);overflow-y:auto;padding:12px}
+  aside.props h2{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);margin:0 0 10px}
+  .field{margin-bottom:10px}
+  .field label{display:block;font-size:10px;color:var(--dim);margin-bottom:4px}
+  .field input,.field select,.field textarea{width:100%;background:#0c1120;color:var(--txt);
+    border:1px solid var(--line);border-radius:6px;padding:7px;font:inherit}
+  .field textarea{resize:vertical;min-height:50px}
+  .rrow{display:flex;align-items:center;gap:6px}
+  .rrow input[type=range]{flex:1}
+  .rval{font-size:11px;color:var(--accent);min-width:36px;text-align:right}
+  .seg{display:flex;gap:5px}
+  .seg button{flex:1;padding:5px;font-size:11px}
+  .seg button.on{background:var(--accent);color:#04121a;border-color:var(--accent);font-weight:700}
+  .empty{color:var(--dim);font-size:11px;line-height:1.5;margin-top:8px}
+  hr.div{border:none;border-top:1px solid var(--line);margin:12px 0}
+
+  .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);
+    background:#0e1a30;border:1px solid var(--accent);color:var(--txt);
+    padding:10px 18px;border-radius:9px;z-index:99;opacity:0;transition:.22s;pointer-events:none}
+  .toast.show{opacity:1}
+</style>
+<script src="/beta/telemetry.js?v=b14"></script>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>🗺️ ZORBS Map Editor</h1>
+    <span class="ver">v0.4 beta</span>
+    <span class="sp"></span>
+    <button class="warn" id="btn-clear">Clear</button>
+    <button id="btn-undo">↩ Undo</button>
+    <button id="btn-load">📂 Load Draft</button>
+    <button id="btn-save">💾 Save Draft</button>
+    <button id="btn-test">▶ Test</button>
+    <button class="pri" id="btn-submit">Submit for Review</button>
+  </header>
+
+  <aside class="palette" id="palette">
+    <div class="pal-tabs">
+      <div class="pal-tab on" id="tab-track" onclick="switchTab('track')">TRACK</div>
+      <div class="pal-tab" id="tab-obs" onclick="switchTab('obs')">OBSTACLES</div>
+    </div>
+    <div id="pal-track"></div>
+    <div id="pal-obs" style="display:none"></div>
+  </aside>
+
+  <main class="stage">
+    <div class="stagebar">
+      <button id="zin">＋</button><button id="zout">－</button><button id="zfit">Fit</button>
+    </div>
+    <div class="valid" id="valid">—</div>
+    <canvas id="cv"></canvas>
+    <div class="mode-hint" id="mode-hint">Drag a piece onto the track · drag obstacles to reposition</div>
+  </main>
+
+  <aside class="props" id="props">
+    <h2>Map details</h2>
+    <div class="field"><label>Name</label><input id="m-name" maxlength="40" placeholder="My Wild Track"></div>
+    <div class="field"><label>Description</label><textarea id="m-desc" maxlength="140" placeholder="What makes this track fun?"></textarea></div>
+    <div class="field"><label>Difficulty</label>
+      <div class="seg" id="m-diff">
+        <button data-d="easy">Easy</button><button data-d="medium" class="on">Medium</button><button data-d="hard">Hard</button>
+      </div></div>
+    <div class="field"><label>Theme</label>
+      <select id="m-theme">
+        <option value="">Random</option><option value="cyberCity">Cyber City</option>
+        <option value="volcano">Volcano</option><option value="glacier">Glacier</option>
+        <option value="neonJungle">Neon Jungle</option><option value="deepSpace">Deep Space</option>
+      </select></div>
+    <hr class="div">
+    <div id="sel-panel"><div class="empty">Click a piece or obstacle on the canvas to edit it.</div></div>
+  </aside>
+</div>
+<div class="toast" id="toast"></div>
+
+<div id="draft-modal" style="display:none;position:fixed;inset:0;z-index:50;background:rgba(6,8,14,.72);backdrop-filter:blur(2px)">
+  <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:min(560px,92vw);max-height:80vh;display:flex;flex-direction:column;background:#121726;border:1px solid #2a3358;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #222a40">
+      <strong style="font-size:15px">📂 Your saved drafts</strong>
+      <button onclick="closeDraftModal()" style="background:none;border:0;color:#9aa6c4;font-size:20px;cursor:pointer;line-height:1">×</button>
+    </div>
+    <div id="draft-list" style="overflow:auto;padding:10px 12px;gap:8px;display:flex;flex-direction:column">
+      <div style="color:#9aa6c4;padding:20px;text-align:center">Loading…</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================================
+// ZORBS MAP EDITOR v0.4 — canvas-first drag-and-drop builder
+//
+// Track pieces drag from the left palette ONTO THE CANVAS — they snap to the
+// nearest insertion gap between existing sections. Obstacles also drag from
+// the palette onto the canvas and sit freely at any track position. Click any
+// piece or obstacle on the canvas to select + edit its properties on the right.
+// ============================================================================
+
+// ---- PALETTE DATA ----
+const TRACK_PIECES = [
+  { kind:'straight', name:'Straight',  desc:'flat run',          color:'#5b7cff', def:{len:30} },
+  { kind:'sweep',    name:'Turn',      desc:'banked curve',      color:'#39c8e0', def:{len:40,dir:1,sharp:0.028} },
+  { kind:'funnel',   name:'Funnel',    desc:'wide → narrow',     color:'#ffb020', def:{len:22,min:0.45} },
+  { kind:'narrower', name:'Narrower',  desc:'bottleneck',        color:'#ff7a45', def:{len:20,min:0.38} },
+  { kind:'moguls',   name:'Moguls',    desc:'washboard bumps',   color:'#b06bff', def:{len:28} },
+  { kind:'drop',     name:'Drop',      desc:'steep descent',     color:'#2ec27e', def:{len:16,drop:1.2} },
+  { kind:'cascade',  name:'Cascade',   desc:'stepped shelf descent', color:'#5ad1a0', def:{len:44,steps:4} },
+  { kind:'arena',    name:'Arena',     desc:'wide open flat zone',  color:'#f5c518', def:{len:40,w:14} },
+  { kind:'spiral',   name:'Spiral',    desc:'helix descent',     color:'#ff5db0', def:{len:32,dir:1} },
+  { kind:'tunnel',   name:'Tunnel',    desc:'enclosed run',      color:'#7f8cad', def:{len:20,dir:1} },
+];
+const OBS_ITEMS = [
+  { kind:'bumper',  name:'Bumper Post', desc:'cylinder ball bounces off', color:'#ff4d5e', icon:'⬡' },
+  { kind:'spinner', name:'Spinner',     desc:'rotating arm knockback',    color:'#ff8800', icon:'✳' },
+  { kind:'boost',   name:'Boost Pad',   desc:'speed burst strip',         color:'#2ec27e', icon:'▲' },
+  { kind:'launch',  name:'Launch Pin',  desc:'flings ball airborne',      color:'#aa44ff', icon:'⬆' },
+  { kind:'pendulum',name:'Pendulum',    desc:'swings across the lane',     color:'#4cd6ff', icon:'⊙' },
+  { kind:'vortex',  name:'Vortex Disc', desc:'orbital spin then fling',    color:'#cc77ff', icon:'◎' },
+];
+const byKind = k => TRACK_PIECES.find(p => p.kind === k);
+const obsByKind = k => OBS_ITEMS.find(o => o.kind === k);
+
+// ---- STATE ----
+let sections = [];         // {kind, len, ...params}
+let obstacles = [];        // {kind, t, side, dir}  t=0..1 along track, side=-1..1
+let branches = [];         // [{id, fromSection, sections, obstacles}] — alternate exits
+let activeBranch = -1;     // -1 = main track; ≥0 = editing branches[activeBranch]
+let _savedMain = null;     // main track backup while in branch mode
+let selType = null;        // 'section' | 'obstacle'
+let selIdx = -1;           // index into sections[] or obstacles[]
+let selObs = [];           // multi-selected obstacle indices (always includes selIdx when selType==='obstacle')
+let _clip = [];            // clipboard of copied obstacle objects
+let _pendingKind = null;   // palette piece kind waiting for a canvas click to place it
+let _boxSel = null;        // {x0,z0,x1,z1} world-space rect during shift-drag box select
+let _hoverPort = null;     // {si, pi} — section index + port index currently hovered
+let selBranchPiece = -1;   // when editing a branch: which piece within it is open for editing
+let difficulty = 'medium';
+let undoStack = [], redoStack = [];
+const author = (() => { try { const s=JSON.parse(localStorage.getItem('zorbs_session')||'{}'); return s.username||s.name||''; } catch(_){return '';} })();
+
+// ---- CANVAS + VIEW ----
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+let view = { panx:0, pany:0, scale:1 };
+
+// ---- PATH CACHE ---- (rebuilt on any change, used for hit-testing + rendering)
+let _path = null;
+
+const STEP = 1.3, WIDTH = 7.0;
+
+function buildPath(){
+  const pts = [];
+  const sectionStarts = [];  // pts index where each section begins (after platform)
+  let x=0, z=0, ang=0, turn=0;
+  // start platform
+  for(let i=0;i<14;i++){ z+=STEP; pts.push({x,z,w:WIDTH*1.4,kind:'platform',sIdx:-1}); }
+  for(let si=0;si<sections.length;si++){
+    sectionStarts.push(pts.length);
+    const s=sections[si], len=s.len|0;
+    let target=0;
+    if(s.kind==='sweep')  target=(s.dir||1)*(s.sharp||0.028);
+    if(s.kind==='spiral') target=(s.dir||1)*0.030;
+    if(s.kind==='tunnel') target=(s.dir||1)*0.012;
+    for(let i=0;i<len;i++){
+      turn+=(target-turn)*0.12; ang+=turn;
+      x+=Math.sin(ang)*STEP; z+=Math.cos(ang)*STEP;
+      let w=WIDTH;
+      const t=len>1?i/(len-1):0;
+      // funnel is a V: narrows to `min` at the MIDDLE then reopens to full width by the end,
+      // matching the generator (track.js) exactly so both ends attach seamlessly to neighbours.
+      if(s.kind==='funnel')   w=WIDTH*(1-Math.sin(t*Math.PI)*(1-(s.min||0.45)));
+      if(s.kind==='narrower') w=WIDTH*(t<0.5?1-(1-(s.min||0.38))*(t*2):(s.min||0.38));
+      if(s.kind==='tunnel')   w=WIDTH*0.8;
+      if(s.kind==='arena'){ const ramp=Math.min(1,t/0.15,(1-t)/0.15); const es=ramp*ramp*(3-2*ramp); w=WIDTH*(1+((s.w||14)/WIDTH-1)*Math.max(0,es)); }
+      pts.push({x,z,w,kind:s.kind,sIdx:si,split:!!s.split});
+    }
+  }
+  // total non-platform pts count (for t mapping)
+  const platEnd = pts.findIndex(p=>p.sIdx>=0);
+  _path = {pts, sectionStarts, platEnd: platEnd<0?pts.length:platEnd};
+  return _path;
+}
+
+// Build a path for a branch starting from the endpoint of its fromSection on the main path.
+function buildBranchPath(br, mainPath){
+  if(!br.sections||!br.sections.length) return null;
+  const{pts,sectionStarts}=mainPath||buildPath();
+  const fromSI=br.fromSection;
+  if(fromSI<0||fromSI>=sectionStarts.length) return null;
+  const endIdx=fromSI+1<sectionStarts.length?sectionStarts[fromSI+1]-1:pts.length-1;
+  const sp=pts[endIdx]; if(!sp) return null;
+  const prev=pts[Math.max(0,endIdx-1)];
+  const baseAng=Math.atan2(sp.x-prev.x, sp.z-prev.z);
+  // Side-aware start: left-port branches (side<0) peel off the left edge, right-port
+  // branches peel off the right edge. Offset the start to that edge and angle the
+  // initial heading outward so two branches at the same boundary clearly diverge
+  // instead of stacking on top of each other / the main line.
+  const side = br.side || 0;
+  const rx=Math.cos(baseAng), rz=-Math.sin(baseAng); // right-hand normal of heading
+  const startX = sp.x + (side?rx*sp.w*side*0.6:0);
+  const startZ = sp.z + (side?rz*sp.w*side*0.6:0);
+  // build branch pts from start point using same 2D path logic as buildPath()
+  const bpts=[];
+  let x=startX, z=startZ, ang=baseAng + side*0.5, turn=0;
+  for(let si=0;si<br.sections.length;si++){
+    const s=br.sections[si], len=s.len|0;
+    let target=0;
+    if(s.kind==='sweep')  target=(s.dir||1)*(s.sharp||0.028);
+    if(s.kind==='spiral') target=(s.dir||1)*0.030;
+    if(s.kind==='tunnel') target=(s.dir||1)*0.012;
+    for(let i=0;i<len;i++){
+      turn+=(target-turn)*0.12; ang+=turn;
+      x+=Math.sin(ang)*STEP; z+=Math.cos(ang)*STEP;
+      let w=WIDTH;
+      const t=len>1?i/(len-1):0;
+      if(s.kind==='funnel')   w=WIDTH*(1-Math.sin(t*Math.PI)*(1-(s.min||0.45)));
+      if(s.kind==='narrower') w=WIDTH*(t<0.5?1-(1-(s.min||0.38))*(t*2):(s.min||0.38));
+      if(s.kind==='tunnel')   w=WIDTH*0.8;
+      if(s.kind==='arena'){ const ramp=Math.min(1,t/0.15,(1-t)/0.15); const es=ramp*ramp*(3-2*ramp); w=WIDTH*(1+((s.w||14)/WIDTH-1)*Math.max(0,es)); }
+      bpts.push({x,z,w,kind:s.kind,sIdx:si});
+    }
+  }
+  return bpts;
+}
+
+// ---- CANVAS COORDINATES ----
+function S2C(sx,sy){ // screen → canvas coords
+  const r=cv.getBoundingClientRect();
+  const px=(sx-r.left)*devicePixelRatio, py=(sy-r.top)*devicePixelRatio;
+  return { x:(px-view.panx)/view.scale, z:(cv.height-py-view.pany)/view.scale };
+}
+function W2S(wx,wz){ // world → screen (canvas pixels)
+  return { x:wx*view.scale+view.panx, y:cv.height-(wz*view.scale+view.pany) };
+}
+
+// ---- HIT TESTING ----
+function nearestPathPoint(wx,wz){
+  if(!_path) return null;
+  let best=-1,bestD=Infinity;
+  _path.pts.forEach((p,i)=>{
+    const d=(p.x-wx)**2+(p.z-wz)**2;
+    if(d<bestD){bestD=d;best=i;}
+  });
+  return best>=0?{idx:best,d:Math.sqrt(bestD)}:null;
+}
+
+// nearest section insert position: finds the nearest path point, reads which
+// section it belongs to, and returns "insert AFTER that section" (sIdx+1).
+// This means dropping anywhere on a section inserts right after it, which is
+// far more intuitive than the old boundary-midpoint approach that could pick
+// the end of the track when you dropped on the side of a section.
+function nearestInsertIdx(wx,wz){
+  if(!_path||!_path.sectionStarts.length) return sections.length;
+  const near=nearestPathPoint(wx,wz);
+  if(!near) return sections.length;
+  const p=_path.pts[near.idx];
+  if(!p) return sections.length;
+  // platform nodes have no sIdx; insert before section 0
+  if(p.sIdx==null) return 0;
+  return p.sIdx + 1;
+}
+
+// convert path index to t=0..1 along track (non-platform only)
+function pathIdxToT(pi){
+  const {pts,platEnd}=_path;
+  const nonPlat=pts.length-platEnd;
+  if(nonPlat<=1) return 0;
+  return Math.max(0,Math.min(1,(pi-platEnd)/(nonPlat-1)));
+}
+
+// convert t to path index
+function tToPathIdx(t){
+  if(!_path) return 0;
+  const{pts,platEnd}=_path;
+  const nonPlat=pts.length-platEnd;
+  return platEnd+Math.round(t*(nonPlat-1));
+}
+
+// compute side offset from a canvas-space drop relative to track center
+function computeSide(wx,wz,pi){
+  if(!_path) return 0;
+  const pts=_path.pts;
+  const a=pts[pi],b=pts[Math.min(pi+1,pts.length-1)];
+  let dx=b.x-a.x,dz=b.z-a.z;const l=Math.hypot(dx,dz)||1;dx/=l;dz/=l;
+  // right normal = (dz, -dx) in x/z
+  const rx=dz,rz=-dx;
+  const dot=(wx-a.x)*rx+(wz-a.z)*rz;
+  return Math.max(-1,Math.min(1,dot/(a.w||WIDTH)));
+}
+
+// obstacle hit test: returns idx in obstacles[], or -1
+function hitObstacle(wx,wz){
+  for(let i=0;i<obstacles.length;i++){
+    const pi=tToPathIdx(obstacles[i].t);
+    if(!_path||!_path.pts[pi]) continue;
+    const p=_path.pts[pi];
+    const side=obstacles[i].side||0;
+    // rough right vector
+    const pts=_path.pts,b=pts[Math.min(pi+1,pts.length-1)];
+    let dx=b.x-p.x,dz=b.z-p.z;const l=Math.hypot(dx,dz)||1;dx/=l;dz/=l;
+    const ox=p.x+dz*side*p.w, oz=p.z-dx*side*p.w;
+    if((ox-wx)**2+(oz-wz)**2<(3.5)**2) return i;
+  }
+  return -1;
+}
+
+// branch path hit test: returns branch index or -1
+function hitBranch(wx,wz){
+  const mainPath=buildPath();
+  for(let bi=0;bi<branches.length;bi++){
+    const bpts=buildBranchPath(branches[bi],mainPath);
+    if(!bpts) continue;
+    for(let i=0;i<bpts.length;i++){
+      const p=bpts[i];
+      if((p.x-wx)**2+(p.z-wz)**2<(p.w*0.85)**2) return bi;
+    }
+  }
+  return -1;
+}
+
+// section hit test: click on a section area → return section index
+function hitSection(wx,wz){
+  if(!_path) return -1;
+  const near=nearestPathPoint(wx,wz);
+  if(!near||near.d>WIDTH*2.5) return -1;
+  return _path.pts[near.idx].sIdx;
+}
+
+// ---- DRAWING ----
+function resize(){ cv.width=cv.clientWidth*devicePixelRatio; cv.height=cv.clientHeight*devicePixelRatio; draw(); }
+addEventListener('resize',resize);
+
+let _dragState=null; // for pan and obstacle drag
+
+// interaction hover state
+let _hoverInsert=-1;   // section insert index to show
+let _hoverT=-1;         // obstacle t to show when dragging from palette
+
+function draw(){
+  ctx.clearRect(0,0,cv.width,cv.height);
+  const{pts,sectionStarts,platEnd}=buildPath();
+  // EMPTY STATE — no track pieces yet: show a prompt instead of a stretched lone platform
+  if(!sections.length){
+    ctx.fillStyle='rgba(127,140,173,.6)';
+    ctx.font=`${15*devicePixelRatio}px system-ui`; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('Drag a track piece here to start building', cv.width/2, cv.height/2);
+    ctx.font=`${12*devicePixelRatio}px system-ui`; ctx.fillStyle='rgba(127,140,173,.4)';
+    ctx.fillText('(or click a piece in the left palette)', cv.width/2, cv.height/2+24*devicePixelRatio);
+    // still show the insertion cursor when dragging the first piece in
+    if(_hoverInsert>=0){
+      ctx.strokeStyle='#39c8e0'; ctx.lineWidth=2.5*devicePixelRatio;
+      ctx.beginPath(); ctx.arc(cv.width/2,cv.height/2-40*devicePixelRatio,9*devicePixelRatio,0,7); ctx.stroke();
+    }
+    return;
+  }
+  if(pts.length<2) return;
+
+  // compute edge normals
+  const left=[],right=[];
+  for(let i=0;i<pts.length;i++){
+    const a=pts[i],b=pts[Math.min(i+1,pts.length-1)];
+    let dx=b.x-a.x,dz=b.z-a.z;const l=Math.hypot(dx,dz)||1;dx/=l;dz/=l;
+    const nx=-dz,nz=dx;
+    left.push(W2S(a.x+nx*a.w, a.z+nz*a.w));
+    right.push(W2S(a.x-nx*a.w, a.z-nz*a.w));
+  }
+
+  // fill
+  ctx.beginPath();
+  left.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));
+  for(let i=right.length-1;i>=0;i--) ctx.lineTo(right[i].x,right[i].y);
+  ctx.closePath();
+  ctx.fillStyle='rgba(57,200,224,0.08)'; ctx.fill();
+
+  // edges — colored per section kind; split zones = gold dashes
+  function drawEdge(side){
+    for(let i=1;i<pts.length;i++){
+      const p=pts[i];
+      if(p.kind==='platform'){ ctx.strokeStyle='#1e2d4a'; ctx.lineWidth=1.5*devicePixelRatio; ctx.setLineDash([]); }
+      else if(p.split){ ctx.strokeStyle='#ffcc00'; ctx.lineWidth=2.5*devicePixelRatio; ctx.setLineDash([6,4]); }
+      else{
+        const pc=byKind(p.kind);
+        const isSelSec=(selType==='section'&&selIdx===p.sIdx);
+        ctx.strokeStyle=isSelSec?'#fff':(pc?.color||'#39c8e0');
+        ctx.lineWidth=(isSelSec?3:2)*devicePixelRatio;
+        ctx.setLineDash([]);
+      }
+      ctx.beginPath(); ctx.moveTo(side[i-1].x,side[i-1].y); ctx.lineTo(side[i].x,side[i].y); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+  }
+  drawEdge(left); drawEdge(right);
+
+  // centerline
+  ctx.strokeStyle='rgba(200,220,255,.15)'; ctx.lineWidth=devicePixelRatio; ctx.setLineDash([5,6]);
+  ctx.beginPath(); pts.forEach((p,i)=>{const s=W2S(p.x,p.z);i?ctx.lineTo(s.x,s.y):ctx.moveTo(s.x,s.y);}); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // START / FINISH markers
+  mark(W2S(pts[0].x,pts[0].z),'#2ec27e','START');
+  mark(W2S(pts[pts.length-1].x,pts[pts.length-1].z),'#ff8800','FINISH');
+
+  // draw branch paths
+  if(branches.length){
+    branches.forEach((br,bi)=>{
+      const isSel=(selType==='branch'&&selIdx===bi);
+      const bpts = buildBranchPath(br, {pts,sectionStarts});
+      if(!bpts||bpts.length<2) return;
+      const bcol='#cc77ff';
+      // ribbon fill
+      const bl=[],brr=[];
+      for(let i=0;i<bpts.length;i++){
+        const a=bpts[i],b2=bpts[Math.min(i+1,bpts.length-1)];
+        let dx=b2.x-a.x,dz=b2.z-a.z;const l=Math.hypot(dx,dz)||1;dx/=l;dz/=l;
+        const nx=-dz,nz=dx;
+        bl.push(W2S(a.x+nx*a.w,a.z+nz*a.w)); brr.push(W2S(a.x-nx*a.w,a.z-nz*a.w));
+      }
+      ctx.beginPath();
+      bl.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));
+      for(let i=brr.length-1;i>=0;i--) ctx.lineTo(brr[i].x,brr[i].y);
+      ctx.closePath(); ctx.fillStyle=isSel?'rgba(204,119,255,0.22)':'rgba(204,119,255,0.10)'; ctx.fill();
+      // edges
+      ctx.strokeStyle=isSel?'#e8aaff':bcol; ctx.lineWidth=(isSel?3:2)*devicePixelRatio; ctx.setLineDash([5,3]);
+      ctx.beginPath(); bl.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.stroke();
+      ctx.beginPath(); brr.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.stroke();
+      ctx.setLineDash([]);
+      // label
+      const ep=bpts[bpts.length-1]; const es=W2S(ep.x,ep.z);
+      ctx.fillStyle=isSel?'#e8aaff':bcol; ctx.font=`${isSel?'bold ':''} ${10*devicePixelRatio}px system-ui`;
+      ctx.textAlign='left'; ctx.textBaseline='middle';
+      ctx.fillText('Branch '+(bi+1)+(isSel?' ◀':''),es.x+6,es.y);
+    });
+  }
+
+  // section boundary tick marks
+  if(sectionStarts.length){
+    ctx.strokeStyle='rgba(255,255,255,.3)'; ctx.lineWidth=devicePixelRatio;
+    sectionStarts.forEach(si=>{
+      const p=pts[si]; if(!p) return;
+      const sl=W2S(left[si].x,left[si].y), sr=W2S(right[si].x,right[si].y);
+      ctx.beginPath(); ctx.moveTo(sl.x,sl.y); ctx.lineTo(sr.x,sr.y); ctx.stroke();
+    });
+  }
+
+  // insertion cursor
+  if(_hoverInsert>=0&&_hoverInsert<=sectionStarts.length){
+    const idx=_hoverInsert<sectionStarts.length?sectionStarts[_hoverInsert]:(pts.length-1);
+    const p=pts[Math.max(0,idx)];
+    if(p){
+      const s=W2S(p.x,p.z);
+      ctx.strokeStyle='#39c8e0'; ctx.lineWidth=2.5*devicePixelRatio;
+      ctx.beginPath(); ctx.arc(s.x,s.y,8*devicePixelRatio,0,7); ctx.stroke();
+      ctx.fillStyle='rgba(57,200,224,.25)'; ctx.fill();
+    }
+  }
+
+  // obstacle hover position (when dragging from palette)
+  if(_hoverT>=0){
+    const pi=tToPathIdx(_hoverT);
+    const p=pts[pi]; if(p){ const s=W2S(p.x,p.z);
+      ctx.strokeStyle='rgba(255,200,0,.7)'; ctx.lineWidth=2*devicePixelRatio;
+      ctx.beginPath(); ctx.arc(s.x,s.y,7*devicePixelRatio,0,7); ctx.stroke(); }
+  }
+
+  // port dots — branch attachment points on each section
+  drawPorts(pts, sectionStarts);
+
+  // obstacles
+  obstacles.forEach((o,i)=>{
+    const pi=tToPathIdx(o.t);
+    const p=pts[pi]; if(!p) return;
+    // place at lateral offset
+    const b=pts[Math.min(pi+1,pts.length-1)];
+    let dx=b.x-p.x,dz=b.z-p.z;const l=Math.hypot(dx,dz)||1;dx/=l;dz/=l;
+    const rx=dz*p.w*(o.side||0), rz=-dx*p.w*(o.side||0);
+    const s=W2S(p.x+rx,p.z+rz);
+    const ob=obsByKind(o.kind);
+    const r=7*devicePixelRatio;
+    const sel=(selType==='obstacle'&&selObs.includes(i));
+    ctx.fillStyle=sel?'#fff':(ob?.color||'#ff4d5e');
+    ctx.strokeStyle=sel?ob?.color||'#ff4d5e':'rgba(0,0,0,.5)';
+    ctx.lineWidth=sel?2.5*devicePixelRatio:1*devicePixelRatio;
+    ctx.beginPath(); ctx.arc(s.x,s.y,r,0,7); ctx.fill(); ctx.stroke();
+    ctx.fillStyle='#000'; ctx.font=`bold ${9*devicePixelRatio}px sans-serif`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(ob?.icon||'?',s.x,s.y);
+    if(sel){ ctx.strokeStyle='#fff'; ctx.lineWidth=1.5*devicePixelRatio;
+      ctx.beginPath(); ctx.arc(s.x,s.y,r+3*devicePixelRatio,0,7); ctx.stroke(); }
+  });
+
+  // box-select rectangle
+  if(_boxSel){
+    const a=W2S(_boxSel.x0,_boxSel.z0), b=W2S(_boxSel.x1,_boxSel.z1);
+    ctx.strokeStyle='rgba(57,200,224,.9)'; ctx.fillStyle='rgba(57,200,224,.12)';
+    ctx.lineWidth=1.5*devicePixelRatio; ctx.setLineDash([5,4]);
+    ctx.beginPath(); ctx.rect(Math.min(a.x,b.x),Math.min(a.y,b.y),Math.abs(b.x-a.x),Math.abs(b.y-a.y));
+    ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
+  }
+}
+function mark(s,col,txt){
+  const r=5*devicePixelRatio;
+  ctx.fillStyle=col; ctx.beginPath(); ctx.arc(s.x,s.y,r,0,7); ctx.fill();
+  ctx.fillStyle=col; ctx.font=`${10*devicePixelRatio}px system-ui`;
+  ctx.textAlign='left'; ctx.textBaseline='middle';
+  ctx.fillText(txt,s.x+r+3,s.y);
+}
+
+// ---- PORT DOTS (branch attachment points on track pieces) ----
+// Returns array of {si, pi, sx, sy, wx, wz} for all visible port dots given current path
+function computePorts(pts, sectionStarts){
+  const ports = [];
+  for(let si=0; si<sections.length; si++){
+    // show ports at both the START and END of each section
+    const endIdx = si+1 < sectionStarts.length ? sectionStarts[si+1] : pts.length-1;
+    const indices = [sectionStarts[si], endIdx];
+    indices.forEach((idx,end)=>{
+      if(idx==null) return;
+      const p = pts[idx]; if(!p) return;
+      // tangent for the side-port spread. At the very last point there is no next
+      // point, so fall back to the previous point's direction — otherwise dx=dz=0
+      // and all three dots collapse onto the center (the "missing FINISH dots" bug).
+      let dx, dz;
+      if(idx+1 <= pts.length-1 && idx+1 !== idx){
+        const b = pts[idx+1]; dx=b.x-p.x; dz=b.z-p.z;
+      }
+      if(Math.hypot(dx||0,dz||0) < 1e-6){
+        const a = pts[Math.max(0,idx-1)]; dx=p.x-a.x; dz=p.z-a.z;
+      }
+      const l=Math.hypot(dx,dz)||1;
+      const rx=dz/l, rz=-dx/l;
+      // a branch peels off the END of a section; an ENTRY port (end===0) is the
+      // boundary = end of the previous section, so it branches from si-1.
+      const branchFrom = end===1 ? si : Math.max(0, si-1);
+      // 3 ports: left edge, center, right edge
+      [-0.7, 0, 0.7].forEach((off,pi)=>{
+        const wx=p.x+rx*p.w*off, wz=p.z+rz*p.w*off;
+        const s=W2S(wx,wz);
+        ports.push({si,pi,end,branchFrom,sx:s.x,sy:s.y,wx,wz});
+      });
+    });
+  }
+  return ports;
+}
+let _cachedPorts = [];
+
+function drawPorts(pts, sectionStarts){
+  _cachedPorts = computePorts(pts, sectionStarts);
+  // while a track piece is being dragged (or armed for click-place) the dots become
+  // bigger, glowing drop-targets so it's obvious you can drop onto them.
+  const dragging = (_palDrag && _palDrag.paltype==='track') || !!_pendingKind;
+  const PR = (dragging ? 8 : 5.5)*devicePixelRatio;
+  _cachedPorts.forEach(pt=>{
+    const hov = _hoverPort && _hoverPort.si===pt.si && _hoverPort.pi===pt.pi && _hoverPort.end===pt.end;
+    const isMain = pt.pi===1;          // center port = MAIN line (extends main track)
+    const portSide = pt.pi===0?-1:1;
+    const hasBranch = !isMain && branches.some(b=>b.fromSection===pt.branchFrom && (b.side||0)===portSide);
+    // MAIN port = cyan (matches main track), BRANCH ports = green; existing branch = purple
+    const baseFill = isMain ? 'rgba(57,200,224,0.40)' : 'rgba(46,194,126,0.35)';
+    const baseStroke = isMain ? 'rgba(57,200,224,0.85)' : 'rgba(46,194,126,0.7)';
+    const hovCol = isMain ? '#39c8e0' : '#2ec27e';
+    const glowCol = isMain ? '57,200,224' : '46,194,126';
+    // glow halo when dragging
+    if(dragging){
+      ctx.beginPath(); ctx.arc(pt.sx,pt.sy,PR+(hov?6:3)*devicePixelRatio,0,7);
+      ctx.fillStyle = `rgba(${glowCol},${hov?0.30:0.12})`; ctx.fill();
+    }
+    ctx.beginPath(); ctx.arc(pt.sx,pt.sy,PR,0,7);
+    ctx.fillStyle = hov ? (isMain?'rgba(57,200,224,0.95)':'rgba(46,194,126,0.95)') : hasBranch ? 'rgba(204,119,255,0.7)' : dragging ? `rgba(${glowCol},0.6)` : baseFill;
+    ctx.strokeStyle = hov ? hovCol : hasBranch ? '#cc77ff' : baseStroke;
+    ctx.lineWidth = (hov?2.5:1.2)*devicePixelRatio;
+    ctx.fill(); ctx.stroke();
+    // icon: main port shows a vertical bar (continue), branch ports show a plus
+    ctx.strokeStyle = hov ? '#fff' : hasBranch ? '#fff' : (isMain?'rgba(57,200,224,0.95)':'rgba(46,194,126,0.9)');
+    ctx.lineWidth = 1.5*devicePixelRatio;
+    const s=PR*0.55;
+    ctx.beginPath();
+    if(isMain){ ctx.moveTo(pt.sx,pt.sy-s); ctx.lineTo(pt.sx,pt.sy+s); }   // bar
+    else { ctx.moveTo(pt.sx-s,pt.sy); ctx.lineTo(pt.sx+s,pt.sy);
+           ctx.moveTo(pt.sx,pt.sy-s); ctx.lineTo(pt.sx,pt.sy+s); }        // plus
+    ctx.stroke();
+  });
+}
+
+function hitPort(cx,cz){
+  // hit radius in world units — generous while dragging so dots are easy to target
+  const dragging = (_palDrag && _palDrag.paltype==='track') || !!_pendingKind;
+  const hitR = (dragging ? 14 : 8) / view.scale;
+  let best=null, bestD=Infinity;
+  for(const pt of _cachedPorts){
+    const d=Math.hypot(cx-pt.wx, cz-pt.wz);
+    if(d<hitR && d<bestD){ bestD=d; best=pt; }
+  }
+  return best;
+}
+
+// ---- FIT / ZOOM ----
+function fit(){
+  const pts=buildPath().pts; if(!pts.length) return;
+  let minx=1e9,maxx=-1e9,minz=1e9,maxz=-1e9;
+  pts.forEach(p=>{minx=Math.min(minx,p.x);maxx=Math.max(maxx,p.x);minz=Math.min(minz,p.z);maxz=Math.max(maxz,p.z);});
+  const pad=64*devicePixelRatio, W=cv.width, H=cv.height;
+  const sx=(W-pad*2)/Math.max(1,maxx-minx), sy=(H-pad*2)/Math.max(1,maxz-minz);
+  view.scale=Math.min(sx,sy,50*devicePixelRatio);
+  view.panx=W/2-((minx+maxx)/2)*view.scale;
+  view.pany=H/2-((minz+maxz)/2)*view.scale;
+  draw();
+}
+document.getElementById('zin').onclick=()=>{view.scale*=1.2;draw();};
+document.getElementById('zout').onclick=()=>{view.scale*=0.83;draw();};
+document.getElementById('zfit').onclick=fit;
+
+// ---- PALETTE RENDER ----
+function switchTab(t){
+  document.getElementById('tab-track').classList.toggle('on',t==='track');
+  document.getElementById('tab-obs').classList.toggle('on',t==='obs');
+  document.getElementById('pal-track').style.display=t==='track'?'':'none';
+  document.getElementById('pal-obs').style.display=t==='obs'?'':'none';
+}
+
+function glyph(kind,c){
+  c=c||'#fff';
+  const s=p=>`<svg viewBox="0 0 28 28" fill="none" stroke="${c}" stroke-width="2.5" stroke-linecap="round">${p}</svg>`;
+  switch(kind){
+    case'straight':return s('<path d="M14 3v22"/>');
+    case'sweep':   return s('<path d="M8 3 Q22 10 13 25"/>');
+    case'funnel':  return s('<path d="M4 3 L12 25 M24 3 L16 25"/>');
+    case'narrower':return s('<path d="M5 3 L13 14 5 25 M23 3 L15 14 23 25"/>');
+    case'moguls':  return s('<path d="M3 14 q3-7 6 0 q3 7 6 0 q3-7 6 0"/>');
+    case'drop':    return s('<path d="M14 3v16 M8 14l6 7 6-7"/>');
+    case'spiral':  return s('<path d="M14 14m0-9 a9 9 0 1 1-6 15"/><circle cx="14" cy="14" r="2.5"/>');
+    case'tunnel':  return s('<rect x="5" y="4" width="18" height="20" rx="7"/>');
+    case'cascade': return s('<path d="M4 5h7v6h7v6h6"/>');
+    case'arena':   return s('<rect x="3" y="6" width="22" height="16" rx="1.5"/>');
+    default:       return s('<circle cx="14" cy="14" r="8"/>');
+  }
+}
+
+function renderPalette(){
+  const tp=document.getElementById('pal-track');
+  tp.innerHTML='<div class="pal-section">Track Pieces</div>';
+  TRACK_PIECES.forEach(p=>{
+    const d=document.createElement('div'); d.className='piece'; d.draggable=true; d.dataset.palkind=p.kind; d.dataset.paltype='track';
+    d.innerHTML=`<div class="p-ic" style="background:${p.color}22;border:1px solid ${p.color}55">${glyph(p.kind,p.color)}</div>
+      <div><div class="p-nm">${p.name}</div><div class="p-ds">${p.desc}</div></div>`;
+    d.addEventListener('dragstart',palDragStart); d.addEventListener('click',()=>startPendingPlace(p.kind));
+    tp.appendChild(d);
+  });
+
+  const op=document.getElementById('pal-obs');
+  op.innerHTML='<div class="pal-section">Drag onto track</div>';
+  OBS_ITEMS.forEach(o=>{
+    const d=document.createElement('div'); d.className='obs-item'; d.draggable=true; d.dataset.palkind=o.kind; d.dataset.paltype='obs';
+    d.innerHTML=`<div class="p-ic" style="background:${o.color}22;border:1px solid ${o.color}55;font-size:16px;color:${o.color}">${o.icon}</div>
+      <div><div class="p-nm">${o.name}</div><div class="p-ds">${o.desc}</div></div>`;
+    d.addEventListener('dragstart',palDragStart);
+    op.appendChild(d);
+  });
+}
+renderPalette();
+
+// ---- PENDING PLACEMENT MODE ---- (click palette piece → hover canvas → click to insert)
+function startPendingPlace(kind){
+  _pendingKind=kind; _hoverInsert=sections.length; _hoverT=-1;
+  updateModeHint(); draw();
+}
+function cancelPendingPlace(){
+  _pendingKind=null; _hoverInsert=-1; updateModeHint(); draw();
+}
+function updateModeHint(){
+  const el=document.getElementById('mode-hint');
+  if(_pendingKind){
+    const p=byKind(_pendingKind);
+    el.textContent=`Click the track to place ${p?.name||_pendingKind} · Esc to cancel`;
+    el.style.color='#fff'; el.style.borderColor='var(--accent)';
+  } else {
+    el.textContent='Drag a piece onto the track · drag obstacles to reposition';
+    el.style.color=''; el.style.borderColor='';
+  }
+}
+
+// ---- DRAG FROM PALETTE → CANVAS ----
+let _palDrag = null; // {paltype, kind}
+
+function palDragStart(e){
+  if(_pendingKind) cancelPendingPlace();
+  _palDrag={paltype:e.currentTarget.dataset.paltype, kind:e.currentTarget.dataset.palkind};
+  e.dataTransfer.setData('paltype', _palDrag.paltype);
+  e.dataTransfer.setData('kind', _palDrag.kind);
+  e.dataTransfer.effectAllowed='copy';
+}
+
+cv.addEventListener('dragenter', e=>e.preventDefault());
+cv.addEventListener('dragover', e=>{
+  e.preventDefault();
+  const c=S2C(e.clientX,e.clientY);
+  if(!_path) buildPath();
+  if(_palDrag&&_palDrag.paltype==='track'){
+    // hovering a port dot → branch placement; otherwise normal main-track insert
+    const pt=hitPort(c.x,c.z);
+    if(pt){ _hoverPort={si:pt.si,pi:pt.pi,end:pt.end}; _hoverInsert=-1; _hoverT=-1; }
+    else { _hoverPort=null; _hoverInsert=nearestInsertIdx(c.x,c.z); _hoverT=-1; }
+  } else if(_palDrag&&_palDrag.paltype==='obs'){
+    const near=nearestPathPoint(c.x,c.z);
+    _hoverT=near?pathIdxToT(near.idx):-1; _hoverInsert=-1;
+  }
+  draw();
+});
+// NOTE: do NOT clear _palDrag here. Many browsers fire `dragleave` immediately before
+// `drop`, so nulling the active-drag state on leave dropped the very first placement (the
+// drop then had no kind and silently no-op'd → "place twice" bug). Only clear the hover
+// cursor here; _palDrag is cleared on `dragend` (a real end of the gesture) instead.
+cv.addEventListener('dragleave',()=>{ _hoverInsert=-1; _hoverT=-1; _hoverPort=null; draw(); });
+// Trust the in-page JS drag state first (reliable same-page); dataTransfer custom types are
+// flaky across browsers and were the other half of the place-twice bug.
+window.addEventListener('dragend',()=>{ _palDrag=null; _hoverInsert=-1; _hoverT=-1; _hoverPort=null; draw(); });
+cv.addEventListener('drop',e=>{
+  e.preventDefault();
+  const paltype=(_palDrag&&_palDrag.paltype)||e.dataTransfer.getData('paltype')||'';
+  const kind=(_palDrag&&_palDrag.kind)||e.dataTransfer.getData('kind')||'';
+  _hoverInsert=-1; _hoverT=-1; _palDrag=null;
+  if(!kind){ draw(); return; }
+  const c=S2C(e.clientX,e.clientY);
+  if(paltype==='track'){
+    const pt=hitPort(c.x,c.z);
+    if(pt){ _hoverPort=null; dropPieceOnPort(pt,kind); }
+    else { const at=nearestInsertIdx(c.x,c.z); addPiece(kind,at); }
+  } else if(paltype==='obs'){
+    const near=nearestPathPoint(c.x,c.z);
+    if(near&&near.idx>=(_path.platEnd||0)){
+      const t=pathIdxToT(near.idx);
+      const side=computeSide(c.x,c.z,near.idx);
+      addObstacle(kind,t,side);
+    }
+  }
+  draw();
+});
+
+// ---- CANVAS POINTER EVENTS (pan + click-to-select + obstacle drag) ----
+let _panStart=null, _obsDragIdx=-1, _hasMoved=false;
+
+cv.addEventListener('pointerdown',e=>{
+  cv.setPointerCapture(e.pointerId);
+  _panStart={x:e.clientX,y:e.clientY,px:view.panx,py:view.pany};
+  _hasMoved=false;
+  if(!_path) buildPath();
+  const c=S2C(e.clientX,e.clientY);
+  // Port dot click. CENTER (pi===1) = main line; SIDE = branch.
+  if(!e.shiftKey){
+    const pt=hitPort(c.x,c.z);
+    if(pt){
+      // if a pending palette piece is armed, drop it onto this port
+      if(_pendingKind){ const k=_pendingKind; _pendingKind=null; _hoverInsert=-1; updateModeHint(); dropPieceOnPort(pt,k); return; }
+      if(pt.pi===1){ select('section', pt.si); return; }    // center → select the main section
+      // side port: select existing branch on THIS side, otherwise create new
+      const side=pt.pi===0?-1:1;
+      const existing=branches.findIndex(b=>b.fromSection===pt.branchFrom && (b.side||0)===side);
+      if(existing>=0) select('branch',existing);
+      else addBranch(pt.branchFrom, side);
+      return;
+    }
+  }
+  const oi=hitObstacle(c.x,c.z);
+  // SHIFT+drag on empty space → box-select obstacles. SHIFT+click an obstacle → toggle it in the set.
+  if(e.shiftKey){
+    if(oi>=0){ toggleObsSel(oi); e.stopPropagation(); _obsDragIdx=-1; }
+    else { _boxSel={x0:c.x,z0:c.z,x1:c.x,z1:c.z}; _obsDragIdx=-1; }
+    return;
+  }
+  if(oi>=0){ _obsDragIdx=oi; select('obstacle',oi); e.stopPropagation(); }
+  else { _obsDragIdx=-1; }
+});
+cv.addEventListener('pointermove',e=>{
+  // update hover cursor for pending placement even without pointer down
+  if(!_panStart && _pendingKind){
+    if(!_path) buildPath();
+    const c=S2C(e.clientX,e.clientY);
+    _hoverInsert=sections.length?nearestInsertIdx(c.x,c.z):0;
+    draw(); return;
+  }
+  // port hover highlight (no drag in progress)
+  if(!_panStart && !_pendingKind){
+    const c=S2C(e.clientX,e.clientY);
+    const pt=hitPort(c.x,c.z);
+    const prev=_hoverPort;
+    _hoverPort = pt ? {si:pt.si,pi:pt.pi} : null;
+    if(!!prev !== !!_hoverPort || (prev&&pt&&(prev.si!==pt.si||prev.pi!==pt.pi))) draw();
+    if(_hoverPort) cv.style.cursor='pointer'; else cv.style.cursor='';
+    return;
+  }
+  if(!_panStart) return;
+  const dx=e.clientX-_panStart.x, dy=e.clientY-_panStart.y;
+  if(Math.abs(dx)>3||Math.abs(dy)>3) _hasMoved=true;
+  if(_boxSel){
+    const c=S2C(e.clientX,e.clientY); _boxSel.x1=c.x; _boxSel.z1=c.z; draw(); return;
+  }
+  if(_obsDragIdx>=0){
+    // drag obstacle to new position
+    const c=S2C(e.clientX,e.clientY);
+    if(!_path) buildPath();
+    const near=nearestPathPoint(c.x,c.z);
+    if(near&&near.idx>=(_path.platEnd||0)){
+      obstacles[_obsDragIdx].t=pathIdxToT(near.idx);
+      obstacles[_obsDragIdx].side=computeSide(c.x,c.z,near.idx);
+      draw();
+    }
+  } else if(_hasMoved&&!_obsDragIdx){
+    // pan
+    view.panx=_panStart.px+dx*devicePixelRatio;
+    view.pany=_panStart.py-dy*devicePixelRatio;
+    draw();
+  }
+});
+cv.addEventListener('pointerup',e=>{
+  if(_boxSel){
+    // finalize box select → all obstacles whose marker falls inside the rect
+    const x0=Math.min(_boxSel.x0,_boxSel.x1), x1=Math.max(_boxSel.x0,_boxSel.x1);
+    const z0=Math.min(_boxSel.z0,_boxSel.z1), z1=Math.max(_boxSel.z0,_boxSel.z1);
+    const inside=[];
+    obstacles.forEach((o,i)=>{
+      const pos=obsWorldPos(i); if(!pos) return;
+      if(pos.x>=x0&&pos.x<=x1&&pos.z>=z0&&pos.z<=z1) inside.push(i);
+    });
+    _boxSel=null;
+    if(inside.length){ selType='obstacle'; selObs=inside; selIdx=inside[0]; renderSelPanel(); }
+    else deselect();
+    draw(); _panStart=null; _hasMoved=false; return;
+  }
+  if(!_hasMoved&&_panStart&&_obsDragIdx<0){
+    if(_pendingKind){
+      // commit pending placement at hover position
+      const at=_hoverInsert>=0?_hoverInsert:sections.length;
+      const kind=_pendingKind;
+      _pendingKind=null; _hoverInsert=-1; updateModeHint();
+      addPiece(kind,at);
+    } else {
+      // click — select section or obstacle
+      if(!_path) buildPath();
+      const c=S2C(e.clientX,e.clientY);
+      const oi=hitObstacle(c.x,c.z);
+      if(oi>=0){ select('obstacle',oi); }
+      else{
+        const bi=hitBranch(c.x,c.z);
+        if(bi>=0){ select('branch',bi); }
+        else{
+          const si=hitSection(c.x,c.z);
+          if(si>=0) select('section',si); else deselect();
+        }
+      }
+    }
+  }
+  if(_obsDragIdx>=0){ const wasDrag=_hasMoved; _obsDragIdx=-1; if(wasDrag) pushUndo(); }
+  _panStart=null; _hasMoved=false; cv.style.cursor='';
+});
+cv.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const f=e.deltaY<0?1.12:0.89;
+  view.scale=Math.max(0.05*devicePixelRatio,view.scale*f);
+  draw();
+},{passive:false});
+
+// ---- MUTATIONS ----
+function addPiece(kind,at){
+  const p=byKind(kind); if(!p) return;
+  const s=Object.assign({kind},JSON.parse(JSON.stringify(p.def)));
+  if(at==null||at>sections.length) at=sections.length;
+  sections.splice(at,0,s);
+  // shift branch fromSection indices that now point past the insertion point
+  branches.forEach(b=>{ if(b.fromSection>=at) b.fromSection++; });
+  pushUndo(); select('section',at); refresh();
+}
+function removePiece(i){
+  sections.splice(i,1);
+  branches = branches.filter(b=>b.fromSection!==i);
+  branches.forEach(b=>{ if(b.fromSection>i) b.fromSection--; });
+  selType=null; selIdx=-1; // always clear — prevents double-delete when panel auto-updates
+  pushUndo(); refresh();
+}
+function addObstacle(kind,t,side){
+  side=Math.max(-0.85,Math.min(0.85,side||0));
+  obstacles.push({kind,t,side,dir:1});
+  pushUndo(); select('obstacle',obstacles.length-1); refresh();
+}
+function removeObstacle(i){
+  obstacles.splice(i,1);
+  deselect(); pushUndo(); refresh();
+}
+function duplicateObstacle(i){
+  const copy=JSON.parse(JSON.stringify(obstacles[i]));
+  copy.t=Math.min(1,copy.t+0.02); copy.side=Math.max(-0.85,Math.min(0.85,(copy.side||0)+0.15));
+  obstacles.splice(i+1,0,copy);
+  pushUndo(); select('obstacle',i+1); refresh();
+}
+
+// ---- MULTI-SELECT obstacle helpers ----
+// world position of an obstacle marker (matches the draw() placement math)
+function obsWorldPos(i){
+  if(!_path) buildPath();
+  const o=obstacles[i]; if(!o) return null;
+  const pi=tToPathIdx(o.t); const p=_path.pts[pi]; if(!p) return null;
+  const b=_path.pts[Math.min(pi+1,_path.pts.length-1)];
+  let dx=b.x-p.x,dz=b.z-p.z;const l=Math.hypot(dx,dz)||1;dx/=l;dz/=l;
+  return { x:p.x+dz*p.w*(o.side||0), z:p.z-dx*p.w*(o.side||0) };
+}
+function toggleObsSel(i){
+  if(selType!=='obstacle') selObs=[];
+  selType='obstacle';
+  const k=selObs.indexOf(i);
+  if(k>=0) selObs.splice(k,1); else selObs.push(i);
+  selIdx=selObs.length?selObs[selObs.length-1]:-1;
+  if(!selObs.length){ deselect(); return; }
+  renderSelPanel(); draw();
+}
+function copyObs(){
+  if(selType!=='obstacle'||!selObs.length) return;
+  _clip=selObs.map(i=>JSON.parse(JSON.stringify(obstacles[i]))).filter(Boolean);
+  toast(_clip.length+' obstacle'+(_clip.length!==1?'s':'')+' copied');
+}
+function pasteObs(){
+  if(!_clip.length) return;
+  // paste offset slightly down-track + sideways, preserving relative layout
+  const baseT=Math.min(..._clip.map(o=>o.t));
+  const start=obstacles.length, added=[];
+  _clip.forEach(o=>{
+    const c=JSON.parse(JSON.stringify(o));
+    c.t=Math.min(1,c.t+0.04);
+    obstacles.push(c); added.push(obstacles.length-1);
+  });
+  selType='obstacle'; selObs=added; selIdx=added[added.length-1];
+  pushUndo(); renderSelPanel(); refresh();
+  toast('Pasted '+added.length);
+}
+function duplicateSelObs(){
+  if(selType!=='obstacle'||!selObs.length) return;
+  const added=[];
+  selObs.slice().forEach(i=>{
+    const c=JSON.parse(JSON.stringify(obstacles[i]));
+    c.t=Math.min(1,c.t+0.03); c.side=Math.max(-0.85,Math.min(0.85,(c.side||0)+0.12));
+    obstacles.push(c); added.push(obstacles.length-1);
+  });
+  selObs=added; selIdx=added[added.length-1];
+  pushUndo(); renderSelPanel(); refresh();
+}
+function deleteSelObs(){
+  if(selType!=='obstacle'||!selObs.length) return;
+  // remove highest indices first so lower indices stay valid
+  selObs.slice().sort((a,b)=>b-a).forEach(i=>obstacles.splice(i,1));
+  deselect(); pushUndo(); refresh();
+}
+
+function select(type,idx){
+  if(!(type==='branch'&&idx===selIdx)) selBranchPiece=-1;  // reset piece editor unless re-selecting same branch
+  selType=type; selIdx=idx; selObs=(type==='obstacle'&&idx>=0)?[idx]:[]; renderSelPanel(); draw();
+}
+function deselect(){ selType=null; selIdx=-1; selObs=[]; selBranchPiece=-1; renderSelPanel(); draw(); }
+
+// ---- BRANCH EDITING — inline, no mode-swap ----
+function addBranch(fromSection, side){
+  const id = Date.now();
+  branches.push({id, fromSection, side:side||0, end:'rejoin', sections:[], obstacles:[]});
+  pushUndo();
+  select('branch', branches.length-1);
+}
+function deleteBranch(idx){
+  branches.splice(idx,1);
+  if(selType==='branch'){ if(selIdx===idx) deselect(); else if(selIdx>idx){ selIdx--; renderSelPanel(); } }
+  pushUndo(); refresh();
+}
+function addBranchPiece(bi, kind){
+  const p=byKind(kind); if(!p) return;
+  branches[bi].sections.push(Object.assign({kind},JSON.parse(JSON.stringify(p.def))));
+  selBranchPiece=branches[bi].sections.length-1;   // open the new piece for editing
+  pushUndo(); renderSelPanel(); draw();
+}
+// open/close a branch piece's property editor
+function toggleBranchPiece(si){
+  selBranchPiece = (selBranchPiece===si) ? -1 : si;
+  renderSelPanel(); draw();
+}
+// Drop a track piece onto a port dot.
+//   CENTER port (pi===1) = MAIN line → insert the piece into the main track here.
+//   SIDE ports (pi 0/2)   = BRANCH    → find/create a branch and append the piece.
+function dropPieceOnPort(pt, kind){
+  const p=byKind(kind); if(!p) return;
+  if(pt.pi===1){
+    // exit port inserts after the section; entry port inserts before it
+    const at = pt.end===1 ? pt.si+1 : pt.si;
+    addPiece(kind, at);
+    return;
+  }
+  const from=pt.branchFrom;
+  const side=pt.pi===0?-1:1;   // left port = left branch, right port = right branch
+  // match BOTH the section AND the side, so the left and right ports at a boundary
+  // are independent branches (dropping on the right never extends a left branch).
+  let bi=branches.findIndex(b=>b.fromSection===from && (b.side||0)===side);
+  if(bi<0){
+    branches.push({id:Date.now(), fromSection:from, side, end:'rejoin', sections:[], obstacles:[]});
+    bi=branches.length-1;
+  }
+  branches[bi].sections.push(Object.assign({kind},JSON.parse(JSON.stringify(p.def))));
+  pushUndo(); select('branch',bi);
+}
+function removeBranchPiece(bi, si){
+  branches[bi].sections.splice(si,1);
+  if(selBranchPiece===si) selBranchPiece=-1; else if(selBranchPiece>si) selBranchPiece--;
+  pushUndo(); renderSelPanel(); draw();
+}
+// stub kept for any lingering onclick references
+function enterBranchMode(idx){ select('branch',idx); }
+function exitBranchMode(){ deselect(); }
+
+// ---- UNDO / REDO ----
+function state(){ return JSON.stringify({sections,obstacles,branches}); }
+function restoreState(s){ const d=JSON.parse(s); sections=d.sections; obstacles=d.obstacles; branches=d.branches||[]; }
+function pushUndo(){ undoStack.push(state()); if(undoStack.length>60)undoStack.shift(); redoStack=[]; scheduleAutoSave(); }
+function undo(){ if(!undoStack.length)return; redoStack.push(state()); restoreState(undoStack.pop()); deselect(); refresh(); }
+function redo(){ if(!redoStack.length)return; undoStack.push(state()); restoreState(redoStack.pop()); deselect(); refresh(); }
+document.getElementById('btn-undo').onclick=undo;
+addEventListener('keydown',e=>{
+  if(e.key==='Escape'){ if(_pendingKind){ cancelPendingPlace(); e.preventDefault(); } return; }
+  if((e.ctrlKey||e.metaKey)&&!e.shiftKey&&e.key==='z'){e.preventDefault();undo();}
+  if((e.ctrlKey||e.metaKey)&&(e.shiftKey&&e.key==='z'||e.key==='y')){e.preventDefault();redo();}
+  // Delete/Backspace: allow when focus is on range sliders, block only on text inputs/textareas
+  const ae=document.activeElement;
+  const isText=ae&&(ae.tagName==='TEXTAREA'||(ae.tagName==='INPUT'&&ae.type!=='range'));
+  if(isText) return;
+  const mod=e.ctrlKey||e.metaKey;
+  if(mod&&e.key==='c'&&selType==='obstacle'&&selObs.length){ e.preventDefault(); copyObs(); return; }
+  if(mod&&e.key==='v'&&_clip.length){ e.preventDefault(); pasteObs(); return; }
+  if(mod&&e.key==='d'&&selType==='obstacle'&&selObs.length){ e.preventDefault(); selObs.length>1?duplicateSelObs():duplicateObstacle(selIdx); return; }
+  if((e.key==='Delete'||e.key==='Backspace')){
+    if(selType==='section'&&selIdx>=0){ e.preventDefault(); removePiece(selIdx); }
+    else if(selType==='obstacle'&&selObs.length>1){ e.preventDefault(); deleteSelObs(); }
+    else if(selType==='obstacle'&&selIdx>=0){ e.preventDefault(); removeObstacle(selIdx); }
+  }
+});
+
+// ---- shared section-property controls (used by both main sections and branch pieces) ----
+// Returns the slider/direction HTML for a section-like object `s`.
+function sectionPropsHTML(s){
+  let h=slider('Length','len',s.len,6,120,1);
+  if('sharp' in s){ h+=slider('Sharpness','sharp',s.sharp,0.012,0.055,0.002);
+    h+=`<div class="turn-deg" style="font-size:10px;color:var(--dim);margin:-4px 0 8px">≈ ${Math.round(s.sharp*s.len*0.92*180/Math.PI)}° of turn</div>`; }
+  if('min'   in s) h+=slider('Throat width','min',s.min,0.25,0.85,0.01);
+  if('drop'  in s) h+=slider('Steepness','drop',s.drop,0.4,3,0.1);
+  if('steps' in s) h+=slider('Tiers','steps',s.steps,2,8,1);
+  if('w'     in s) h+=slider('Arena width','w',s.w,8,30,1);
+  if('dir'   in s) h+=dirseg(s.dir);
+  return h;
+}
+// Wire slider + direction events for a property block, writing back into target `s`.
+function wireSectionProps(root, s, onChange){
+  root.querySelectorAll('input[type=range]').forEach(r=>{
+    r.addEventListener('input',()=>{
+      s[r.dataset.k]=parseFloat(r.value);
+      r.parentElement.querySelector('.rval').textContent=fmt(r.dataset.k,r.value);
+      const td=root.querySelector('.turn-deg');
+      if(td&&'sharp'in s) td.textContent='≈ '+Math.round(s.sharp*s.len*0.92*180/Math.PI)+'° of turn';
+      draw(); validate();
+    });
+    r.addEventListener('change',pushUndo);
+  });
+  const ds=root.querySelector('#dirseg');
+  if(ds) ds.querySelectorAll('button').forEach(b=>b.onclick=()=>{ s.dir=+b.dataset.v; pushUndo(); if(onChange)onChange(); });
+}
+
+// ---- SELECTED PIECE PROPERTIES PANEL ----
+const selPanel=document.getElementById('sel-panel');
+function renderSelPanel(){
+  if(!selType||selIdx<0){
+    selPanel.innerHTML='<div class="empty">Click a piece or obstacle on the canvas to edit it.</div>';
+    return;
+  }
+  if(selType==='section'){
+    const s=sections[selIdx]; if(!s){selPanel.innerHTML='';return;}
+    const p=byKind(s.kind);
+    let h=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <div class="p-ic" style="width:30px;height:30px;background:${p.color}22;border:1px solid ${p.color}55">${glyph(s.kind,p.color)}</div>
+      <div><div style="font-weight:700">${p.name}</div><div style="font-size:10px;color:var(--dim)">piece ${selIdx+1}/${sections.length}</div></div></div>`;
+    h+=slider('Length','len',s.len,6,120,1);
+    if('sharp' in s){ h+=slider('Sharpness','sharp',s.sharp,0.012,0.055,0.002);
+      h+=`<div id="turn-deg" style="font-size:10px;color:var(--dim);margin:-4px 0 8px">≈ ${Math.round(s.sharp*s.len*0.92*180/Math.PI)}° of turn</div>`; }
+    if('min'   in s) h+=slider('Throat width','min',s.min,0.25,0.85,0.01);
+    if('drop'  in s) h+=slider('Steepness','drop',s.drop,0.4,3,0.1);
+    if('steps' in s) h+=slider('Tiers','steps',s.steps,2,8,1);
+    if('w'     in s) h+=slider('Arena width','w',s.w,8,30,1);
+    if('dir'   in s) h+=dirseg(s.dir);
+    if(s.kind==='straight') h+=splitseg(!!s.split);
+    // Branch exits — quick overview + add button; click the branch path to edit it
+    {
+      const myBranches=branches.map((b,i)=>({b,i})).filter(({b})=>b.fromSection===selIdx);
+      const sideName=s=> s<0?'◀ Left':s>0?'Right ▶':'Center';
+      if(myBranches.length){
+        h+=`<hr class="div"><div style="font-size:10px;color:var(--dim);margin-bottom:6px">BRANCH EXITS</div>`;
+        myBranches.forEach(({b,i})=>{
+          const isFinish=b.end==='finish';
+          h+=`<div style="border:1px solid var(--line);border-radius:7px;padding:6px;margin-bottom:6px;cursor:pointer" onclick="select('branch',${i})">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span style="font-size:11px;color:#cc77ff">Branch ${i+1} <span style="color:var(--dim)">(${sideName(b.side||0)})</span></span>
+              <span style="font-size:10px;color:var(--dim)">${b.sections.length} piece${b.sections.length!==1?'s':''}</span>
+            </div>
+            <div style="font-size:10px;color:var(--dim);margin-top:2px">${isFinish?'🏁 Own finish':'↩ Rejoins main'} — click to edit</div>
+          </div>`;
+        });
+      }
+      // Explicit per-side new-branch buttons — a section can have one LEFT and one RIGHT
+      // branch. Only offer a side that isn't already taken so each click is unambiguous.
+      const hasL=myBranches.some(({b})=>(b.side||0)<0), hasR=myBranches.some(({b})=>(b.side||0)>0);
+      h+=`<div style="display:flex;gap:5px;margin-top:2px">`;
+      if(!hasL) h+=`<button style="flex:1;padding:5px;font-size:11px" onclick="addBranch(${selIdx},-1)">＋ Branch ◀ left</button>`;
+      if(!hasR) h+=`<button style="flex:1;padding:5px;font-size:11px" onclick="addBranch(${selIdx},1)">＋ Branch right ▶</button>`;
+      if(hasL&&hasR) h+=`<div style="flex:1;font-size:10px;color:var(--dim);text-align:center;padding:5px">Both sides used — branch off another section</div>`;
+      h+=`</div>`;
+    }
+    h+=`<button class="danger" style="width:100%;margin-top:8px" onclick="removePiece(${selIdx})">Delete piece</button>`;
+    selPanel.innerHTML=h;
+    selPanel.querySelectorAll('input[type=range]').forEach(r=>{
+      r.addEventListener('input',()=>{
+        sections[selIdx][r.dataset.k]=parseFloat(r.value);
+        r.parentElement.querySelector('.rval').textContent=fmt(r.dataset.k,r.value);
+        const td=selPanel.querySelector('#turn-deg'); const sc=sections[selIdx];
+        if(td&&'sharp'in sc) td.textContent='≈ '+Math.round(sc.sharp*sc.len*0.92*180/Math.PI)+'° of turn';
+        draw(); validate();
+      });
+      r.addEventListener('change',pushUndo);
+    });
+    const ds=selPanel.querySelector('#dirseg');
+    if(ds) ds.querySelectorAll('button').forEach(b=>b.onclick=()=>{ sections[selIdx].dir=+b.dataset.v; pushUndo(); refresh(); });
+    const ss=selPanel.querySelector('#splitseg');
+    if(ss) ss.querySelectorAll('button').forEach(b=>b.onclick=()=>{
+      if(+b.dataset.v) sections[selIdx].split=true; else delete sections[selIdx].split;
+      pushUndo(); refresh();
+    });
+  } else if(selType==='branch'){
+    const bi=selIdx; const br=branches[bi];
+    if(!br){ selPanel.innerHTML=''; return; }
+    const isFinish=br.end==='finish';
+    let h=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div><div style="font-weight:700;color:#cc77ff">Branch ${bi+1}</div>
+      <div style="font-size:10px;color:var(--dim)">from section ${br.fromSection+1}</div></div>
+      <button class="danger" style="padding:4px 8px;font-size:11px" onclick="deleteBranch(${bi})">✕ Remove</button>
+    </div>`;
+    // rejoin/finish toggle
+    h+=`<div class="seg" id="brend-seg" style="margin-bottom:10px">
+      <button data-v="rejoin" class="${!isFinish?'on':''}">↩ Rejoin main</button>
+      <button data-v="finish" class="${isFinish?'on':''}">🏁 Own finish</button>
+    </div>`;
+    // section list — each piece is clickable to open its full editor (like main sections)
+    if(selBranchPiece>=br.sections.length) selBranchPiece=-1;
+    if(br.sections.length){
+      h+=`<div style="font-size:10px;color:var(--dim);margin-bottom:4px">BRANCH PIECES — click to edit</div>`;
+      br.sections.forEach((s,si)=>{
+        const pc=byKind(s.kind);
+        const open=(si===selBranchPiece);
+        h+=`<div style="margin-bottom:4px;border:1px solid ${open?(pc?.color||'#cc77ff'):'var(--line)'};border-radius:7px;overflow:hidden">
+          <div style="display:flex;align-items:center;gap:6px;padding:6px 8px;cursor:pointer;background:${open?'#1a2236':'#141b30'}" onclick="toggleBranchPiece(${si})">
+            <div class="p-ic" style="width:22px;height:22px;background:${pc?.color||'#888'}22;border:1px solid ${pc?.color||'#888'}55">${glyph(s.kind,pc?.color||'#fff')}</div>
+            <div style="flex:1;font-size:11px;color:${pc?.color||'#fff'}">${pc?.name||s.kind}</div>
+            <div style="font-size:10px;color:var(--dim)">${open?'▼':'▶'} len ${s.len||'?'}</div>
+            <button class="danger" style="padding:2px 7px;font-size:10px" onclick="event.stopPropagation();removeBranchPiece(${bi},${si})">✕</button>
+          </div>`;
+        if(open){
+          h+=`<div class="bp-props" style="padding:8px 10px;background:#0e1322">${sectionPropsHTML(s)}</div>`;
+        }
+        h+=`</div>`;
+      });
+    } else {
+      h+=`<div style="font-size:11px;color:var(--dim);margin-bottom:8px">No pieces yet — add some below</div>`;
+    }
+    // add-piece buttons
+    h+=`<div style="font-size:10px;color:var(--dim);margin:8px 0 5px">ADD PIECE TO BRANCH</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">`;
+    TRACK_PIECES.forEach(p=>{
+      h+=`<button style="padding:5px;font-size:10px;text-align:left" onclick="addBranchPiece(${bi},'${p.kind}')">
+        <span style="color:${p.color}">+</span> ${p.name}</button>`;
+    });
+    h+=`</div>`;
+    selPanel.innerHTML=h;
+    // rejoin/finish toggle wiring
+    selPanel.querySelector('#brend-seg').querySelectorAll('button').forEach(b=>b.onclick=()=>{
+      branches[bi].end=b.dataset.v; pushUndo(); refresh();
+    });
+    // wire the open piece's property controls
+    if(selBranchPiece>=0 && br.sections[selBranchPiece]){
+      const bp=selPanel.querySelector('.bp-props');
+      if(bp) wireSectionProps(bp, br.sections[selBranchPiece], ()=>renderSelPanel());
+    }
+    return;
+  } else if(selType==='obstacle'&&selObs.length>1){
+    // MULTI-SELECT group panel
+    const kinds={}; selObs.forEach(i=>{ const k=obstacles[i]&&obstacles[i].kind; if(k)kinds[k]=(kinds[k]||0)+1; });
+    const summary=Object.entries(kinds).map(([k,n])=>`${n}× ${obsByKind(k)?.name||k}`).join(', ');
+    let h=`<div style="font-weight:700;margin-bottom:4px">${selObs.length} obstacles selected</div>
+      <div style="font-size:10px;color:var(--dim);margin-bottom:10px">${summary}</div>
+      <button style="width:100%;margin-bottom:6px" onclick="duplicateSelObs()">⧉ Duplicate all (Ctrl+D)</button>
+      <button style="width:100%;margin-bottom:6px" onclick="copyObs()">⧉ Copy (Ctrl+C)</button>
+      ${_clip.length?`<button style="width:100%;margin-bottom:6px" onclick="pasteObs()">📋 Paste ${_clip.length} (Ctrl+V)</button>`:''}
+      <button class="danger" style="width:100%;margin-top:4px" onclick="deleteSelObs()">Delete all</button>
+      <div class="empty" style="margin-top:10px">Shift+drag to box-select · Shift+click to toggle one</div>`;
+    selPanel.innerHTML=h;
+    return;
+  } else if(selType==='obstacle'){
+    const o=obstacles[selIdx]; if(!o){selPanel.innerHTML='';return;}
+    const ob=obsByKind(o.kind);
+    let h=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <div class="p-ic" style="width:30px;height:30px;background:${ob.color}22;border:1px solid ${ob.color}55;font-size:16px;color:${ob.color};display:grid;place-items:center">${ob.icon}</div>
+      <div><div style="font-weight:700">${ob.name}</div><div style="font-size:10px;color:var(--dim)">obstacle ${selIdx+1}/${obstacles.length}</div></div></div>`;
+    h+=slider('Track position','t',o.t,0,1,0.01);
+    h+=slider('Side offset','side',o.side||0,-1,1,0.05);
+    if(o.kind==='bumper') h+=slider('Post size','size',o.size||0.65,0.35,1.6,0.05);
+    if(o.kind==='spinner'){
+      h+=slider('Arm length','size',o.size||2.5,0.8,4.5,0.1);
+      h+=slider('Spin speed','speed',o.speed||2.5,0.8,5,0.1);
+      h+=`<div class="field"><label>Spin direction</label><div class="seg" id="obsdirseg">
+      <button data-v="-1" class="${(o.dir||1)<0?'on':''}">◀ Left</button><button data-v="1" class="${(o.dir||1)>0?'on':''}">Right ▶</button></div></div>`;
+    }
+    if(o.kind==='boost') h+=slider('Pad length','length',o.length||14,6,28,1);
+    if(o.kind==='pendulum') h+=slider('Swing speed','speed',o.speed||1.6,0.5,3.5,0.1);
+    if(o.kind==='vortex'){
+      h+=slider('Revolutions','revolutions',o.revolutions||1.5,1,4,0.25);
+      h+=slider('Duration (s)','duration',o.duration||1.4,0.8,3.0,0.1);
+      h+=`<div class="field"><label>Spin direction</label><div class="seg" id="obsdirseg">
+      <button data-v="-1" class="${(o.dir||1)<0?'on':''}">◀ Left</button><button data-v="1" class="${(o.dir||1)>0?'on':''}">Right ▶</button></div></div>`;
+    }
+    h+=`<div style="display:flex;gap:5px;margin-top:8px">
+      <button style="flex:1" onclick="duplicateObstacle(${selIdx})">⧉ Duplicate</button>
+      <button style="flex:1" onclick="copyObs()">Copy</button></div>`;
+    if(_clip.length) h+=`<button style="width:100%;margin-top:6px" onclick="pasteObs()">📋 Paste ${_clip.length}</button>`;
+    h+=`<button class="danger" style="width:100%;margin-top:6px" onclick="removeObstacle(${selIdx})">Delete obstacle</button>`;
+    h+=`<div class="empty" style="margin-top:8px">Shift+drag the canvas to select several at once</div>`;
+    selPanel.innerHTML=h;
+    selPanel.querySelectorAll('input[type=range]').forEach(r=>{
+      r.addEventListener('input',()=>{
+        obstacles[selIdx][r.dataset.k]=parseFloat(r.value);
+        r.parentElement.querySelector('.rval').textContent=fmt(r.dataset.k,r.value);
+        draw(); validate();
+      });
+      r.addEventListener('change',pushUndo);
+    });
+    const ds=selPanel.querySelector('#obsdirseg');
+    if(ds) ds.querySelectorAll('button').forEach(b=>b.onclick=()=>{ obstacles[selIdx].dir=+b.dataset.v; pushUndo(); refresh(); });
+  }
+}
+function slider(label,key,val,min,max,step){
+  return `<div class="field"><label>${label}</label><div class="rrow">
+    <input type="range" data-k="${key}" min="${min}" max="${max}" step="${step}" value="${val}">
+    <span class="rval">${fmt(key,val)}</span></div></div>`;
+}
+function fmt(k,v){ return (k==='len'||k==='length'||k==='steps')?String(v|0):(+v).toFixed(k==='t'||k==='side'||k==='min'||k==='sharp'?2:1); }
+function dirseg(dir){
+  return `<div class="field"><label>Direction</label><div class="seg" id="dirseg">
+    <button data-v="-1" class="${dir<0?'on':''}">◀ Left</button>
+    <button data-v="1" class="${dir>0?'on':''}">Right ▶</button></div></div>`;
+}
+function splitseg(split){
+  return `<div class="field"><label>Split zone (two paths rejoin)</label><div class="seg" id="splitseg">
+    <button data-v="0" class="${!split?'on':''}">Single path</button>
+    <button data-v="1" class="${split?'on':''}">⑂ Split</button></div></div>`;
+}
+
+// difficulty buttons
+document.getElementById('m-diff').querySelectorAll('button').forEach(b=>b.onclick=()=>{
+  difficulty=b.dataset.d;
+  document.getElementById('m-diff').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));
+});
+
+// ---- VALIDATION ----
+function validate(){
+  const el=document.getElementById('valid');
+  const total=sections.reduce((a,s)=>a+(s.len|0),0);
+  const probs=[];
+  if(sections.length<3) probs.push('add at least 3 pieces');
+  if(total<120) probs.push('track too short');
+  if(total>2000) probs.push('track too long');
+  const splits=sections.filter(s=>s.split);
+  if(splits.length>1) probs.push('only one split zone allowed');
+  if(splits.length&&splits[0].len<60) probs.push('split zone must be length ≥60');
+  for(let i=1;i<sections.length;i++){
+    const heavy=k=>['funnel','narrower','drop'].includes(k);
+    if(heavy(sections[i].kind)&&heavy(sections[i-1].kind)){probs.push('two bottlenecks in a row');break;}
+  }
+  const ok=probs.length===0;
+  el.className='valid '+(ok?'ok':'bad');
+  el.textContent=ok?`✓ ${sections.length} pieces · ~${Math.round(total*1.3/10)}s`:'⚠ '+probs[0];
+  document.getElementById('btn-submit').disabled=!ok;
+  document.getElementById('btn-test').disabled=sections.length<2;
+  return ok;
+}
+
+// ---- REFRESH ----
+function refresh(){ validate(); renderSelPanel(); draw(); }
+
+// ---- TOAST ----
+let _toastT;
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(_toastT); _toastT=setTimeout(()=>t.classList.remove('show'),2800); }
+
+// ---- MAP DATA ----
+function currentMap(){
+  return {
+    name:document.getElementById('m-name').value.trim()||'Untitled Track',
+    description:document.getElementById('m-desc').value.trim(),
+    difficulty, theme:document.getElementById('m-theme').value,
+    author:author||'anon',
+    sections:JSON.parse(JSON.stringify(sections)),
+    obstacles:JSON.parse(JSON.stringify(obstacles)),
+    branches:JSON.parse(JSON.stringify(branches)),
+  };
+}
+
+// ---- THUMBNAIL ---- top-down PNG snapshot of the authored centerline (stored with the map).
+function makeThumb(){
+  try{
+    const p=buildPath(); const pts=p.pts; if(!pts.length) return '';
+    let minx=Infinity,maxx=-Infinity,minz=Infinity,maxz=-Infinity;
+    for(const q of pts){ if(q.x<minx)minx=q.x; if(q.x>maxx)maxx=q.x; if(q.z<minz)minz=q.z; if(q.z>maxz)maxz=q.z; }
+    const W=320,H=200,pad=16;
+    const c=document.createElement('canvas'); c.width=W; c.height=H;
+    const g=c.getContext('2d');
+    g.fillStyle='#0c0f1a'; g.fillRect(0,0,W,H);
+    const sx=(W-pad*2)/Math.max(1,maxx-minx), sz=(H-pad*2)/Math.max(1,maxz-minz);
+    const sc=Math.min(sx,sz);
+    const ox=pad+( (W-pad*2)-(maxx-minx)*sc )/2, oz=pad+( (H-pad*2)-(maxz-minz)*sc )/2;
+    const X=q=>ox+(q.x-minx)*sc, Y=q=>H-(oz+(q.z-minz)*sc);
+    // track ribbon
+    g.lineCap='round'; g.lineJoin='round';
+    g.strokeStyle='#2a3358';
+    g.beginPath();
+    for(let i=0;i<pts.length;i++){ const q=pts[i]; if(i===0)g.moveTo(X(q),Y(q)); else g.lineTo(X(q),Y(q)); }
+    g.lineWidth=Math.max(3,WIDTH*sc*1.4); g.stroke();
+    g.strokeStyle='#4cd6ff'; g.lineWidth=2; g.stroke();
+    // obstacles
+    for(const o of obstacles){ const pi=tToPathIdx(o.t); const q=pts[pi]; if(!q)continue;
+      g.fillStyle=o.kind==='boost'?'#ffd34c':o.kind==='spinner'?'#ff5db0':o.kind==='launch'?'#2ec27e':o.kind==='pendulum'?'#4cd6ff':o.kind==='vortex'?'#cc77ff':'#ff7a59';
+      g.beginPath(); g.arc(X(q),Y(q),3,0,7); g.fill(); }
+    return c.toDataURL('image/png');
+  }catch(_){ return ''; }
+}
+
+// ---- TEST ----
+document.getElementById('btn-test').onclick=()=>{
+  if(sections.length<2) return;
+  try{sessionStorage.setItem('zorbs_testmap',JSON.stringify(currentMap()));}catch(_){}
+  window.open('/beta/?map=test','_blank');
+};
+
+// ---- SUBMIT ----
+document.getElementById('btn-submit').onclick=async()=>{
+  if(!validate()) return;
+  if(!author){toast('Sign in on the dashboard first so we can credit your track.');return;}
+  const btn=document.getElementById('btn-submit'); btn.disabled=true; btn.textContent='Submitting…';
+  try{
+    const r=await fetch('/api/maps',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'submit',map:Object.assign(currentMap(),{thumb:makeThumb()})})});
+    const j=await r.json().catch(()=>({}));
+    if(j&&j.ok) toast('✓ Submitted! An admin will review it soon.');
+    else toast('Submit failed: '+(j&&j.error||'try again'));
+  }catch(e){toast('Network error — try again.');}
+  btn.textContent='Submit for Review'; btn.disabled=false; validate();
+};
+
+// ---- DRAFTS (save/load a build-in-progress to the account) ----
+let currentDraftId = null;
+
+function applyMap(d){
+  sections = Array.isArray(d.sections)? JSON.parse(JSON.stringify(d.sections)) : [];
+  obstacles = Array.isArray(d.obstacles)? JSON.parse(JSON.stringify(d.obstacles)) : [];
+  branches = Array.isArray(d.branches)? JSON.parse(JSON.stringify(d.branches)) : [];
+  document.getElementById('m-name').value = d.name && d.name!=='Untitled Draft' ? d.name : '';
+  document.getElementById('m-desc').value = d.description||'';
+  difficulty = ['easy','medium','hard'].includes(d.difficulty)? d.difficulty : 'medium';
+  document.getElementById('m-diff').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x.dataset.d===difficulty));
+  const th=document.getElementById('m-theme'); th.value = d.theme||'';
+  deselect(); undoStack=[]; redoStack=[]; fit(); refresh();
+}
+
+document.getElementById('btn-save').onclick=async()=>{
+  if(!author){toast('Sign in on the dashboard first to save drafts to your account.');return;}
+  if(!sections.length){toast('Nothing to save yet — add a piece first.');return;}
+  const btn=document.getElementById('btn-save'); btn.disabled=true; const old=btn.textContent; btn.textContent='Saving…';
+  try{
+    const map=Object.assign(currentMap(),{thumb:makeThumb()});
+    const r=await fetch('/api/maps',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'draft-save',map,id:currentDraftId||undefined})});
+    const j=await r.json().catch(()=>({}));
+    if(j&&j.ok){ currentDraftId=j.id; toast('💾 Draft saved to your account.'); }
+    else toast('Save failed: '+(j&&j.error||'try again'));
+  }catch(e){toast('Network error — try again.');}
+  btn.textContent=old; btn.disabled=false;
+};
+
+document.getElementById('btn-load').onclick=openDraftModal;
+function closeDraftModal(){ document.getElementById('draft-modal').style.display='none'; }
+async function openDraftModal(){
+  if(!author){toast('Sign in on the dashboard first to load your drafts.');return;}
+  const modal=document.getElementById('draft-modal'); const list=document.getElementById('draft-list');
+  modal.style.display='block';
+  list.innerHTML='<div style="color:#9aa6c4;padding:20px;text-align:center">Loading…</div>';
+  try{
+    const r=await fetch('/api/maps?list=drafts&author='+encodeURIComponent(author));
+    const j=await r.json().catch(()=>({}));
+    const drafts=(j&&j.drafts)||[];
+    if(!drafts.length){ list.innerHTML='<div style="color:#9aa6c4;padding:24px;text-align:center">No saved drafts yet.<br><span style="font-size:12px">Build a track and hit 💾 Save Draft.</span></div>'; return; }
+    list.innerHTML=drafts.map(d=>{
+      const when=d.updated?new Date(d.updated).toLocaleString():'';
+      const img=d.thumb?`<img src="${d.thumb}" style="width:80px;height:50px;object-fit:cover;border-radius:6px;flex:0 0 auto;background:#0c0f1a">`:`<div style="width:80px;height:50px;border-radius:6px;background:#0c0f1a;flex:0 0 auto"></div>`;
+      const nm=(d.name||'Untitled Draft').replace(/[<>&]/g,'');
+      return `<div style="display:flex;gap:10px;align-items:center;background:#0f1422;border:1px solid #222a40;border-radius:8px;padding:8px">
+        ${img}
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${nm}</div>
+          <div style="color:#9aa6c4;font-size:11px">${d.sectionCount} pieces · ${d.obstacleCount} obstacles · ${d.difficulty}</div>
+          <div style="color:#6b7596;font-size:10px">${when}</div>
+        </div>
+        <button onclick="loadDraft('${d.id}')" style="background:#2a6cff;border:0;color:#fff;border-radius:6px;padding:7px 12px;cursor:pointer;font-size:12px">Load</button>
+        <button onclick="delDraft('${d.id}','${nm.replace(/'/g,"")}')" style="background:#3a2030;border:1px solid #5a2a40;color:#ff8a9c;border-radius:6px;padding:7px 10px;cursor:pointer;font-size:12px">🗑</button>
+      </div>`;
+    }).join('');
+  }catch(e){ list.innerHTML='<div style="color:#ff8a9c;padding:20px;text-align:center">Couldn\'t load drafts — try again.</div>'; }
+}
+async function loadDraft(id){
+  try{
+    const r=await fetch('/api/maps?draft='+encodeURIComponent(id)+'&author='+encodeURIComponent(author));
+    const j=await r.json().catch(()=>({}));
+    if(j&&j.ok&&j.draft){ applyMap(j.draft); currentDraftId=id; closeDraftModal(); toast('📂 Draft loaded — keep building.'); }
+    else toast('Couldn\'t load that draft.');
+  }catch(e){toast('Network error — try again.');}
+}
+async function delDraft(id,name){
+  if(!confirm('Delete draft "'+name+'"? This can\'t be undone.')) return;
+  try{
+    await fetch('/api/maps',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'draft-delete',id,author})});
+    if(currentDraftId===id) currentDraftId=null;
+    openDraftModal();
+  }catch(e){toast('Network error — try again.');}
+}
+
+// ---- CLEAR ----
+document.getElementById('btn-clear').onclick=()=>{
+  if(!sections.length&&!obstacles.length) return;
+  if(confirm('Clear the whole track?')){ sections=[];obstacles=[];branches=[];deselect();pushUndo();fit();refresh();}
+};
+
+// ---- STARTER TRACK ---- (gentle S-curve track, no spirals, so default state is clean)
+function seedStarter(){
+  sections=[
+    {kind:'straight',  len:28},
+    {kind:'sweep',     len:40, dir:1,  sharp:0.024},
+    {kind:'straight',  len:30},
+    {kind:'straight',  len:72, split:true},
+    {kind:'sweep',     len:40, dir:-1, sharp:0.024},
+    {kind:'moguls',    len:26},
+    {kind:'straight',  len:26},
+    {kind:'sweep',     len:38, dir:1,  sharp:0.022},
+    {kind:'straight',  len:30},
+  ];
+  obstacles=[
+    {kind:'bumper', t:0.38, side:0.5,  dir:1},
+    {kind:'bumper', t:0.38, side:-0.5, dir:1},
+    {kind:'spinner',t:0.62, side:0,    dir:1},
+    {kind:'boost',  t:0.78, side:0,    dir:1},
+  ];
+}
+// ---- AUTO-SAVE ---- periodically save draft to account (every 90s if signed in and track has content)
+let _autoSaveTimer = null;
+function scheduleAutoSave(){
+  clearTimeout(_autoSaveTimer);
+  _autoSaveTimer = setTimeout(async ()=>{
+    if(!author || !sections.length) return;
+    try{
+      const map=Object.assign(currentMap(),{thumb:makeThumb()});
+      const r=await fetch('/api/maps',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({action:'draft-save',map,id:currentDraftId||undefined})});
+      const j=await r.json().catch(()=>({}));
+      if(j&&j.ok) currentDraftId=j.id;
+    }catch(_){}
+    scheduleAutoSave();
+  }, 90000);
+}
+// (auto-save is restarted from inside pushUndo on every edit)
+scheduleAutoSave();
+
+// ---- LOAD DRAFT FROM URL ---- so the dashboard "EDIT" button deep-links to the right draft
+(async()=>{
+  const p=new URLSearchParams(location.search);
+  const draftId=p.get('draft');
+  if(!draftId||!author) return;
+  try{
+    const r=await fetch('/api/maps?draft='+encodeURIComponent(draftId)+'&author='+encodeURIComponent(author));
+    const j=await r.json().catch(()=>({}));
+    if(j&&j.ok&&j.draft){ applyMap(j.draft); currentDraftId=draftId; toast('📂 Draft loaded — keep building.'); }
+  }catch(_){}
+})();
+
+seedStarter();
+resize(); setTimeout(fit,50); refresh();
+</script>
+</body>
+</html>
