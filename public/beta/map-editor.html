@@ -6,12 +6,11 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-<title>ZORBS — Map Editor (v0.6)</title>
+<title>ZORBS — Map Editor (v0.7)</title>
 <style>
   :root{
     --bg:#0a0e1a; --panel:#121829; --panel2:#0e1322; --line:#23304d;
-    --txt:#dfe8ff; --dim:#7f8cad; --accent:#39c8e0; --accent2:#ff8800;
-    --good:#2ec27e; --bad:#ff4d5e; --mid:#5b7cff; --left:#2ec27e; --right:#ff7a45; --splitc:#ffcc00;
+    --txt:#dfe8ff; --dim:#7f8cad; --accent:#39c8e0; --good:#2ec27e; --bad:#ff4d5e; --splitc:#ffcc00;
   }
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font-family:system-ui,Segoe UI,Roboto,sans-serif;overflow:hidden}
@@ -25,17 +24,17 @@
   #top button.pri{background:var(--accent);color:#04141a;border:0;font-weight:700}
   #top button:disabled{opacity:.4;cursor:not-allowed}
   #main{display:flex;height:calc(100% - 50px)}
-  #palette{width:182px;background:var(--panel);border-right:1px solid var(--line);padding:10px;overflow-y:auto}
+  #palette{width:184px;background:var(--panel);border-right:1px solid var(--line);padding:10px;overflow-y:auto}
   #stage{flex:1;position:relative;background:radial-gradient(circle at 50% 40%,#0d1326,#070a13)}
   #cv{width:100%;height:100%;display:block;touch-action:none}
-  #side{width:330px;background:var(--panel);border-left:1px solid var(--line);padding:12px;overflow-y:auto}
+  #side{width:300px;background:var(--panel);border-left:1px solid var(--line);padding:12px;overflow-y:auto}
   .sectitle{font-size:10px;letter-spacing:1px;color:var(--dim);margin:2px 0 8px}
-  .palItem{display:flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:6px;cursor:grab;user-select:none}
+  .palItem{display:flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:6px;cursor:pointer;user-select:none}
   .palItem:hover{border-color:var(--accent)}
   .palItem:active{transform:scale(.98)}
   .palItem.split{border-style:dashed;border-color:var(--splitc)}
   .palItem.split:hover{border-color:#ffe066}
-  .sw{width:18px;height:18px;border-radius:5px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:11px}
+  .sw{width:18px;height:18px;border-radius:5px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
   .palItem .nm{font-size:12px;font-weight:600}
   .palItem .ds{font-size:10px;color:var(--dim)}
   .field{margin-bottom:9px}
@@ -45,12 +44,6 @@
   .seg{display:flex;gap:4px}
   .seg button{flex:1;background:var(--panel2);border:1px solid var(--line);color:var(--dim);border-radius:7px;padding:6px;font-size:11px}
   .seg button.on{background:var(--accent);color:#04141a;border-color:var(--accent);font-weight:700}
-  .tabs{display:flex;gap:4px;margin:6px 0}
-  .tab{flex:1;background:var(--panel2);border:1px solid var(--line);color:var(--dim);border-radius:7px;padding:6px 4px;font-size:11px;font-weight:600;text-align:center}
-  .tab.on{color:#04141a;font-weight:800}
-  .tab.t-left.on{background:var(--left);border-color:var(--left)}
-  .tab.t-right.on{background:var(--right);border-color:var(--right)}
-  .addhere{font-size:10px;color:var(--accent);margin:0 0 6px}
   .item{border:1px solid var(--line);border-radius:8px;margin-bottom:6px;overflow:hidden}
   .item.sel{border-color:var(--accent)}
   .item.split{border-color:var(--splitc)}
@@ -60,7 +53,6 @@
   .itemHd button{background:transparent;border:0;color:var(--dim);font-size:13px;padding:2px 5px}
   .itemHd button:hover{color:var(--txt)}
   .itemBody{padding:8px 10px;background:var(--panel2);border-top:1px solid var(--line)}
-  .lanebox{border:1px solid var(--line);border-radius:7px;padding:7px;margin-top:7px}
   .rng{display:flex;align-items:center;gap:8px;margin-bottom:6px}
   .rng label{font-size:10px;color:var(--dim);width:62px}
   .rng input[type=range]{flex:1}
@@ -68,15 +60,10 @@
   .hint{font-size:11px;color:var(--dim);line-height:1.5}
   .danger{background:#3a1622!important;border:1px solid #5a2030!important;color:#ff8a9c!important}
   .full{width:100%}
-  .mainTargetBtn{width:100%;border:1px dashed var(--line);background:transparent;color:var(--dim);border-radius:8px;padding:8px;font-size:11px;margin-bottom:8px}
-  .mainTargetBtn.on{border-color:var(--accent);color:var(--accent)}
   #emptyHint{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--dim);pointer-events:none;text-align:center}
   #emptyHint h2{margin:0;color:var(--txt);font-weight:800}
   #toast{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);background:#10203a;border:1px solid var(--accent);color:var(--txt);padding:10px 16px;border-radius:10px;font-size:13px;opacity:0;transition:.2s;pointer-events:none;z-index:30}
   #toast.show{opacity:1}
-  #dropring{position:absolute;inset:0;border:0;pointer-events:none;display:none;align-items:center;justify-content:center;z-index:5}
-  #dropring.on{display:flex}
-  #dropring .r{border:3px dashed var(--accent);border-radius:18px;width:60%;height:60%;display:flex;align-items:center;justify-content:center;color:var(--accent);font-size:15px;background:rgba(57,200,224,.06)}
   #draftModal{position:absolute;inset:0;background:rgba(7,10,19,.85);display:none;align-items:center;justify-content:center;z-index:25}
   #draftBox{background:var(--panel);border:1px solid var(--line);border-radius:14px;width:520px;max-width:92%;max-height:80%;overflow:auto;padding:18px}
   #draftBox h3{margin:0 0 12px}
@@ -90,7 +77,7 @@
 </head>
 <body>
 <div id="top">
-  <span class="logo">ZORBS</span><span class="ver">editor v0.6</span>
+  <span class="logo">ZORBS</span><span class="ver">editor v0.7</span>
   <input id="m-name" maxlength="40" placeholder="Track name" />
   <span class="sp"></span>
   <button id="btn-clear">↻ Clear</button>
@@ -103,19 +90,17 @@
   <div id="palette">
     <div class="sectitle">TRACK PIECES</div>
     <div id="pal-list"></div>
-    <div class="sectitle" style="margin-top:12px">SPLITS</div>
-    <div class="hint" style="margin-bottom:6px">Drag (or click) a split into your track to fork the marbles.</div>
+    <div class="sectitle" style="margin-top:12px">SPLIT PIECES</div>
+    <div class="hint" style="margin-bottom:6px">Click to add a self-contained split — the marbles fork and rejoin inside it.</div>
     <div id="pal-splits"></div>
   </div>
   <div id="stage">
     <canvas id="cv"></canvas>
-    <div id="dropring"><div class="r">Drop to add to your track</div></div>
-    <div id="emptyHint"><h2>Build your track</h2><div>Click or drag a piece from the left. Add a <b style="color:#ffcc00">Split</b> wherever you want the marbles to fork.</div></div>
+    <div id="emptyHint"><h2>Build your track</h2><div>Click a piece on the left to add it. Splits are pieces too — just drop one in.</div></div>
     <div id="toast"></div>
   </div>
   <div id="side">
     <div class="sectitle">YOUR TRACK — start → finish</div>
-    <button class="mainTargetBtn on" id="mainTarget">▸ Adding to MAIN line</button>
     <div id="trackArea"></div>
     <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
     <div class="sectitle">MAP DETAILS</div>
@@ -142,13 +127,10 @@
 <script src="/beta/telemetry.js?v=b14"></script>
 <script>
 // ============================================================================
-// ZORBS Map Editor v0.6 — INLINE track list. A track is a flat list of pieces;
-// a SPLIT is just another piece you drop in that forks the marbles right there.
-// Export to the engine's {sections, branches}:
-//   sections = every NORMAL piece in order (the main line / through path)
-//   each SPLIT contributes branches peeling from the section just before it:
-//     left -> side -1, right -> side +1, each rejoin OR own-finish.
-//   split2 carries noMiddle so the engine drops the straight-through lane.
+// ZORBS Map Editor v0.7 — dead-simple linear track. Every entry is ONE piece,
+// including splits. A split is a SELF-CONTAINED segment: the marbles fork into
+// lanes and rejoin inside it; you don't fill anything. Export auto-builds the
+// branch lanes for each split, so the author just drops the piece in.
 // ============================================================================
 
 const STEP = 1.3, WIDTH = 7.0;
@@ -164,7 +146,7 @@ const TRACK_PIECES = [
   { kind:'spiral',   name:'Spiral',    desc:'helix descent',     color:'#ff5db0', def:{len:32,dir:1} },
   { kind:'tunnel',   name:'Tunnel',    desc:'enclosed run',      color:'#7f8cad', def:{len:20,dir:1} },
 ];
-// SPLIT piece presets: which side lanes exist + whether a straight middle survives.
+// Splits are pieces. sides = which lanes the marbles fork into; noMiddle = no straight-through.
 const SPLIT_PIECES = [
   { type:'split3',  name:'Split into 3', desc:'left · middle · right', sides:['left','right'], noMiddle:false, icon:'⅄' },
   { type:'split2',  name:'Split into 2', desc:'left · right (no mid)', sides:['left','right'], noMiddle:true,  icon:'Y' },
@@ -176,13 +158,9 @@ const bySplit = t => SPLIT_PIECES.find(p => p.type === t);
 const clone = o => JSON.parse(JSON.stringify(o));
 const author = (() => { try { const s=JSON.parse(localStorage.getItem('zorbs_session')||'{}'); return (s.username||s.name||'').toLowerCase(); } catch(_){return '';} })();
 
-// ---- MODEL ----
-// track: ordered list. A normal item = {kind,len,...}. A split item =
-//   {kind:'split', type, sides:['left','right'], lanes:{left:[],right:[]},
-//    end:{left:'rejoin',right:'rejoin'}, noMiddle:bool}
+// ---- MODEL: a flat list. normal = {kind,len,...}; split = {kind:'split',type,len} ----
 let track = [];
-let addTarget = { type:'main' };       // {type:'main'} | {type:'lane', idx, lane}
-let openItem = -1;                      // which main-list item is expanded
+let openItem = -1;
 let passObstacles = [];
 let difficulty = 'medium';
 let undoStack = [], redoStack = [];
@@ -192,59 +170,26 @@ const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
 let view = { panx:0, pany:0, scale:6 };
 
 function mkPiece(kind){ return Object.assign({kind},clone(byKind(kind).def)); }
-function mkSplit(type){
-  const sp=bySplit(type); const lanes={}, end={};
-  sp.sides.forEach(s=>{ lanes[s]=[]; end[s]='rejoin'; });
-  return { kind:'split', type, sides:sp.sides.slice(), lanes, end, noMiddle:sp.noMiddle };
-}
+function mkSplit(type){ return { kind:'split', type, len:44 }; }
+function isSplit(it){ return it && it.kind==='split'; }
 
 // ---- PALETTE ----
 function buildPalette(){
   document.getElementById('pal-list').innerHTML = TRACK_PIECES.map(p=>`
-    <div class="palItem" draggable="true" data-kind="${p.kind}">
-      <div class="sw" style="background:${p.color}"></div>
-      <div><div class="nm">${p.name}</div><div class="ds">${p.desc}</div></div>
-    </div>`).join('');
+    <div class="palItem" data-kind="${p.kind}"><div class="sw" style="background:${p.color}"></div>
+      <div><div class="nm">${p.name}</div><div class="ds">${p.desc}</div></div></div>`).join('');
   document.getElementById('pal-splits').innerHTML = SPLIT_PIECES.map(p=>`
-    <div class="palItem split" draggable="true" data-split="${p.type}">
-      <div class="sw" style="background:#2a2410;color:#ffcc00;border:1px solid #ffcc00">${p.icon}</div>
-      <div><div class="nm">${p.name}</div><div class="ds">${p.desc}</div></div>
-    </div>`).join('');
-  document.querySelectorAll('#pal-list .palItem').forEach(el=>{
-    el.onclick=()=>addPiece(el.dataset.kind);
-    el.ondragstart=e=>{ dragItem={kind:el.dataset.kind}; e.dataTransfer.effectAllowed='copy'; };
-  });
-  document.querySelectorAll('#pal-splits .palItem').forEach(el=>{
-    el.onclick=()=>addSplit(el.dataset.split);
-    el.ondragstart=e=>{ dragItem={split:el.dataset.split}; e.dataTransfer.effectAllowed='copy'; };
-  });
+    <div class="palItem split" data-split="${p.type}"><div class="sw" style="background:#2a2410;color:#ffcc00;border:1px solid #ffcc00">${p.icon}</div>
+      <div><div class="nm">${p.name}</div><div class="ds">${p.desc}</div></div></div>`).join('');
+  document.querySelectorAll('#pal-list .palItem').forEach(el=>el.onclick=()=>add(mkPiece(el.dataset.kind)));
+  document.querySelectorAll('#pal-splits .palItem').forEach(el=>el.onclick=()=>add(mkSplit(el.dataset.split)));
 }
-let dragItem=null;
+function add(item){ track.push(item); openItem=track.length-1; pushUndo(); refresh(); }
 
-function targetArr(){
-  if(addTarget.type==='lane'){ const it=track[addTarget.idx]; if(it&&it.kind==='split') return it.lanes[addTarget.lane]||(it.lanes[addTarget.lane]=[]); }
-  return null;
-}
-function addPiece(kind){
-  const arr=targetArr();
-  if(arr){ arr.push(mkPiece(kind)); }
-  else { track.push(mkPiece(kind)); openItem=track.length-1; }
-  pushUndo(); refresh();
-}
-function addSplit(type){
-  // a split must have a trunk before it; if the track is empty, seed one straight
-  if(!track.some(t=>t.kind!=='split')) track.push(mkPiece('straight'));
-  track.push(mkSplit(type));
-  const idx=track.length-1; openItem=idx;
-  addTarget={ type:'lane', idx, lane:track[idx].sides[0] };
-  pushUndo(); refresh();
-}
-
-// ---- 2D PATH (preview only) ----
-function layLane(pieces, x, z, ang, laneId){
+// ---- 2D PREVIEW ----
+function layPieces(pieces, x, z, ang, laneId){
   const pts=[]; let turn=0;
   for(const s of pieces){
-    if(s.kind==='split') continue;
     const len=s.len|0; let target=0;
     if(s.kind==='sweep')  target=(s.dir||1)*(s.sharp||0.028);
     if(s.kind==='spiral') target=(s.dir||1)*0.030;
@@ -257,76 +202,78 @@ function layLane(pieces, x, z, ang, laneId){
       if(s.kind==='narrower') w=WIDTH*(t<0.5?1-(1-(s.min||0.38))*(t*2):(s.min||0.38));
       if(s.kind==='tunnel')   w=WIDTH*0.8;
       if(s.kind==='arena'){ const r=Math.min(1,t/0.15,(1-t)/0.15); const e=r*r*(3-2*r); w=WIDTH*(1+((s.w||14)/WIDTH-1)*Math.max(0,e)); }
-      pts.push({x,z,w,kind:s.kind,lane:laneId});
+      pts.push({x,z,w,lane:laneId});
     }
   }
   return { pts, end:{x,z,ang} };
 }
-// Walk the track: lay the main spine piece-by-piece; at each split, branch the side lanes.
+// Walk the track: main spine continues through everything; a split forks parallel
+// side lanes over its own length and the spine keeps going straight (the middle).
 function buildPreview(){
-  const paths=[]; let x=0,z=0,ang=0,turn=0;
-  let spine=[];
-  for(let idx=0; idx<track.length; idx++){
-    const it=track[idx];
-    if(it.kind!=='split'){
-      const r=layLane([it],x,z,ang,'main'); // lay one piece continuing the spine
-      // continue heading using last turn state: re-derive ang from last two pts
-      if(r.pts.length){ spine=spine.concat(r.pts); const e=r.end; x=e.x; z=e.z; ang=e.ang; }
-      continue;
+  const paths=[]; let x=0,z=0,ang=0; let spine=[];
+  for(const it of track){
+    if(!isSplit(it)){
+      const r=layPieces([it],x,z,ang,'main');
+      spine=spine.concat(r.pts); x=r.end.x; z=r.end.z; ang=r.end.ang; continue;
     }
-    // split: fan side lanes parallel from current spine point
-    const rx=Math.cos(ang), rz=-Math.sin(ang);
-    if(it.sides.includes('left') && it.lanes.left.length){ const L=layLane(it.lanes.left, x+rx*WIDTH*-0.95, z+rz*WIDTH*-0.95, ang, 'left'); paths.push({lane:'left',pts:L.pts,idx}); }
-    if(it.sides.includes('right')&& it.lanes.right.length){ const R=layLane(it.lanes.right, x+rx*WIDTH* 0.95, z+rz*WIDTH* 0.95, ang, 'right'); paths.push({lane:'right',pts:R.pts,idx}); }
+    // split: side lanes fan parallel from here; the middle continues the spine straight
+    const sp=bySplit(it.type); const rx=Math.cos(ang), rz=-Math.sin(ang);
+    const lane=[{kind:'straight',len:it.len}];
+    if(sp.sides.includes('left'))  paths.push({lane:'left', pts:layPieces(lane, x+rx*WIDTH*-0.95, z+rz*WIDTH*-0.95, ang,'left').pts});
+    if(sp.sides.includes('right')) paths.push({lane:'right',pts:layPieces(lane, x+rx*WIDTH* 0.95, z+rz*WIDTH* 0.95, ang,'right').pts});
+    const r=layPieces([{kind:'straight',len:it.len}],x,z,ang,'main'); // middle through
+    spine=spine.concat(r.pts); x=r.end.x; z=r.end.z; ang=r.end.ang;
   }
   paths.unshift({lane:'main',pts:spine});
-  const finishPt=spine[spine.length-1]||{x:0,z:0};
-  return {paths,finishPt};
+  return { paths, finishPt: spine[spine.length-1]||{x:0,z:0} };
 }
 
 // ---- EXPORT ----
 function exportData(){
-  const sections=[]; const branches=[]; let bid=1;
+  const sections=[]; const branches=[]; let bid=1; let anyNoMid=false;
   for(const it of track){
-    if(it.kind!=='split'){ sections.push(clone(it)); continue; }
-    const fromSection=Math.max(0, sections.length-1);
-    if(it.sides.includes('left') && it.lanes.left.length)
-      branches.push({ id:bid++, fromSection, side:-1, end:it.end.left==='finish'?'finish':'rejoin', noMiddle:!!it.noMiddle, sections:clone(it.lanes.left), obstacles:[] });
-    if(it.sides.includes('right') && it.lanes.right.length)
-      branches.push({ id:bid++, fromSection, side: 1, end:it.end.right==='finish'?'finish':'rejoin', noMiddle:!!it.noMiddle, sections:clone(it.lanes.right), obstacles:[] });
+    if(!isSplit(it)){ sections.push(clone(it)); continue; }
+    if(!sections.length) sections.push({kind:'straight',len:20});   // a split needs a trunk
+    const sp=bySplit(it.type); const fromSection=sections.length-1;
+    const laneSecs=[{kind:'straight',len:Math.max(12,it.len|0)}];
+    if(sp.noMiddle) anyNoMid=true;
+    if(sp.sides.includes('left'))  branches.push({ id:bid++, fromSection, side:-1, end:'rejoin', noMiddle:sp.noMiddle, sections:clone(laneSecs), obstacles:[] });
+    if(sp.sides.includes('right')) branches.push({ id:bid++, fromSection, side: 1, end:'rejoin', noMiddle:sp.noMiddle, sections:clone(laneSecs), obstacles:[] });
+    sections.push({kind:'straight',len:Math.max(12,it.len|0)});      // the middle through-lane
   }
-  const noMiddle=branches.some(b=>b.noMiddle);
-  return { sections, branches, noMiddle };
+  return { sections, branches, noMiddle:anyNoMid };
 }
 
-// ---- IMPORT (reconstruct inline track from a saved map) ----
+// ---- IMPORT (reconstruct the simple list from a saved map) ----
 function importMap(d){
   const sections=Array.isArray(d.sections)?clone(d.sections):[];
   const branches=Array.isArray(d.branches)?clone(d.branches):[];
   passObstacles=Array.isArray(d.obstacles)?clone(d.obstacles):[];
   const byFrom=new Map();
-  branches.filter(b=>b.side===-1||b.side===1).forEach(b=>{ const k=Math.max(0,b.fromSection|0); (byFrom.get(k)||byFrom.set(k,[]).get(k)).push(b); });
+  branches.filter(b=>b.side===-1||b.side===1).forEach(b=>{ const k=Math.max(0,b.fromSection|0); if(!byFrom.has(k))byFrom.set(k,[]); byFrom.get(k).push(b); });
   track=[];
   for(let i=0;i<sections.length;i++){
-    track.push(sections[i]);
     if(byFrom.has(i)){
+      // a split lived just after section i: emit the section, then a split piece, and
+      // SKIP the next section (it was the split's auto middle straight).
+      track.push(sections[i]);
       const brs=byFrom.get(i);
       const left=brs.find(b=>b.side===-1), right=brs.find(b=>b.side===1);
-      const noMiddle = brs.some(b=>b.noMiddle) || d.noMiddle===true;
-      const sides=[]; if(left)sides.push('left'); if(right)sides.push('right');
+      const noMiddle=brs.some(b=>b.noMiddle)||d.noMiddle===true;
       const type = noMiddle?'split2' : (left&&right?'split3' : left?'splitML':'splitMR');
-      track.push({ kind:'split', type, sides, noMiddle,
-        lanes:{ left:left?clone(left.sections):[], right:right?clone(right.sections):[] },
-        end:{ left:left&&left.end==='finish'?'finish':'rejoin', right:right&&right.end==='finish'?'finish':'rejoin' } });
+      const len = (left||right) ? ((left||right).sections[0]?.len||44) : 44;
+      track.push({ kind:'split', type, len });
+      if(i+1<sections.length) i++;   // consume the middle straight
+      continue;
     }
+    track.push(sections[i]);
   }
   document.getElementById('m-name').value = d.name && !/^untitled/i.test(d.name) ? d.name : '';
   document.getElementById('m-desc').value = d.description||'';
   difficulty=['easy','medium','hard'].includes(d.difficulty)?d.difficulty:'medium';
   document.getElementById('m-diff').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.d===difficulty));
   document.getElementById('m-theme').value=d.theme||'';
-  addTarget={type:'main'}; openItem=-1; undoStack=[]; redoStack=[];
-  refresh(); fit();
+  openItem=-1; undoStack=[]; redoStack=[]; refresh(); fit();
 }
 
 // ---- CANVAS ----
@@ -341,36 +288,28 @@ function fit(){
   const pad=70*devicePixelRatio;
   view.scale=Math.min((cv.width-pad*2)/Math.max(8,maxx-minx),(cv.height-pad*2)/Math.max(8,maxz-minz),26*devicePixelRatio);
   view.panx=cv.width/2-((minx+maxx)/2)*view.scale;
-  view.pany=cv.height/2-((minz+maxz)/2)*view.scale;
-  draw();
+  view.pany=cv.height/2-((minz+maxz)/2)*view.scale; draw();
 }
 function draw(){
   ctx.clearRect(0,0,cv.width,cv.height);
-  document.getElementById('emptyHint').style.display = track.length? 'none':'flex';
+  document.getElementById('emptyHint').style.display = track.length?'none':'flex';
   if(!track.length) return;
   const {paths,finishPt}=buildPreview();
   paths.forEach(({lane,pts})=>{
-    if(pts.length<2) return;
-    const col=laneColor[lane]||'#39c8e0';
-    const sel=(addTarget.type==='lane'&&lane===addTarget.lane)||(addTarget.type==='main'&&lane==='main');
+    if(pts.length<2) return; const col=laneColor[lane]||'#39c8e0';
     const left=[],right=[];
-    for(let i=0;i<pts.length;i++){
-      const a=pts[i],b=pts[Math.min(i+1,pts.length-1)];
-      let dx=b.x-a.x,dz=b.z-a.z;const l=Math.hypot(dx,dz)||1;dx/=l;dz/=l;
-      const nx=-dz,nz=dx;
-      left.push(W2S(a.x+nx*a.w,a.z+nz*a.w)); right.push(W2S(a.x-nx*a.w,a.z-nz*a.w));
-    }
+    for(let i=0;i<pts.length;i++){ const a=pts[i],b=pts[Math.min(i+1,pts.length-1)];
+      let dx=b.x-a.x,dz=b.z-a.z;const l=Math.hypot(dx,dz)||1;dx/=l;dz/=l; const nx=-dz,nz=dx;
+      left.push(W2S(a.x+nx*a.w,a.z+nz*a.w)); right.push(W2S(a.x-nx*a.w,a.z-nz*a.w)); }
     ctx.beginPath(); left.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));
     for(let i=right.length-1;i>=0;i--) ctx.lineTo(right[i].x,right[i].y);
-    ctx.closePath(); ctx.fillStyle=sel?col+'26':col+'12'; ctx.fill();
-    ctx.strokeStyle=sel?'#fff':col; ctx.lineWidth=(sel?3:2)*devicePixelRatio;
+    ctx.closePath(); ctx.fillStyle=col+'15'; ctx.fill();
+    ctx.strokeStyle=col; ctx.lineWidth=2*devicePixelRatio;
     ctx.beginPath(); left.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.stroke();
     ctx.beginPath(); right.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.stroke();
-    if(lane!=='main'){ const m=pts[Math.floor(pts.length/2)]; const s=W2S(m.x,m.z);
-      ctx.fillStyle=col; ctx.font=`${12*devicePixelRatio}px system-ui`; ctx.textAlign='center'; ctx.fillText(lane==='left'?'◀ Left':'Right ▶',s.x,s.y); }
   });
   const main=paths[0].pts;
-  if(main.length){ marker(W2S(main[0].x,main[0].z),'#2ec27e','START'); }
+  if(main.length) marker(W2S(main[0].x,main[0].z),'#2ec27e','START');
   marker(W2S(finishPt.x,finishPt.z),'#ff8800','FINISH');
 }
 function marker(s,col,label){
@@ -378,91 +317,36 @@ function marker(s,col,label){
   ctx.fillStyle=col; ctx.font=`bold ${11*devicePixelRatio}px system-ui`; ctx.textAlign='left'; ctx.textBaseline='middle';
   ctx.fillText(label,s.x+8*devicePixelRatio,s.y);
 }
-// pan / zoom
 let pdrag=null;
 cv.addEventListener('pointerdown',e=>{ pdrag={x:e.clientX,y:e.clientY,px:view.panx,py:view.pany}; cv.setPointerCapture(e.pointerId); });
 cv.addEventListener('pointermove',e=>{ if(!pdrag)return; view.panx=pdrag.px+(e.clientX-pdrag.x)*devicePixelRatio; view.pany=pdrag.py-(e.clientY-pdrag.y)*devicePixelRatio; draw(); });
 cv.addEventListener('pointerup',()=>pdrag=null);
 cv.addEventListener('wheel',e=>{ e.preventDefault(); const f=e.deltaY<0?1.1:0.9; const r=cv.getBoundingClientRect(); const mx=(e.clientX-r.left)*devicePixelRatio,my=(e.clientY-r.top)*devicePixelRatio; const wx=(mx-view.panx)/view.scale, wz=(cv.height-my-view.pany)/view.scale; view.scale*=f; view.panx=mx-wx*view.scale; view.pany=(cv.height-my)-wz*view.scale; draw(); },{passive:false});
 
-// drag-and-drop from palette onto the stage / track panel
-function allowDrop(host){
-  host.addEventListener('dragover',e=>{ if(dragItem){ e.preventDefault(); document.getElementById('dropring').classList.add('on'); } });
-  host.addEventListener('dragleave',()=>document.getElementById('dropring').classList.remove('on'));
-  host.addEventListener('drop',e=>{ e.preventDefault(); document.getElementById('dropring').classList.remove('on');
-    if(!dragItem) return; if(dragItem.split) addSplit(dragItem.split); else if(dragItem.kind) addPiece(dragItem.kind); dragItem=null; });
-}
-allowDrop(document.getElementById('stage'));
-allowDrop(document.getElementById('side'));
-
-// ---- RIGHT PANEL (track list) ----
+// ---- RIGHT PANEL ----
 function refresh(){ renderTrack(); draw(); validate(); }
-function setMainTarget(){ addTarget={type:'main'}; refresh(); }
-document.getElementById('mainTarget').onclick=setMainTarget;
-
-function pieceRow(s,onDel,onUp,onDown,open,onOpen,bodyHTML){
-  const pc=byKind(s.kind);
-  return `<div class="item ${open?'sel':''}">
-    <div class="itemHd" data-open="1">
-      <div class="sw" style="width:16px;height:16px;background:${pc.color}"></div>
-      <div class="nm" style="color:${pc.color}">${pc.name}</div>
-      <div class="mini">${open?'▼':'▶'} len ${s.len}</div>
-      <button data-up="1">▲</button><button data-down="1">▼</button><button data-del="1" style="color:var(--bad)">✕</button>
-    </div>${open?`<div class="itemBody">${bodyHTML}</div>`:''}</div>`;
-}
 function renderTrack(){
-  document.getElementById('mainTarget').classList.toggle('on', addTarget.type==='main');
   const host=document.getElementById('trackArea');
   if(!track.length){ host.innerHTML='<div class="hint">Empty — add pieces from the left.</div>'; return; }
-  let h='';
-  track.forEach((it,idx)=>{
-    if(it.kind!=='split'){
-      const open=(openItem===idx);
-      h+=`<div class="item ${open?'sel':''}" data-idx="${idx}">
-        <div class="itemHd" data-open="${idx}">
-          <div class="sw" style="width:16px;height:16px;background:${byKind(it.kind).color}"></div>
-          <div class="nm" style="color:${byKind(it.kind).color}">${byKind(it.kind).name}</div>
-          <div class="mini">${open?'▼':'▶'} len ${it.len}</div>
-          <button data-up="${idx}">▲</button><button data-down="${idx}">▼</button><button data-del="${idx}" style="color:var(--bad)">✕</button>
-        </div>${open?`<div class="itemBody">${propsHTML(it)}</div>`:''}</div>`;
-    } else {
-      const sp=bySplit(it.type);
-      h+=`<div class="item split" data-idx="${idx}">
-        <div class="itemHd">
-          <div class="sw" style="width:16px;height:16px;background:#2a2410;color:#ffcc00;border:1px solid #ffcc00">${sp.icon}</div>
-          <div class="nm" style="color:#ffcc00">${sp.name}</div>
-          <button data-del="${idx}" style="color:var(--bad)">✕</button>
-        </div>
-        <div class="itemBody">
-          <div class="tabs">${it.sides.map(sd=>`<div class="tab t-${sd} ${addTarget.type==='lane'&&addTarget.idx===idx&&addTarget.lane===sd?'on':''}" data-lane="${idx}|${sd}">${sd==='left'?'◀ Left':'Right ▶'} (${it.lanes[sd].length})</div>`).join('')}</div>`;
-      // active lane editor (if this split's lane is the add target)
-      const al=(addTarget.type==='lane'&&addTarget.idx===idx)?addTarget.lane:null;
-      it.sides.forEach(sd=>{
-        if(sd!==al) return;
-        const end=it.end[sd];
-        h+=`<div class="lanebox">
-          <div class="addhere">▸ Click pieces on the left to add to this lane</div>
-          <div class="seg" style="margin-bottom:8px">
-            <button data-end="${idx}|${sd}|rejoin" class="${end==='rejoin'?'on':''}">↩ Rejoin</button>
-            <button data-end="${idx}|${sd}|finish" class="${end==='finish'?'on':''}">🏁 Own finish</button></div>`;
-        if(!it.lanes[sd].length){ h+=`<div class="hint">No pieces yet — add some.</div>`; }
-        else it.lanes[sd].forEach((s,si)=>{
-          h+=`<div class="item"><div class="itemHd" data-lopen="${idx}|${sd}|${si}">
-            <div class="sw" style="width:14px;height:14px;background:${byKind(s.kind).color}"></div>
-            <div class="nm" style="color:${byKind(s.kind).color}">${byKind(s.kind).name}</div>
-            <div class="mini">len ${s.len}</div>
-            <button data-ldel="${idx}|${sd}|${si}" style="color:var(--bad)">✕</button></div>
-            ${(_lopen===idx+'|'+sd+'|'+si)?`<div class="itemBody">${propsHTML(s)}</div>`:''}</div>`;
-        });
-        h+=`</div>`;
-      });
-      h+=`</div></div>`;
+  host.innerHTML = track.map((it,idx)=>{
+    const open=(openItem===idx);
+    if(isSplit(it)){ const sp=bySplit(it.type);
+      return `<div class="item split ${open?'sel':''}"><div class="itemHd" data-open="${idx}">
+        <div class="sw" style="width:16px;height:16px;background:#2a2410;color:#ffcc00;border:1px solid #ffcc00">${sp.icon}</div>
+        <div class="nm" style="color:#ffcc00">${sp.name}</div><div class="mini">${open?'▼':'▶'} len ${it.len}</div>
+        <button data-up="${idx}">▲</button><button data-down="${idx}">▼</button><button data-del="${idx}" style="color:var(--bad)">✕</button></div>
+        ${open?`<div class="itemBody"><div class="rng"><label>Length</label><input type="range" data-k="len" min="20" max="120" step="2" value="${it.len}"><span class="v" id="v-len">${it.len}</span></div>
+          <div class="hint">${sp.desc} — marbles fork and rejoin automatically.</div></div>`:''}</div>`;
     }
-  });
-  host.innerHTML=h;
-  wireTrack(host);
+    const pc=byKind(it.kind);
+    return `<div class="item ${open?'sel':''}"><div class="itemHd" data-open="${idx}">
+      <div class="sw" style="width:16px;height:16px;background:${pc.color}"></div>
+      <div class="nm" style="color:${pc.color}">${pc.name}</div><div class="mini">${open?'▼':'▶'} len ${it.len}</div>
+      <button data-up="${idx}">▲</button><button data-down="${idx}">▼</button><button data-del="${idx}" style="color:var(--bad)">✕</button></div>
+      ${open?`<div class="itemBody">${propsHTML(it)}</div>`:''}</div>`;
+  }).join('');
+  wire(host);
 }
-let _lopen=null;
 function propsHTML(s){
   let h=''; const rng=(k,label,min,max,step,val)=>`<div class="rng"><label>${label}</label><input type="range" data-k="${k}" min="${min}" max="${max}" step="${step}" value="${val}"><span class="v" id="v-${k}">${val}</span></div>`;
   h+=rng('len','Length',6,200,1,s.len);
@@ -477,66 +361,35 @@ function propsHTML(s){
   }
   return h;
 }
-function wireRange(el,s){
-  el.querySelectorAll('input[type=range]').forEach(r=>{
-    r.oninput=()=>{ const k=r.dataset.k; s[k]=(k==='len'||k==='steps'||k==='w')?(+r.value|0):+r.value; const v=el.querySelector('#v-'+k); if(v)v.textContent=s[k]; draw(); validate(); };
-    r.onchange=pushUndo;
-  });
-  const ds=el.querySelector('[data-dir]'); if(ds) ds.querySelectorAll('button').forEach(b=>b.onclick=()=>{ s.dir=+b.dataset.v; pushUndo(); refresh(); });
-}
-function wireTrack(host){
-  // main item headers (open/up/down/del)
-  host.querySelectorAll('.itemHd[data-open]').forEach(hd=>{
-    hd.onclick=e=>{ if(e.target.dataset.del!=null||e.target.dataset.up!=null||e.target.dataset.down!=null) return;
-      const i=+hd.dataset.open; openItem=(openItem===i?-1:i); renderTrack(); };
-  });
-  host.querySelectorAll('[data-del]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const i=+b.dataset.del;
-    if(addTarget.type==='lane'&&addTarget.idx>=i) addTarget={type:'main'};
-    track.splice(i,1); if(openItem===i)openItem=-1; else if(openItem>i)openItem--; pushUndo(); refresh(); });
+function wire(host){
+  host.querySelectorAll('.itemHd[data-open]').forEach(hd=>hd.onclick=e=>{
+    if(e.target.dataset.del!=null||e.target.dataset.up!=null||e.target.dataset.down!=null) return;
+    const i=+hd.dataset.open; openItem=(openItem===i?-1:i); renderTrack(); });
+  host.querySelectorAll('[data-del]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const i=+b.dataset.del; track.splice(i,1); if(openItem===i)openItem=-1; else if(openItem>i)openItem--; pushUndo(); refresh(); });
   host.querySelectorAll('[data-up]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const i=+b.dataset.up; if(i>0){ [track[i-1],track[i]]=[track[i],track[i-1]]; openItem=i-1; pushUndo(); refresh(); } });
   host.querySelectorAll('[data-down]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const i=+b.dataset.down; if(i<track.length-1){ [track[i+1],track[i]]=[track[i],track[i+1]]; openItem=i+1; pushUndo(); refresh(); } });
-  // split lane tabs
-  host.querySelectorAll('.tab[data-lane]').forEach(t=>t.onclick=()=>{ const [i,l]=t.dataset.lane.split('|'); addTarget={type:'lane',idx:+i,lane:l}; _lopen=null; refresh(); });
-  // lane end toggles
-  host.querySelectorAll('[data-end]').forEach(b=>b.onclick=()=>{ const [i,l,v]=b.dataset.end.split('|'); track[+i].end[l]=v; pushUndo(); refresh(); });
-  // lane piece open/delete
-  host.querySelectorAll('[data-lopen]').forEach(hd=>hd.onclick=e=>{ if(e.target.dataset.ldel!=null) return; _lopen=(_lopen===hd.dataset.lopen?null:hd.dataset.lopen); renderTrack(); });
-  host.querySelectorAll('[data-ldel]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const [i,l,si]=b.dataset.ldel.split('|'); track[+i].lanes[l].splice(+si,1); _lopen=null; pushUndo(); refresh(); });
-  // wire range/dir for whichever body is open
-  if(openItem>=0 && track[openItem] && track[openItem].kind!=='split'){ const el=host.querySelectorAll('.item')[mainItemDomIndex(openItem)]; }
-  // simplest: wire every open body to its data object
-  host.querySelectorAll('.itemBody').forEach(body=>{
-    // find the section object this body edits: walk up to .item, match by index/lane
-    const it=body.closest('.item');
-  });
-  // robust prop wiring: re-bind by scanning
-  bindOpenProps(host);
-}
-function mainItemDomIndex(){ return 0; }
-function bindOpenProps(host){
-  // main open piece
-  if(openItem>=0 && track[openItem] && track[openItem].kind!=='split'){
-    const items=[...host.children]; // top-level .item per track entry
-    let di=0;
-    for(let i=0;i<track.length;i++){ if(i===openItem){ const body=items[di].querySelector('.itemBody'); if(body) wireRange(body,track[i]); } di++; }
+  if(openItem>=0 && track[openItem]){
+    const s=track[openItem]; const body=host.querySelectorAll('.item')[openItem]?.querySelector('.itemBody');
+    if(body){
+      body.querySelectorAll('input[type=range]').forEach(r=>{
+        r.oninput=()=>{ const k=r.dataset.k; s[k]=(k==='len'||k==='steps'||k==='w')?(+r.value|0):+r.value; const v=body.querySelector('#v-'+k); if(v)v.textContent=s[k]; draw(); validate(); };
+        r.onchange=pushUndo; });
+      const ds=body.querySelector('[data-dir]'); if(ds) ds.querySelectorAll('button').forEach(b=>b.onclick=()=>{ s.dir=+b.dataset.v; pushUndo(); refresh(); });
+    }
   }
-  // open lane piece
-  if(_lopen){ const [i,l,si]=_lopen.split('|'); const s=track[+i]&&track[+i].lanes[l]&&track[+i].lanes[l][+si];
-    if(s){ host.querySelectorAll('.lanebox .itemBody').forEach(body=>wireRange(body,s)); } }
 }
 
 // ---- UNDO ----
 function snap(){ return JSON.stringify({track,difficulty}); }
 function pushUndo(){ undoStack.push(snap()); if(undoStack.length>80)undoStack.shift(); redoStack=[]; }
-function restore(s){ const d=JSON.parse(s); track=d.track; difficulty=d.difficulty; addTarget={type:'main'}; refresh(); }
+function restore(s){ const d=JSON.parse(s); track=d.track; difficulty=d.difficulty; refresh(); }
 window.addEventListener('keydown',e=>{
   if((e.ctrlKey||e.metaKey)&&e.key==='z'&&!e.shiftKey){ if(undoStack.length){ redoStack.push(snap()); restore(undoStack.pop()); } e.preventDefault(); }
   else if((e.ctrlKey||e.metaKey)&&(e.key==='y'||(e.key==='z'&&e.shiftKey))){ if(redoStack.length){ undoStack.push(snap()); restore(redoStack.pop()); } e.preventDefault(); }
 });
 
 // ---- VALIDATION ----
-function mainLen(){ return exportData().sections.length; }
-function validate(){ const ok=mainLen()>=2; document.getElementById('btn-test').disabled=!ok; document.getElementById('btn-submit').disabled=!ok; return ok; }
+function validate(){ const ok=exportData().sections.length>=2; document.getElementById('btn-test').disabled=!ok; document.getElementById('btn-submit').disabled=!ok; return ok; }
 
 // ---- MAP DATA ----
 function currentMap(){
@@ -563,13 +416,13 @@ function makeThumb(){
 let toastT=null; function toast(m){ const el=document.getElementById('toast'); el.textContent=m; el.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove('show'),2600); }
 
 // ---- BUTTONS ----
-document.getElementById('btn-clear').onclick=()=>{ if(track.length && !confirm('Clear the whole track?')) return; track=[]; addTarget={type:'main'}; openItem=-1; currentDraftId=null; refresh(); };
+document.getElementById('btn-clear').onclick=()=>{ if(track.length && !confirm('Clear the whole track?')) return; track=[]; openItem=-1; currentDraftId=null; refresh(); };
 document.getElementById('btn-test').onclick=()=>{ if(!validate()) return; try{ sessionStorage.setItem('zorbs_testmap',JSON.stringify(currentMap())); }catch(_){}; window.open('/beta/?map=test','_blank'); };
 document.getElementById('m-diff').querySelectorAll('button').forEach(b=>b.onclick=()=>{ difficulty=b.dataset.d; document.getElementById('m-diff').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b)); });
 
 document.getElementById('btn-save').onclick=async()=>{
   if(!author){ toast('Sign in on the dashboard first to save drafts.'); return; }
-  if(mainLen()<1){ toast('Nothing to save yet.'); return; }
+  if(!track.length){ toast('Nothing to save yet.'); return; }
   const btn=document.getElementById('btn-save'); btn.disabled=true; const old=btn.textContent; btn.textContent='Saving…';
   try{ const map=Object.assign(currentMap(),{thumb:makeThumb()});
     const r=await fetch('/api/maps',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'draft-save',map,id:currentDraftId||undefined})});
