@@ -200,7 +200,8 @@ function sanitizeDraft(raw) {
     const bSections = Array.isArray(br.sections) ? br.sections.map(sanitizeSection).filter(Boolean).slice(0, 40) : [];
     const bObstacles = Array.isArray(br.obstacles) ? br.obstacles.map(sanitizeObstacle).filter(Boolean).slice(0, 20) : [];
     const end = br.end === 'finish' ? 'finish' : 'rejoin';
-    return { id: br.id || 0, fromSection: Math.max(0, (br.fromSection | 0)), end, sections: bSections, obstacles: bObstacles };
+    const side = br.side < 0 ? -1 : br.side > 0 ? 1 : 0;
+    return { id: br.id || 0, fromSection: Math.max(0, (br.fromSection | 0)), side, end, sections: bSections, obstacles: bObstacles };
   }).filter(Boolean) : [];
   return {
     name: clean(raw.name, 40) || 'Untitled Draft',
@@ -237,7 +238,8 @@ function sanitizeMap(raw) {
       ? br.obstacles.map(sanitizeObstacle).filter(Boolean).slice(0, 20) : [];
     const fromSection = Math.max(0, (br.fromSection | 0));
     const end = br.end === 'finish' ? 'finish' : 'rejoin';
-    return { id: br.id || 0, fromSection, end, sections: bSections, obstacles: bObstacles };
+    const side = br.side < 0 ? -1 : br.side > 0 ? 1 : 0;
+    return { id: br.id || 0, fromSection, side, end, sections: bSections, obstacles: bObstacles };
   }).filter(Boolean) : [];
   return {
     name: clean(raw.name, 40) || 'Untitled Track',
