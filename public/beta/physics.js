@@ -412,6 +412,7 @@ const ZPHYSICS = (() => {
   const MAX_SPEED = 28;      // CRUISE speed on the flat; drops add real momentum on top of this
   const ENERGY_G = 28;       // gravity used to convert height lost -> forward speed (coaster feel)
   const SPEED_CEILING = 64;  // absolute safety cap so momentum can't run away
+  const CRUISE_FLOOR = 16;   // lively baseline speed restored on flat/straight grounded track
   const SPIRAL_DOWNFORCE = 6.0;     // extra downforce on spiral coils (keeps balls planted)
   const BOOST_PAD_STRENGTH = 1.3;   // forward boost from a side pad (MEDIUM mode tuning)
 
@@ -952,10 +953,16 @@ const ZPHYSICS = (() => {
       const lv0 = b.body.linvel();
       const latVel = lv0.x * r.x + lv0.z * r.z;          // current lateral velocity
       const LANE_DAMP = 0.55;                            // damping ratio relative to lanePull
-      const laneFx = r.x * (latErr * lanePull - latVel * lanePull * LANE_DAMP);
-      const laneFz = r.z * (latErr * lanePull - latVel * lanePull * LANE_DAMP);
-
       const m = b.body.mass() || 1;
+      // BANK HOLD: on a steeply banked floor, gravity's lateral component (g·sin(bank)) drags
+      // the ball down the tilt toward the low edge faster than the plain lane-spring can pull
+      // it back — so it slides off the low side (the "balls fall on banked turns / banked
+      // straights" wipe). Add a force that CANCELS that down-bank gravity pull (toward the high
+      // side), so the banked floor holds the ball the way a real banked curve does.
+      const bankHold = m * 9.8 * Math.sin(n.bank || 0);   // +bank => high side is +r; push toward +r
+      const laneFx = r.x * (latErr * lanePull * m - latVel * lanePull * LANE_DAMP * m + bankHold);
+      const laneFz = r.z * (latErr * lanePull * m - latVel * lanePull * LANE_DAMP * m + bankHold);
+
       // SPIRAL DOWNFORCE: tight downward coils can let a ball float off the curved surface;
       // a little extra downforce on spiral nodes keeps it planted (deliberately gentle).
       const downforce = (n.kind === 'spiral') ? SPIRAL_DOWNFORCE * m : 0;
@@ -1107,15 +1114,21 @@ const ZPHYSICS = (() => {
       // forward along the track plus a nudge back toward the centerline. Safety net for
       // any jam we haven't predicted — players should never see a permanently dead ball.
       const hs0 = Math.hypot(lv.x, lv.z);
-      if (b._grounded && hs0 < 0.6) {
+      // A ball wedged against a tunnel entry / banked throat can hover around walking-to-jog
+      // pace (hs ~3-6) indefinitely without ever hitting the old <0.6 threshold — it looks
+      // "alive" but never advances (confirmed: branch tunnelturn wedge oscillating at hint 120).
+      // So track a ball creeping below ~5 for a few seconds and give it the same recovery shove,
+      // re-centering it off the wall it's caught on. Anything genuinely flowing clears this easily.
+      if (b._grounded && hs0 < 5) {
         b._stuckT = (b._stuckT || 0) + dt;
-        if (b._stuckT > 2.5) {
+        const crawl = hs0 < 0.6;
+        if (b._stuckT > (crawl ? 2.5 : 4.0)) {
           b._stuckT = 0;
           const m = b.body.mass() || 1;
           b.body.applyImpulse({
-            x: (fx - r.x * Math.sign(curLat) * 0.4) * m * 5,
+            x: (fx - r.x * Math.sign(curLat) * 0.5) * m * 6,
             y: 0.0,
-            z: (fz - r.z * Math.sign(curLat) * 0.4) * m * 5,
+            z: (fz - r.z * Math.sign(curLat) * 0.5) * m * 6,
           }, true);
         }
       } else {
@@ -1135,19 +1148,41 @@ const ZPHYSICS = (() => {
       // (v_safe = sqrt(r·g·(tan(bank)+grip))), and cap cruise to it — so marbles slow FOR the
       // corner, in anticipation, then power back out.
       let cornerCap = SPEED_CEILING;
-      { let maxAng = 0, sharpBank = 0;
-        for (let k=1; k<=10; k++){
-          const a = N[Math.min(b.hint+k-1, N.length-1)], c = N[Math.min(b.hint+k, N.length-1)];
-          const dd = a.dir.x*c.dir.x + a.dir.z*c.dir.z;
-          const ang = Math.acos(Math.max(-1, Math.min(1, dd)));      // heading change per node
-          if (ang > maxAng){ maxAng = ang; sharpBank = Math.abs(c.bank || 0); }
+      { // Derive curvature from POSITION deltas, not n.dir — n.dir carries bank/twist wobble
+        // (~0.33 rad of noise per node even on a straight), which made the old estimate read
+        // every track as a hairpin and clamp cruise to ~9 (the "horribly slow" bug). A smoothed
+        // horizontal tangent from positions ±2 nodes gives the TRUE heading change per node.
+        const tan = (i) => {
+          const a = N[Math.max(0, i-2)], c = N[Math.min(N.length-1, i+2)];
+          const dx = c.pos.x - a.pos.x, dz = c.pos.z - a.pos.z;
+          const l = Math.hypot(dx, dz) || 1e-4; return [dx/l, dz/l];
+        };
+        let maxAng = 0, sharpBank = 0, maxBank = 0;
+        for (let k=2; k<=11; k++){
+          const i0 = Math.min(b.hint+k-1, N.length-1), i1 = Math.min(b.hint+k, N.length-1);
+          const [ax,az] = tan(i0), [cx,cz] = tan(i1);
+          const dd = ax*cx + az*cz;
+          const ang = Math.acos(Math.max(-1, Math.min(1, dd)));      // TRUE heading change / node
+          if (ang > maxAng){ maxAng = ang; sharpBank = Math.abs(N[i1].bank || 0); }
+          const bk = Math.abs(N[i1].bank || 0); if (bk > maxBank) maxBank = bk;
         }
-        if (maxAng > 0.014){
-          const radius = 1.3 / maxAng;                                // node spacing / turn angle
+        // Only genuinely TIGHT turns need limiting. Gentle weaves (~0.02-0.04 rad/node) pass
+        // at full cruise; the bank holds them fine. Only bends past ~0.05 rad/node (radius <~25)
+        // engage the cap, and even then we keep it generous so marbles stay FAST.
+        if (maxAng > 0.04){
+          const radius = 1.27 / maxAng;                              // node spacing / turn angle
           // bank + generous grip (the taller walls also help contain), so we trim the top speed
           // for a turn WITHOUT over-braking the pack to a crawl.
-          const hold = Math.tan(Math.min(1.2, sharpBank)) + 0.5;
-          cornerCap = Math.sqrt(Math.max(1, radius) * 9.8 * hold) * 1.12;
+          const hold = Math.tan(Math.min(1.2, sharpBank)) + 1.1;
+          cornerCap = Math.sqrt(Math.max(1, radius) * 9.8 * hold) * 1.1;
+        }
+        // BANK CAP: a steeply BANKED section (often a turn expressed through bank rather than
+        // sharp centreline curvature — tunnelturns, banked straights) will fling a ball over the
+        // outer wall at speed even when heading-change looks mild. So the steeper the upcoming
+        // bank, the lower the speed we allow, independent of measured curvature.
+        if (maxBank > 0.35){
+          const bankCap = 22 - (maxBank - 0.35) * 20;    // ~0.4:21  0.6:17  0.8:13
+          if (bankCap < cornerCap) cornerCap = bankCap;
         }
       }
       const cruise = Math.min(MAX_SPEED * (1 + b.boost * 0.5), cornerCap);
@@ -1157,6 +1192,14 @@ const ZPHYSICS = (() => {
         // gently otherwise (so drop momentum flows).
         const rate = (cornerCap < MAX_SPEED) ? 0.93 : 0.9925;
         ns = cruise + (hs - cruise) * rate;
+      } else if (b._grounded){
+        // CRUISE RESTORE: the constant drive force alone settles a ball around ~11 (damping +
+        // floor-pinning eat it), which felt sluggish. Gently ease a grounded ball UP toward a
+        // healthy floor speed so straights feel lively — but keep the target MODEST (well under
+        // MAX_SPEED) so we don't fling the pack into walls on turns. Drops still stack real
+        // momentum ON TOP via the energy model; this only lifts the slow baseline.
+        const floorTarget = Math.min(cruise, CRUISE_FLOOR);
+        if (hs < floorTarget) ns = hs + (floorTarget - hs) * 0.06;
       }
       if (ns > SPEED_CEILING) ns = SPEED_CEILING;
       if (ns !== hs && hs > 0.001) {
