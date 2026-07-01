@@ -4,6 +4,11 @@
   "_howto": "baseUrl is the R2 public bucket URL ending in /Music/. Each track's 'file' must match the exact filename in R2 (case-sensitive).",
   "baseUrl": "https://pub-ade1ec4abb664bc9a8d4aa0aa81eacee.r2.dev/Music/",
   "tracks": [
+    { "title": "Infectious",         "file": "Infectious.mp3" },
+    { "title": "Neon",               "file": "Neon.mp3" },
+    { "title": "Neon Pulse",         "file": "Neon-Pulse.mp3" },
+    { "title": "Pulse",              "file": "Pulse.mp3" },
+    { "title": "Push",               "file": "Push.mp3" },
     { "title": "Dreams in Neon",    "file": "Dreams-in-Neon.mp3" },
     { "title": "Into the Light",     "file": "Into-the-Light.mp3" },
     { "title": "Lifeline",           "file": "Lifeline.mp3" },
