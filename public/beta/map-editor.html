@@ -169,6 +169,7 @@ const author = (() => { try { const s=JSON.parse(localStorage.getItem('zorbs_ses
 // ---- MODEL ----  main list; split = {kind:'split',type,lanes:{left:[],right:[]},end:{left,right}}
 let track = [];
 let openItem = -1;
+let _lopen = null;   // which split-lane piece is expanded, keyed "idx|side|pieceIndex"
 let passObstacles = [];
 let difficulty = 'medium';
 let undoStack = [], redoStack = [];
@@ -400,7 +401,14 @@ function renderTrack(){
             <button data-end="${idx}|${sd}|rejoin" class="${end==='rejoin'?'on':''}">↩ Rejoin</button>
             <button data-end="${idx}|${sd}|finish" class="${end==='finish'?'on':''}">🏁 Finish</button></div>`;
         if(!it.lanes[sd].length) lanes+=`<div class="hint" style="font-size:10px">empty — drag onto its ${sd} tip on the canvas</div>`;
-        else it.lanes[sd].forEach((s,si)=>{ lanes+=`<div class="lrow"><div class="sw" style="background:${KCOLOR[s.kind]}"></div><span style="flex:1">${pieceName(s)} <span style="color:var(--dim)">·${s.len}</span></span><button data-ldel="${idx}|${sd}|${si}" style="color:var(--bad)">✕</button></div>`; });
+        else it.lanes[sd].forEach((s,si)=>{ const key=idx+'|'+sd+'|'+si; const lo=(_lopen===key);
+          lanes+=`<div class="item" style="margin:4px 0">
+            <div class="itemHd" data-lopen="${key}" style="padding:5px 7px">
+              <div class="sw" style="width:13px;height:13px;background:${KCOLOR[s.kind]}"></div>
+              <div class="nm" style="font-size:11px;color:${KCOLOR[s.kind]}">${pieceName(s)}</div>
+              <div class="mini">${lo?'▼':'▶'} len ${s.len}</div>
+              <button data-lup="${key}">▲</button><button data-ldown="${key}">▼</button><button data-ldel="${key}" style="color:var(--bad)">✕</button></div>
+            ${lo?`<div class="itemBody" data-lbody="${key}">${propsHTML(s)}</div>`:''}</div>`; });
         lanes+=`</div>`;
       });
       return `<div class="item split"><div class="itemHd" data-open="${idx}"><div class="sw" style="width:16px;height:16px;background:#2a2410;color:#ffcc00;border:1px solid #ffcc00">${sp.icon}</div>
@@ -433,11 +441,28 @@ function wire(host){
   host.querySelectorAll('[data-up]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const i=+b.dataset.up; if(i>0){ [track[i-1],track[i]]=[track[i],track[i-1]]; openItem=i-1; pushUndo(); refresh(); } });
   host.querySelectorAll('[data-down]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const i=+b.dataset.down; if(i<track.length-1){ [track[i+1],track[i]]=[track[i],track[i+1]]; openItem=i+1; pushUndo(); refresh(); } });
   host.querySelectorAll('[data-end]').forEach(b=>b.onclick=()=>{ const [i,l,v]=b.dataset.end.split('|'); track[+i].end[l]=v; pushUndo(); refresh(); });
-  host.querySelectorAll('[data-ldel]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const [i,l,si]=b.dataset.ldel.split('|'); track[+i].lanes[l].splice(+si,1); pushUndo(); refresh(); });
+  // split-lane pieces: open to edit, reorder, delete — treated like normal track pieces
+  host.querySelectorAll('.itemHd[data-lopen]').forEach(hd=>hd.onclick=e=>{
+    if(e.target.dataset.ldel!=null||e.target.dataset.lup!=null||e.target.dataset.ldown!=null) return;
+    _lopen=(_lopen===hd.dataset.lopen?null:hd.dataset.lopen); renderTrack(); });
+  host.querySelectorAll('[data-ldel]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const [i,l,si]=b.dataset.ldel.split('|'); track[+i].lanes[l].splice(+si,1); _lopen=null; pushUndo(); refresh(); });
+  host.querySelectorAll('[data-lup]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const [i,l,si]=b.dataset.lup.split('|'); const a=track[+i].lanes[l]; const k=+si; if(k>0){ [a[k-1],a[k]]=[a[k],a[k-1]]; _lopen=i+'|'+l+'|'+(k-1); pushUndo(); refresh(); } });
+  host.querySelectorAll('[data-ldown]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const [i,l,si]=b.dataset.ldown.split('|'); const a=track[+i].lanes[l]; const k=+si; if(k<a.length-1){ [a[k+1],a[k]]=[a[k],a[k+1]]; _lopen=i+'|'+l+'|'+(k+1); pushUndo(); refresh(); } });
+  // main open piece props
   if(openItem>=0 && track[openItem] && !isSplit(track[openItem])){
     const s=track[openItem]; const body=host.querySelectorAll('.item')[openItem]?.querySelector('.itemBody');
-    if(body) body.querySelectorAll('input[type=range]').forEach(r=>{ r.oninput=()=>{ const k=r.dataset.k; s[k]=(k==='len'||k==='steps'||k==='w')?(+r.value|0):+r.value; const v=body.querySelector('#v-'+k); if(v)v.textContent=s[k]; draw(); validate(); }; r.onchange=pushUndo; });
+    if(body) wireRanges(body, s);
   }
+  // open lane piece props
+  if(_lopen){ const [i,l,si]=_lopen.split('|'); const s=track[+i]&&track[+i].lanes[l]&&track[+i].lanes[l][+si];
+    const body=host.querySelector('[data-lbody="'+_lopen.replace(/"/g,'')+'"]');
+    if(s&&body) wireRanges(body, s); }
+}
+function wireRanges(body, s){
+  body.querySelectorAll('input[type=range]').forEach(r=>{
+    r.oninput=()=>{ const k=r.dataset.k; s[k]=(k==='len'||k==='steps'||k==='w')?(+r.value|0):+r.value; const v=body.querySelector('#v-'+k); if(v)v.textContent=s[k]; draw(); validate(); };
+    r.onchange=pushUndo;
+  });
 }
 
 // ---- UNDO ----
