@@ -6,12 +6,9 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-<title>ZORBS — Map Editor (v0.7)</title>
+<title>ZORBS — Map Editor (v0.8)</title>
 <style>
-  :root{
-    --bg:#0a0e1a; --panel:#121829; --panel2:#0e1322; --line:#23304d;
-    --txt:#dfe8ff; --dim:#7f8cad; --accent:#39c8e0; --good:#2ec27e; --bad:#ff4d5e; --splitc:#ffcc00;
-  }
+  :root{ --bg:#0a0e1a; --panel:#121829; --panel2:#0e1322; --line:#23304d; --txt:#dfe8ff; --dim:#7f8cad; --accent:#39c8e0; --good:#2ec27e; --bad:#ff4d5e; --left:#2ec27e; --right:#ff7a45; --splitc:#ffcc00; }
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font-family:system-ui,Segoe UI,Roboto,sans-serif;overflow:hidden}
   button{font-family:inherit;cursor:pointer}
@@ -24,19 +21,17 @@
   #top button.pri{background:var(--accent);color:#04141a;border:0;font-weight:700}
   #top button:disabled{opacity:.4;cursor:not-allowed}
   #main{display:flex;height:calc(100% - 50px)}
-  #palette{width:184px;background:var(--panel);border-right:1px solid var(--line);padding:10px;overflow-y:auto}
+  #palette{width:186px;background:var(--panel);border-right:1px solid var(--line);padding:10px;overflow-y:auto}
   #stage{flex:1;position:relative;background:radial-gradient(circle at 50% 40%,#0d1326,#070a13)}
   #cv{width:100%;height:100%;display:block;touch-action:none}
-  #side{width:300px;background:var(--panel);border-left:1px solid var(--line);padding:12px;overflow-y:auto}
+  #side{width:296px;background:var(--panel);border-left:1px solid var(--line);padding:12px;overflow-y:auto}
   .sectitle{font-size:10px;letter-spacing:1px;color:var(--dim);margin:2px 0 8px}
-  .palItem{display:flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:6px;cursor:pointer;user-select:none}
+  .palItem{display:flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:7px;margin-bottom:5px;cursor:grab;user-select:none}
   .palItem:hover{border-color:var(--accent)}
-  .palItem:active{transform:scale(.98)}
   .palItem.split{border-style:dashed;border-color:var(--splitc)}
-  .palItem.split:hover{border-color:#ffe066}
-  .sw{width:18px;height:18px;border-radius:5px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
+  .sw{width:17px;height:17px;border-radius:5px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
   .palItem .nm{font-size:12px;font-weight:600}
-  .palItem .ds{font-size:10px;color:var(--dim)}
+  .palItem .ds{font-size:9px;color:var(--dim)}
   .field{margin-bottom:9px}
   .field label{display:block;font-size:10px;color:var(--dim);margin-bottom:3px}
   .field input,.field textarea,.field select{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:7px;padding:7px;font-size:12px}
@@ -45,14 +40,16 @@
   .seg button{flex:1;background:var(--panel2);border:1px solid var(--line);color:var(--dim);border-radius:7px;padding:6px;font-size:11px}
   .seg button.on{background:var(--accent);color:#04141a;border-color:var(--accent);font-weight:700}
   .item{border:1px solid var(--line);border-radius:8px;margin-bottom:6px;overflow:hidden}
-  .item.sel{border-color:var(--accent)}
-  .item.split{border-color:var(--splitc)}
+  .item.sel{border-color:var(--accent)} .item.split{border-color:var(--splitc)}
   .itemHd{display:flex;align-items:center;gap:7px;padding:7px 9px;cursor:pointer;background:var(--panel2)}
-  .itemHd .nm{flex:1;font-size:12px}
-  .itemHd .mini{font-size:10px;color:var(--dim)}
+  .itemHd .nm{flex:1;font-size:12px} .itemHd .mini{font-size:10px;color:var(--dim)}
   .itemHd button{background:transparent;border:0;color:var(--dim);font-size:13px;padding:2px 5px}
   .itemHd button:hover{color:var(--txt)}
   .itemBody{padding:8px 10px;background:var(--panel2);border-top:1px solid var(--line)}
+  .lane{border-left:2px solid var(--line);margin:6px 0 2px 6px;padding-left:8px}
+  .lrow{display:flex;align-items:center;gap:6px;font-size:11px;padding:3px 0}
+  .lrow .sw{width:12px;height:12px}
+  .lrow button{background:transparent;border:0;color:var(--dim);font-size:12px;cursor:pointer}
   .rng{display:flex;align-items:center;gap:8px;margin-bottom:6px}
   .rng label{font-size:10px;color:var(--dim);width:62px}
   .rng input[type=range]{flex:1}
@@ -77,7 +74,7 @@
 </head>
 <body>
 <div id="top">
-  <span class="logo">ZORBS</span><span class="ver">editor v0.7</span>
+  <span class="logo">ZORBS</span><span class="ver">editor v0.8</span>
   <input id="m-name" maxlength="40" placeholder="Track name" />
   <span class="sp"></span>
   <button id="btn-clear">↻ Clear</button>
@@ -91,12 +88,11 @@
     <div class="sectitle">TRACK PIECES</div>
     <div id="pal-list"></div>
     <div class="sectitle" style="margin-top:12px">SPLIT PIECES</div>
-    <div class="hint" style="margin-bottom:6px">Click to add a self-contained split — the marbles fork and rejoin inside it.</div>
     <div id="pal-splits"></div>
   </div>
   <div id="stage">
     <canvas id="cv"></canvas>
-    <div id="emptyHint"><h2>Build your track</h2><div>Click a piece on the left to add it. Splits are pieces too — just drop one in.</div></div>
+    <div id="emptyHint"><h2>Build your track</h2><div>Drag a piece onto the track tip to extend it (RCT-style).<br>After a split, drag onto the <b style="color:#2ec27e">green</b> / <b style="color:#ff7a45">orange</b> lane ends to build each path.</div></div>
     <div id="toast"></div>
   </div>
   <div id="side">
@@ -109,56 +105,61 @@
       <div class="seg" id="m-diff"><button data-d="easy">Easy</button><button data-d="medium" class="on">Medium</button><button data-d="hard">Hard</button></div>
     </div>
     <div class="field"><label>Theme</label>
-      <select id="m-theme">
-        <option value="">Random</option><option value="cyberCity">Cyber City</option>
-        <option value="volcano">Volcano</option><option value="glacier">Glacier</option>
-        <option value="neonJungle">Neon Jungle</option><option value="deepSpace">Deep Space</option>
-      </select>
+      <select id="m-theme"><option value="">Random</option><option value="cyberCity">Cyber City</option><option value="volcano">Volcano</option><option value="glacier">Glacier</option><option value="neonJungle">Neon Jungle</option><option value="deepSpace">Deep Space</option></select>
     </div>
   </div>
 </div>
 
-<div id="draftModal"><div id="draftBox">
-  <h3>Your saved drafts</h3>
-  <div id="draftList"></div>
-  <button class="full" style="background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:9px;margin-top:6px" onclick="closeDraftModal()">Close</button>
-</div></div>
+<div id="draftModal"><div id="draftBox"><h3>Your saved drafts</h3><div id="draftList"></div>
+  <button class="full" style="background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:9px;margin-top:6px" onclick="closeDraftModal()">Close</button></div></div>
 
 <script src="/beta/telemetry.js?v=b14"></script>
 <script>
 // ============================================================================
-// ZORBS Map Editor v0.7 — dead-simple linear track. Every entry is ONE piece,
-// including splits. A split is a SELF-CONTAINED segment: the marbles fork into
-// lanes and rejoin inside it; you don't fill anything. Export auto-builds the
-// branch lanes for each split, so the author just drops the piece in.
+// ZORBS Map Editor v0.8 — RCT-style build-at-the-tip with drag & drop.
+// The track is a main list of pieces. A SPLIT piece opens side LANES (green/left,
+// orange/right) that are ALSO buildable: drag a piece near a lane's tip and it
+// extends THAT lane. Turns are dedicated Left/Right pieces (no direction submenu).
+// Export flattens to the engine's {sections, branches}: main list = sections,
+// each split's lanes = branches peeling from the section before it (rejoin/finish),
+// split2 carries noMiddle.
 // ============================================================================
-
 const STEP = 1.3, WIDTH = 7.0;
-const TRACK_PIECES = [
-  { kind:'straight', name:'Straight',  desc:'flat run',          color:'#5b7cff', def:{len:30} },
-  { kind:'sweep',    name:'Turn',      desc:'banked curve',      color:'#39c8e0', def:{len:40,dir:1,sharp:0.028} },
-  { kind:'funnel',   name:'Funnel',    desc:'wide → narrow',     color:'#ffb020', def:{len:22,min:0.45} },
-  { kind:'narrower', name:'Narrower',  desc:'bottleneck',        color:'#ff7a45', def:{len:20,min:0.38} },
-  { kind:'moguls',   name:'Moguls',    desc:'washboard bumps',   color:'#b06bff', def:{len:28} },
-  { kind:'drop',     name:'Drop',      desc:'steep descent',     color:'#2ec27e', def:{len:16,drop:1.2} },
-  { kind:'cascade',  name:'Cascade',   desc:'stepped descent',   color:'#5ad1a0', def:{len:44,steps:4} },
-  { kind:'arena',    name:'Arena',     desc:'wide open zone',    color:'#f5c518', def:{len:40,w:14} },
-  { kind:'spiral',   name:'Spiral',    desc:'helix descent',     color:'#ff5db0', def:{len:32,dir:1} },
-  { kind:'tunnel',   name:'Tunnel',    desc:'enclosed run',      color:'#7f8cad', def:{len:20,dir:1} },
+const PAL = [
+  { id:'straight', kind:'straight', name:'Straight',    desc:'flat run',      color:'#5b7cff', def:{len:30} },
+  { id:'turnL',    kind:'sweep',    name:'Turn Left',    desc:'banked curve',  color:'#39c8e0', def:{len:40,dir:-1,sharp:0.028} },
+  { id:'turnR',    kind:'sweep',    name:'Turn Right',   desc:'banked curve',  color:'#39c8e0', def:{len:40,dir:1,sharp:0.028} },
+  { id:'funnel',   kind:'funnel',   name:'Funnel',       desc:'wide → narrow', color:'#ffb020', def:{len:22,min:0.45} },
+  { id:'narrower', kind:'narrower', name:'Narrower',     desc:'bottleneck',    color:'#ff7a45', def:{len:20,min:0.38} },
+  { id:'moguls',   kind:'moguls',   name:'Moguls',       desc:'washboard',     color:'#b06bff', def:{len:28} },
+  { id:'drop',     kind:'drop',     name:'Drop',         desc:'steep descent', color:'#2ec27e', def:{len:16,drop:1.2} },
+  { id:'tunneldrop',kind:'tunneldrop',name:'Tunnel Drop', desc:'enclosed steep plunge — speed!', color:'#3aa0ff', def:{len:18,drop:2.6} },
+  { id:'cascade',  kind:'cascade',  name:'Cascade',      desc:'stepped',       color:'#5ad1a0', def:{len:44,steps:4} },
+  { id:'arena',    kind:'arena',    name:'Arena',        desc:'wide open',     color:'#f5c518', def:{len:40,w:14} },
+  { id:'spiralL',  kind:'spiral',   name:'Spiral Left',  desc:'helix descent', color:'#ff5db0', def:{len:32,dir:-1} },
+  { id:'spiralR',  kind:'spiral',   name:'Spiral Right', desc:'helix descent', color:'#ff5db0', def:{len:32,dir:1} },
+  { id:'tunnelL',  kind:'tunnel',   name:'Tunnel Left',  desc:'enclosed run',  color:'#7f8cad', def:{len:20,dir:-1} },
+  { id:'tunnelR',  kind:'tunnel',   name:'Tunnel Right', desc:'enclosed run',  color:'#7f8cad', def:{len:20,dir:1} },
 ];
-// Splits are pieces. sides = which lanes the marbles fork into; noMiddle = no straight-through.
-const SPLIT_PIECES = [
+const SPLITS = [
   { type:'split3',  name:'Split into 3', desc:'left · middle · right', sides:['left','right'], noMiddle:false, icon:'⅄' },
   { type:'split2',  name:'Split into 2', desc:'left · right (no mid)', sides:['left','right'], noMiddle:true,  icon:'Y' },
   { type:'splitML', name:'Middle + Left',  desc:'straight + left lane', sides:['left'],  noMiddle:false, icon:'⌐' },
   { type:'splitMR', name:'Middle + Right', desc:'straight + right lane', sides:['right'], noMiddle:false, icon:'¬' },
 ];
-const byKind = k => TRACK_PIECES.find(p => p.kind === k);
-const bySplit = t => SPLIT_PIECES.find(p => p.type === t);
+const byId = id => PAL.find(p=>p.id===id);
+const bySplit = t => SPLITS.find(p=>p.type===t);
+const KCOLOR = { straight:'#5b7cff', sweep:'#39c8e0', funnel:'#ffb020', narrower:'#ff7a45', moguls:'#b06bff', drop:'#2ec27e', tunneldrop:'#3aa0ff', cascade:'#5ad1a0', arena:'#f5c518', spiral:'#ff5db0', tunnel:'#7f8cad' };
+function pieceName(s){
+  if(s.kind==='sweep')  return (s.dir<0?'Turn Left':'Turn Right');
+  if(s.kind==='spiral') return (s.dir<0?'Spiral Left':'Spiral Right');
+  if(s.kind==='tunnel') return (s.dir<0?'Tunnel Left':'Tunnel Right');
+  return {straight:'Straight',funnel:'Funnel',narrower:'Narrower',moguls:'Moguls',drop:'Drop',tunneldrop:'Tunnel Drop',cascade:'Cascade',arena:'Arena'}[s.kind]||s.kind;
+}
 const clone = o => JSON.parse(JSON.stringify(o));
 const author = (() => { try { const s=JSON.parse(localStorage.getItem('zorbs_session')||'{}'); return (s.username||s.name||'').toLowerCase(); } catch(_){return '';} })();
 
-// ---- MODEL: a flat list. normal = {kind,len,...}; split = {kind:'split',type,len} ----
+// ---- MODEL ----  main list; split = {kind:'split',type,lanes:{left:[],right:[]},end:{left,right}}
 let track = [];
 let openItem = -1;
 let passObstacles = [];
@@ -169,38 +170,49 @@ let currentDraftId = null;
 const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
 let view = { panx:0, pany:0, scale:6 };
 
-function mkPiece(kind){ return Object.assign({kind},clone(byKind(kind).def)); }
-function mkSplit(type){ return { kind:'split', type, len:44 }; }
-function isSplit(it){ return it && it.kind==='split'; }
+function mkPiece(id){ const p=byId(id); return Object.assign({kind:p.kind},clone(p.def)); }
+function mkSplit(type){ const sp=bySplit(type); const lanes={},end={}; sp.sides.forEach(s=>{lanes[s]=[];end[s]='rejoin';}); return {kind:'split',type,lanes,end}; }
+function isSplit(it){ return it&&it.kind==='split'; }
+function laneLen(arr){ return (arr||[]).reduce((a,s)=>a+(s.len|0),0); }
+function splitMid(it){ const sp=bySplit(it.type); return Math.max(24, ...sp.sides.map(sd=>laneLen(it.lanes[sd]))); }
 
 // ---- PALETTE ----
 function buildPalette(){
-  document.getElementById('pal-list').innerHTML = TRACK_PIECES.map(p=>`
-    <div class="palItem" draggable="true" data-kind="${p.kind}"><div class="sw" style="background:${p.color}"></div>
+  document.getElementById('pal-list').innerHTML = PAL.map(p=>`
+    <div class="palItem" draggable="true" data-pal="${p.id}"><div class="sw" style="background:${p.color}"></div>
       <div><div class="nm">${p.name}</div><div class="ds">${p.desc}</div></div></div>`).join('');
-  document.getElementById('pal-splits').innerHTML = SPLIT_PIECES.map(p=>`
+  document.getElementById('pal-splits').innerHTML = SPLITS.map(p=>`
     <div class="palItem split" draggable="true" data-split="${p.type}"><div class="sw" style="background:#2a2410;color:#ffcc00;border:1px solid #ffcc00">${p.icon}</div>
       <div><div class="nm">${p.name}</div><div class="ds">${p.desc}</div></div></div>`).join('');
   document.querySelectorAll('#pal-list .palItem').forEach(el=>{
-    el.onclick=()=>add(mkPiece(el.dataset.kind));
-    el.ondragstart=e=>{ ghost={kind:el.dataset.kind}; e.dataTransfer.effectAllowed='copy'; try{e.dataTransfer.setData('text/plain',el.dataset.kind);}catch(_){} };
-    el.ondragend=()=>{ ghost=null; draw(); };
+    el.onclick=()=>dropAdd({pal:el.dataset.pal},{type:'main'});
+    el.ondragstart=e=>{ ghost={pal:el.dataset.pal}; e.dataTransfer.effectAllowed='copy'; try{e.dataTransfer.setData('text/plain',el.dataset.pal);}catch(_){} };
+    el.ondragend=()=>{ ghost=null; dropTarget=null; draw(); };
   });
   document.querySelectorAll('#pal-splits .palItem').forEach(el=>{
-    el.onclick=()=>add(mkSplit(el.dataset.split));
+    el.onclick=()=>dropAdd({split:el.dataset.split},{type:'main'});
     el.ondragstart=e=>{ ghost={split:el.dataset.split}; e.dataTransfer.effectAllowed='copy'; try{e.dataTransfer.setData('text/plain',el.dataset.split);}catch(_){} };
-    el.ondragend=()=>{ ghost=null; draw(); };
+    el.ondragend=()=>{ ghost=null; dropTarget=null; draw(); };
   });
 }
-function add(item){ track.push(item); openItem=track.length-1; pushUndo(); refresh(); fit(); }
-// build-at-the-end drag: a ghost of the piece being dragged is previewed at the track tip.
-let ghost=null, ghostOver=false;
-function ghostItem(){ if(!ghost) return null; return ghost.split?mkSplit(ghost.split):mkPiece(ghost.kind); }
+let ghost=null, dropTarget=null;
+function ghostItem(){ if(!ghost) return null; return ghost.split?mkSplit(ghost.split):mkPiece(ghost.pal); }
+// place a piece at a target: {type:'main'} appends to the main list; {type:'lane',idx,side} extends a split lane
+function dropAdd(g, target){
+  const item = g.split?mkSplit(g.split):mkPiece(g.pal);
+  if(target.type==='lane'){
+    const it=track[target.idx]; if(it&&isSplit(it)){ it.lanes[target.side].push(item); }
+  } else {
+    track.push(item); openItem=track.length-1;
+  }
+  pushUndo(); refresh(); fit();
+}
 
 // ---- 2D PREVIEW ----
 function layPieces(pieces, x, z, ang, laneId){
   const pts=[]; let turn=0;
   for(const s of pieces){
+    if(isSplit(s)) continue;
     const len=s.len|0; let target=0;
     if(s.kind==='sweep')  target=(s.dir||1)*(s.sharp||0.028);
     if(s.kind==='spiral') target=(s.dir||1)*0.030;
@@ -218,37 +230,27 @@ function layPieces(pieces, x, z, ang, laneId){
   }
   return { pts, end:{x,z,ang} };
 }
-// Walk the track: main spine continues through everything; a split forks parallel
-// side lanes over its own length and the spine keeps going straight (the middle).
+// Walk the track. Returns paths (per-lane point arrays), the main tip, and TIPS —
+// the buildable ends (main + each split lane), used for drag targeting.
 function buildPreview(){
-  const paths=[]; let x=0,z=0,ang=0; let spine=[];
-  for(const it of track){
-    if(!isSplit(it)){
-      const r=layPieces([it],x,z,ang,'main');
-      spine=spine.concat(r.pts); x=r.end.x; z=r.end.z; ang=r.end.ang; continue;
-    }
-    // split: side lanes fan parallel from here; the middle continues the spine straight
+  const paths=[]; const tips=[]; let x=0,z=0,ang=0; let spine=[];
+  for(let idx=0; idx<track.length; idx++){
+    const it=track[idx];
+    if(!isSplit(it)){ const r=layPieces([it],x,z,ang,'main'); spine=spine.concat(r.pts); x=r.end.x;z=r.end.z;ang=r.end.ang; continue; }
     const sp=bySplit(it.type); const rx=Math.cos(ang), rz=-Math.sin(ang);
-    const lane=[{kind:'straight',len:it.len}];
-    if(sp.sides.includes('left'))  paths.push({lane:'left', pts:layPieces(lane, x+rx*WIDTH*-0.95, z+rz*WIDTH*-0.95, ang,'left').pts});
-    if(sp.sides.includes('right')) paths.push({lane:'right',pts:layPieces(lane, x+rx*WIDTH* 0.95, z+rz*WIDTH* 0.95, ang,'right').pts});
-    const r=layPieces([{kind:'straight',len:it.len}],x,z,ang,'main'); // middle through
-    spine=spine.concat(r.pts); x=r.end.x; z=r.end.z; ang=r.end.ang;
+    sp.sides.forEach(side=>{
+      const sgn=side==='left'?-1:1;
+      const sx=x+rx*WIDTH*0.95*sgn, sz=z+rz*WIDTH*0.95*sgn;
+      const r=layPieces(it.lanes[side], sx, sz, ang, side);
+      paths.push({lane:side, pts:r.pts});
+      const te = r.pts.length? r.end : {x:sx,z:sz,ang};
+      tips.push({ x:te.x, z:te.z, side, target:{type:'lane',idx,side} });
+    });
+    const r=layPieces([{kind:'straight',len:splitMid(it)}],x,z,ang,'main'); spine=spine.concat(r.pts); x=r.end.x;z=r.end.z;ang=r.end.ang;
   }
   paths.unshift({lane:'main',pts:spine});
-  return { paths, finishPt: spine[spine.length-1]||{x:0,z:0}, end:{x,z,ang} };
-}
-// preview one candidate piece laid at the current track tip (for the drag ghost)
-function ghostPaths(){
-  const g=ghostItem(); if(!g) return null;
-  const {end}=buildPreview(); const {x,z,ang}=end;
-  const out=[];
-  if(isSplit(g)){ const sp=bySplit(g.type); const rx=Math.cos(ang),rz=-Math.sin(ang); const lane=[{kind:'straight',len:g.len}];
-    if(sp.sides.includes('left'))  out.push({lane:'left', pts:layPieces(lane,x+rx*WIDTH*-0.95,z+rz*WIDTH*-0.95,ang,'g').pts});
-    if(sp.sides.includes('right')) out.push({lane:'right',pts:layPieces(lane,x+rx*WIDTH* 0.95,z+rz*WIDTH* 0.95,ang,'g').pts});
-    out.push({lane:'main',pts:layPieces([{kind:'straight',len:g.len}],x,z,ang,'g').pts});
-  } else { out.push({lane:'main',pts:layPieces([g],x,z,ang,'g').pts}); }
-  return out;
+  tips.push({ x, z, side:'main', target:{type:'main'} });
+  return { paths, tips, finishPt: spine[spine.length-1]||{x:0,z:0} };
 }
 
 // ---- EXPORT ----
@@ -256,18 +258,19 @@ function exportData(){
   const sections=[]; const branches=[]; let bid=1; let anyNoMid=false;
   for(const it of track){
     if(!isSplit(it)){ sections.push(clone(it)); continue; }
-    if(!sections.length) sections.push({kind:'straight',len:20});   // a split needs a trunk
-    const sp=bySplit(it.type); const fromSection=sections.length-1;
-    const laneSecs=[{kind:'straight',len:Math.max(12,it.len|0)}];
-    if(sp.noMiddle) anyNoMid=true;
-    if(sp.sides.includes('left'))  branches.push({ id:bid++, fromSection, side:-1, end:'rejoin', noMiddle:sp.noMiddle, sections:clone(laneSecs), obstacles:[] });
-    if(sp.sides.includes('right')) branches.push({ id:bid++, fromSection, side: 1, end:'rejoin', noMiddle:sp.noMiddle, sections:clone(laneSecs), obstacles:[] });
-    sections.push({kind:'straight',len:Math.max(12,it.len|0)});      // the middle through-lane
+    if(!sections.length) sections.push({kind:'straight',len:20});
+    const sp=bySplit(it.type); const fromSection=sections.length-1; const mid=splitMid(it);
+    sp.sides.forEach(side=>{
+      const lp = it.lanes[side].length? clone(it.lanes[side]) : [{kind:'straight',len:mid}];
+      if(sp.noMiddle) anyNoMid=true;
+      branches.push({ id:bid++, fromSection, side:side==='left'?-1:1, end:it.end[side]==='finish'?'finish':'rejoin', noMiddle:sp.noMiddle, sections:lp, obstacles:[] });
+    });
+    sections.push({kind:'straight',len:mid});
   }
   return { sections, branches, noMiddle:anyNoMid };
 }
 
-// ---- IMPORT (reconstruct the simple list from a saved map) ----
+// ---- IMPORT ----
 function importMap(d){
   const sections=Array.isArray(d.sections)?clone(d.sections):[];
   const branches=Array.isArray(d.branches)?clone(d.branches):[];
@@ -277,16 +280,13 @@ function importMap(d){
   track=[];
   for(let i=0;i<sections.length;i++){
     if(byFrom.has(i)){
-      // a split lived just after section i: emit the section, then a split piece, and
-      // SKIP the next section (it was the split's auto middle straight).
       track.push(sections[i]);
-      const brs=byFrom.get(i);
-      const left=brs.find(b=>b.side===-1), right=brs.find(b=>b.side===1);
+      const brs=byFrom.get(i); const left=brs.find(b=>b.side===-1), right=brs.find(b=>b.side===1);
       const noMiddle=brs.some(b=>b.noMiddle)||d.noMiddle===true;
       const type = noMiddle?'split2' : (left&&right?'split3' : left?'splitML':'splitMR');
-      const len = (left||right) ? ((left||right).sections[0]?.len||44) : 44;
-      track.push({ kind:'split', type, len });
-      if(i+1<sections.length) i++;   // consume the middle straight
+      const lanes={}, end={}; bySplit(type).sides.forEach(sd=>{ const br=sd==='left'?left:right; lanes[sd]=br?clone(br.sections):[]; end[sd]=br&&br.end==='finish'?'finish':'rejoin'; });
+      track.push({kind:'split',type,lanes,end});
+      if(i+1<sections.length) i++;
       continue;
     }
     track.push(sections[i]);
@@ -302,6 +302,7 @@ function importMap(d){
 // ---- CANVAS ----
 function resize(){ const r=cv.getBoundingClientRect(); cv.width=r.width*devicePixelRatio; cv.height=r.height*devicePixelRatio; draw(); }
 function W2S(wx,wz){ return { x:wx*view.scale+view.panx, y:cv.height-(wz*view.scale+view.pany) }; }
+function S2W(cx,cy){ const r=cv.getBoundingClientRect(); const px=(cx-r.left)*devicePixelRatio, py=(cy-r.top)*devicePixelRatio; return { x:(px-view.panx)/view.scale, z:(cv.height-py-view.pany)/view.scale }; }
 const laneColor={main:'#39c8e0',left:'#2ec27e',right:'#ff7a45'};
 function fit(){
   const {paths}=buildPreview(); let pts=[]; paths.forEach(p=>pts=pts.concat(p.pts));
@@ -310,120 +311,124 @@ function fit(){
   pts.forEach(p=>{minx=Math.min(minx,p.x);maxx=Math.max(maxx,p.x);minz=Math.min(minz,p.z);maxz=Math.max(maxz,p.z);});
   const pad=70*devicePixelRatio;
   view.scale=Math.min((cv.width-pad*2)/Math.max(8,maxx-minx),(cv.height-pad*2)/Math.max(8,maxz-minz),26*devicePixelRatio);
-  view.panx=cv.width/2-((minx+maxx)/2)*view.scale;
-  view.pany=cv.height/2-((minz+maxz)/2)*view.scale; draw();
+  view.panx=cv.width/2-((minx+maxx)/2)*view.scale; view.pany=cv.height/2-((minz+maxz)/2)*view.scale; draw();
+}
+function ribbon(pts,col,{fill=true,dash=false,alpha=1}={}){
+  if(pts.length<2) return; const left=[],right=[];
+  for(let i=0;i<pts.length;i++){ const a=pts[i],b=pts[Math.min(i+1,pts.length-1)];
+    let dx=b.x-a.x,dz=b.z-a.z;const l=Math.hypot(dx,dz)||1;dx/=l;dz/=l; const nx=-dz,nz=dx;
+    left.push(W2S(a.x+nx*a.w,a.z+nz*a.w)); right.push(W2S(a.x-nx*a.w,a.z-nz*a.w)); }
+  ctx.save(); ctx.globalAlpha=alpha; if(dash) ctx.setLineDash([7,5]);
+  if(fill){ ctx.beginPath(); left.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); for(let i=right.length-1;i>=0;i--) ctx.lineTo(right[i].x,right[i].y); ctx.closePath(); ctx.fillStyle=col+'15'; ctx.fill(); }
+  ctx.strokeStyle=col; ctx.lineWidth=2*devicePixelRatio;
+  ctx.beginPath(); left.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.stroke();
+  ctx.beginPath(); right.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.stroke();
+  ctx.restore();
 }
 function draw(){
   ctx.clearRect(0,0,cv.width,cv.height);
   document.getElementById('emptyHint').style.display = track.length?'none':'flex';
   if(!track.length) return;
-  const {paths,finishPt}=buildPreview();
-  paths.forEach(({lane,pts})=>{
-    if(pts.length<2) return; const col=laneColor[lane]||'#39c8e0';
-    const left=[],right=[];
-    for(let i=0;i<pts.length;i++){ const a=pts[i],b=pts[Math.min(i+1,pts.length-1)];
-      let dx=b.x-a.x,dz=b.z-a.z;const l=Math.hypot(dx,dz)||1;dx/=l;dz/=l; const nx=-dz,nz=dx;
-      left.push(W2S(a.x+nx*a.w,a.z+nz*a.w)); right.push(W2S(a.x-nx*a.w,a.z-nz*a.w)); }
-    ctx.beginPath(); left.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));
-    for(let i=right.length-1;i>=0;i--) ctx.lineTo(right[i].x,right[i].y);
-    ctx.closePath(); ctx.fillStyle=col+'15'; ctx.fill();
-    ctx.strokeStyle=col; ctx.lineWidth=2*devicePixelRatio;
-    ctx.beginPath(); left.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.stroke();
-    ctx.beginPath(); right.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.stroke();
-  });
-  const main=paths[0].pts;
-  if(main.length) marker(W2S(main[0].x,main[0].z),'#2ec27e','START');
+  const {paths,tips,finishPt}=buildPreview();
+  paths.forEach(({lane,pts})=>ribbon(pts,laneColor[lane]||'#39c8e0'));
+  // buildable tips: pulse a ring at each; green if it's the current drop target
+  tips.forEach(tp=>{ const s=W2S(tp.x,tp.z); const isT=dropTarget&&sameTarget(dropTarget,tp.target);
+    ctx.save(); ctx.strokeStyle=isT?'#7CFFb0':(laneColor[tp.side]||'#39c8e0'); ctx.globalAlpha=isT?0.95:0.5; ctx.lineWidth=2*devicePixelRatio; ctx.setLineDash(isT?[]:[3,3]);
+    ctx.beginPath(); ctx.arc(s.x,s.y,(isT?10:6)*devicePixelRatio,0,7); ctx.stroke(); ctx.restore(); });
+  const main=paths[0].pts; if(main.length) marker(W2S(main[0].x,main[0].z),'#2ec27e','START');
   marker(W2S(finishPt.x,finishPt.z),'#ff8800','FINISH');
-  // GHOST: preview the dragged piece snapping onto the track tip (RCT-style build-at-end)
-  if(ghost){
-    const gp=ghostPaths();
-    if(gp) gp.forEach(({pts})=>{
-      if(pts.length<2) return;
-      const left=[],right=[];
-      for(let i=0;i<pts.length;i++){ const a=pts[i],b=pts[Math.min(i+1,pts.length-1)];
-        let dx=b.x-a.x,dz=b.z-a.z;const l=Math.hypot(dx,dz)||1;dx/=l;dz/=l; const nx=-dz,nz=dx;
-        left.push(W2S(a.x+nx*a.w,a.z+nz*a.w)); right.push(W2S(a.x-nx*a.w,a.z-nz*a.w)); }
-      ctx.save(); ctx.setLineDash([7,5]); ctx.strokeStyle=ghostOver?'#7CFFb0':'#ffffff'; ctx.globalAlpha=ghostOver?0.95:0.55; ctx.lineWidth=2.5*devicePixelRatio;
-      ctx.beginPath(); left.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.stroke();
-      ctx.beginPath(); right.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.stroke();
-      ctx.restore();
-    });
-    // tip marker
-    const {end}=buildPreview(); const s=W2S(end.x,end.z);
-    ctx.save(); ctx.setLineDash([]); ctx.strokeStyle='#7CFFb0'; ctx.globalAlpha=0.9; ctx.lineWidth=2*devicePixelRatio;
-    ctx.beginPath(); ctx.arc(s.x,s.y,9*devicePixelRatio,0,7); ctx.stroke(); ctx.restore();
+  // GHOST at the current drop target
+  if(ghost && dropTarget){
+    const tp=tips.find(t=>sameTarget(t.target,dropTarget)); if(tp){ const g=ghostItem();
+      const ang=tipAngle(tp); const gp = isSplit(g)? ghostSplitPaths(g,tp.x,tp.z,ang) : [layPieces([g],tp.x,tp.z,ang,'g').pts];
+      gp.forEach(pts=>ribbon(pts,'#ffffff',{fill:false,dash:true,alpha:0.85}));
+    }
   }
 }
-// stage drop target: dragging a palette piece over the canvas previews it at the tip;
-// dropping snaps it on (append). Works alongside click-to-add.
-const stage=document.getElementById('stage');
-stage.addEventListener('dragover',e=>{ if(!ghost) return; e.preventDefault(); e.dataTransfer.dropEffect='copy'; if(!ghostOver){ ghostOver=true; } draw(); });
-stage.addEventListener('dragleave',e=>{ if(e.target===stage||!stage.contains(e.relatedTarget)){ ghostOver=false; draw(); } });
-stage.addEventListener('drop',e=>{ e.preventDefault(); const g=ghostItem(); ghostOver=false; ghost=null; if(g){ add(g); } });
-function marker(s,col,label){
-  ctx.beginPath(); ctx.arc(s.x,s.y,5*devicePixelRatio,0,7); ctx.fillStyle=col; ctx.fill();
-  ctx.fillStyle=col; ctx.font=`bold ${11*devicePixelRatio}px system-ui`; ctx.textAlign='left'; ctx.textBaseline='middle';
-  ctx.fillText(label,s.x+8*devicePixelRatio,s.y);
+function tipAngle(tp){ // heading at a tip = derived from the last two pts of its lane (fallback +z)
+  const {paths}=buildPreview();
+  const lane = tp.side==='main'?paths[0]:paths.find(p=>p.lane===tp.side);
+  const pts=lane&&lane.pts; if(pts&&pts.length>=2){ const a=pts[pts.length-2],b=pts[pts.length-1]; return Math.atan2(b.x-a.x,b.z-a.z); } return 0;
 }
+function ghostSplitPaths(g,x,z,ang){ const sp=bySplit(g.type); const rx=Math.cos(ang),rz=-Math.sin(ang); const out=[]; const lane=[{kind:'straight',len:24}];
+  if(sp.sides.includes('left')) out.push(layPieces(lane,x+rx*WIDTH*-0.95,z+rz*WIDTH*-0.95,ang,'g').pts);
+  if(sp.sides.includes('right'))out.push(layPieces(lane,x+rx*WIDTH* 0.95,z+rz*WIDTH* 0.95,ang,'g').pts);
+  out.push(layPieces(lane,x,z,ang,'g').pts); return out; }
+function sameTarget(a,b){ if(!a||!b) return false; if(a.type!==b.type) return false; return a.type==='main' || (a.idx===b.idx&&a.side===b.side); }
+function marker(s,col,label){ ctx.beginPath(); ctx.arc(s.x,s.y,5*devicePixelRatio,0,7); ctx.fillStyle=col; ctx.fill();
+  ctx.fillStyle=col; ctx.font=`bold ${11*devicePixelRatio}px system-ui`; ctx.textAlign='left'; ctx.textBaseline='middle'; ctx.fillText(label,s.x+8*devicePixelRatio,s.y); }
+
+// pan/zoom
 let pdrag=null;
 cv.addEventListener('pointerdown',e=>{ pdrag={x:e.clientX,y:e.clientY,px:view.panx,py:view.pany}; cv.setPointerCapture(e.pointerId); });
 cv.addEventListener('pointermove',e=>{ if(!pdrag)return; view.panx=pdrag.px+(e.clientX-pdrag.x)*devicePixelRatio; view.pany=pdrag.py-(e.clientY-pdrag.y)*devicePixelRatio; draw(); });
 cv.addEventListener('pointerup',()=>pdrag=null);
 cv.addEventListener('wheel',e=>{ e.preventDefault(); const f=e.deltaY<0?1.1:0.9; const r=cv.getBoundingClientRect(); const mx=(e.clientX-r.left)*devicePixelRatio,my=(e.clientY-r.top)*devicePixelRatio; const wx=(mx-view.panx)/view.scale, wz=(cv.height-my-view.pany)/view.scale; view.scale*=f; view.panx=mx-wx*view.scale; view.pany=(cv.height-my)-wz*view.scale; draw(); },{passive:false});
 
+// drag targeting: nearest buildable tip to the cursor
+function nearestTarget(cx,cy){
+  const w=S2W(cx,cy); const {tips}=buildPreview(); let best=null,bd=1e9;
+  tips.forEach(tp=>{ const d=(tp.x-w.x)**2+(tp.z-w.z)**2; if(d<bd){bd=d;best=tp.target;} });
+  return best;
+}
+const stage=document.getElementById('stage');
+stage.addEventListener('dragover',e=>{ if(!ghost) return; e.preventDefault(); e.dataTransfer.dropEffect='copy'; dropTarget=nearestTarget(e.clientX,e.clientY); draw(); });
+stage.addEventListener('drop',e=>{ e.preventDefault(); if(!ghost) return; const t=dropTarget||{type:'main'}; const g=ghost; ghost=null; dropTarget=null; dropAdd(g,t); });
+stage.addEventListener('dragleave',e=>{ if(!stage.contains(e.relatedTarget)){ dropTarget=null; draw(); } });
+
 // ---- RIGHT PANEL ----
 function refresh(){ renderTrack(); draw(); validate(); }
 function renderTrack(){
   const host=document.getElementById('trackArea');
-  if(!track.length){ host.innerHTML='<div class="hint">Empty — add pieces from the left.</div>'; return; }
+  if(!track.length){ host.innerHTML='<div class="hint">Empty — drag a piece onto the canvas.</div>'; return; }
   host.innerHTML = track.map((it,idx)=>{
     const open=(openItem===idx);
     if(isSplit(it)){ const sp=bySplit(it.type);
-      return `<div class="item split ${open?'sel':''}"><div class="itemHd" data-open="${idx}">
-        <div class="sw" style="width:16px;height:16px;background:#2a2410;color:#ffcc00;border:1px solid #ffcc00">${sp.icon}</div>
-        <div class="nm" style="color:#ffcc00">${sp.name}</div><div class="mini">${open?'▼':'▶'} len ${it.len}</div>
+      let lanes='';
+      sp.sides.forEach(sd=>{
+        const end=it.end[sd];
+        lanes+=`<div class="lane"><div style="font-size:10px;color:${laneColor[sd]}">${sd==='left'?'◀ Left':'Right ▶'} lane</div>
+          <div class="seg" style="margin:4px 0">
+            <button data-end="${idx}|${sd}|rejoin" class="${end==='rejoin'?'on':''}">↩ Rejoin</button>
+            <button data-end="${idx}|${sd}|finish" class="${end==='finish'?'on':''}">🏁 Finish</button></div>`;
+        if(!it.lanes[sd].length) lanes+=`<div class="hint" style="font-size:10px">empty — drag onto its ${sd} tip on the canvas</div>`;
+        else it.lanes[sd].forEach((s,si)=>{ lanes+=`<div class="lrow"><div class="sw" style="background:${KCOLOR[s.kind]}"></div><span style="flex:1">${pieceName(s)} <span style="color:var(--dim)">·${s.len}</span></span><button data-ldel="${idx}|${sd}|${si}" style="color:var(--bad)">✕</button></div>`; });
+        lanes+=`</div>`;
+      });
+      return `<div class="item split"><div class="itemHd" data-open="${idx}"><div class="sw" style="width:16px;height:16px;background:#2a2410;color:#ffcc00;border:1px solid #ffcc00">${sp.icon}</div>
+        <div class="nm" style="color:#ffcc00">${sp.name}</div>
         <button data-up="${idx}">▲</button><button data-down="${idx}">▼</button><button data-del="${idx}" style="color:var(--bad)">✕</button></div>
-        ${open?`<div class="itemBody"><div class="rng"><label>Length</label><input type="range" data-k="len" min="20" max="120" step="2" value="${it.len}"><span class="v" id="v-len">${it.len}</span></div>
-          <div class="hint">${sp.desc} — marbles fork and rejoin automatically.</div></div>`:''}</div>`;
+        <div class="itemBody">${lanes}</div></div>`;
     }
-    const pc=byKind(it.kind);
-    return `<div class="item ${open?'sel':''}"><div class="itemHd" data-open="${idx}">
-      <div class="sw" style="width:16px;height:16px;background:${pc.color}"></div>
-      <div class="nm" style="color:${pc.color}">${pc.name}</div><div class="mini">${open?'▼':'▶'} len ${it.len}</div>
+    const col=KCOLOR[it.kind];
+    return `<div class="item ${open?'sel':''}"><div class="itemHd" data-open="${idx}"><div class="sw" style="width:16px;height:16px;background:${col}"></div>
+      <div class="nm" style="color:${col}">${pieceName(it)}</div><div class="mini">${open?'▼':'▶'} len ${it.len}</div>
       <button data-up="${idx}">▲</button><button data-down="${idx}">▼</button><button data-del="${idx}" style="color:var(--bad)">✕</button></div>
       ${open?`<div class="itemBody">${propsHTML(it)}</div>`:''}</div>`;
   }).join('');
   wire(host);
 }
 function propsHTML(s){
-  let h=''; const rng=(k,label,min,max,step,val)=>`<div class="rng"><label>${label}</label><input type="range" data-k="${k}" min="${min}" max="${max}" step="${step}" value="${val}"><span class="v" id="v-${k}">${val}</span></div>`;
-  h+=rng('len','Length',6,200,1,s.len);
+  const rng=(k,label,min,max,step,val)=>`<div class="rng"><label>${label}</label><input type="range" data-k="${k}" min="${min}" max="${max}" step="${step}" value="${val}"><span class="v" id="v-${k}">${val}</span></div>`;
+  let h=rng('len','Length',6,200,1,s.len);
   if(s.kind==='sweep'){ h+=rng('sharp','Sharpness',0.01,0.12,0.002,s.sharp); }
   if(s.kind==='funnel'||s.kind==='narrower'){ h+=rng('min','Throat',0.25,0.9,0.01,s.min); }
   if(s.kind==='drop'){ h+=rng('drop','Steepness',0.4,3,0.1,s.drop); }
+  if(s.kind==='tunneldrop'){ h+=rng('drop','Steepness',1.2,4,0.1,s.drop); }
   if(s.kind==='cascade'){ h+=rng('steps','Steps',2,8,1,s.steps); }
   if(s.kind==='arena'){ h+=rng('w','Width',8,30,1,s.w); }
-  if(s.kind==='sweep'||s.kind==='spiral'||s.kind==='tunnel'){
-    h+=`<div style="font-size:10px;color:var(--dim);margin:2px 0 4px">Direction</div>
-        <div class="seg" data-dir="1"><button data-v="-1" class="${(s.dir||1)<0?'on':''}">◀ Left</button><button data-v="1" class="${(s.dir||1)>0?'on':''}">Right ▶</button></div>`;
-  }
   return h;
 }
 function wire(host){
-  host.querySelectorAll('.itemHd[data-open]').forEach(hd=>hd.onclick=e=>{
-    if(e.target.dataset.del!=null||e.target.dataset.up!=null||e.target.dataset.down!=null) return;
-    const i=+hd.dataset.open; openItem=(openItem===i?-1:i); renderTrack(); });
+  host.querySelectorAll('.itemHd[data-open]').forEach(hd=>hd.onclick=e=>{ if(e.target.dataset.del!=null||e.target.dataset.up!=null||e.target.dataset.down!=null) return; const i=+hd.dataset.open; openItem=(openItem===i?-1:i); renderTrack(); });
   host.querySelectorAll('[data-del]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const i=+b.dataset.del; track.splice(i,1); if(openItem===i)openItem=-1; else if(openItem>i)openItem--; pushUndo(); refresh(); });
   host.querySelectorAll('[data-up]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const i=+b.dataset.up; if(i>0){ [track[i-1],track[i]]=[track[i],track[i-1]]; openItem=i-1; pushUndo(); refresh(); } });
   host.querySelectorAll('[data-down]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const i=+b.dataset.down; if(i<track.length-1){ [track[i+1],track[i]]=[track[i],track[i+1]]; openItem=i+1; pushUndo(); refresh(); } });
-  if(openItem>=0 && track[openItem]){
+  host.querySelectorAll('[data-end]').forEach(b=>b.onclick=()=>{ const [i,l,v]=b.dataset.end.split('|'); track[+i].end[l]=v; pushUndo(); refresh(); });
+  host.querySelectorAll('[data-ldel]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const [i,l,si]=b.dataset.ldel.split('|'); track[+i].lanes[l].splice(+si,1); pushUndo(); refresh(); });
+  if(openItem>=0 && track[openItem] && !isSplit(track[openItem])){
     const s=track[openItem]; const body=host.querySelectorAll('.item')[openItem]?.querySelector('.itemBody');
-    if(body){
-      body.querySelectorAll('input[type=range]').forEach(r=>{
-        r.oninput=()=>{ const k=r.dataset.k; s[k]=(k==='len'||k==='steps'||k==='w')?(+r.value|0):+r.value; const v=body.querySelector('#v-'+k); if(v)v.textContent=s[k]; draw(); validate(); };
-        r.onchange=pushUndo; });
-      const ds=body.querySelector('[data-dir]'); if(ds) ds.querySelectorAll('button').forEach(b=>b.onclick=()=>{ s.dir=+b.dataset.v; pushUndo(); refresh(); });
-    }
+    if(body) body.querySelectorAll('input[type=range]').forEach(r=>{ r.oninput=()=>{ const k=r.dataset.k; s[k]=(k==='len'||k==='steps'||k==='w')?(+r.value|0):+r.value; const v=body.querySelector('#v-'+k); if(v)v.textContent=s[k]; draw(); validate(); }; r.onchange=pushUndo; });
   }
 }
 
@@ -436,81 +441,50 @@ window.addEventListener('keydown',e=>{
   else if((e.ctrlKey||e.metaKey)&&(e.key==='y'||(e.key==='z'&&e.shiftKey))){ if(redoStack.length){ undoStack.push(snap()); restore(redoStack.pop()); } e.preventDefault(); }
 });
 
-// ---- VALIDATION ----
+// ---- VALIDATION / MAP DATA ----
 function validate(){ const ok=exportData().sections.length>=2; document.getElementById('btn-test').disabled=!ok; document.getElementById('btn-submit').disabled=!ok; return ok; }
+function currentMap(){ const {sections,branches,noMiddle}=exportData();
+  return { name:document.getElementById('m-name').value.trim()||'Untitled Track', description:document.getElementById('m-desc').value.trim(), difficulty, theme:document.getElementById('m-theme').value, author:author||'anon', sections, branches, obstacles:passObstacles, noMiddle:!!noMiddle }; }
+function makeThumb(){ try{ const {paths}=buildPreview(); let pts=[]; paths.forEach(p=>pts=pts.concat(p.pts)); if(!pts.length) return '';
+  let minx=1e9,maxx=-1e9,minz=1e9,maxz=-1e9; pts.forEach(q=>{minx=Math.min(minx,q.x);maxx=Math.max(maxx,q.x);minz=Math.min(minz,q.z);maxz=Math.max(maxz,q.z);});
+  const W=320,H=200,pad=16; const c=document.createElement('canvas'); c.width=W;c.height=H; const g=c.getContext('2d'); g.fillStyle='#0c0f1a'; g.fillRect(0,0,W,H);
+  const sc=Math.min((W-pad*2)/Math.max(1,maxx-minx),(H-pad*2)/Math.max(1,maxz-minz)); const ox=pad+((W-pad*2)-(maxx-minx)*sc)/2, oz=pad+((H-pad*2)-(maxz-minz)*sc)/2;
+  const X=q=>ox+(q.x-minx)*sc, Y=q=>H-(oz+(q.z-minz)*sc); g.lineCap='round'; g.lineJoin='round';
+  paths.forEach(({lane,pts})=>{ if(pts.length<2)return; g.strokeStyle=laneColor[lane]||'#39c8e0'; g.lineWidth=Math.max(3,WIDTH*sc*1.2); g.beginPath(); pts.forEach((q,i)=>i?g.lineTo(X(q),Y(q)):g.moveTo(X(q),Y(q))); g.stroke(); });
+  return c.toDataURL('image/png'); }catch(_){ return ''; } }
 
-// ---- MAP DATA ----
-function currentMap(){
-  const {sections,branches,noMiddle}=exportData();
-  return { name:document.getElementById('m-name').value.trim()||'Untitled Track',
-    description:document.getElementById('m-desc').value.trim(), difficulty, theme:document.getElementById('m-theme').value,
-    author:author||'anon', sections, branches, obstacles:passObstacles, noMiddle:!!noMiddle };
-}
-function makeThumb(){
-  try{ const {paths}=buildPreview(); let pts=[]; paths.forEach(p=>pts=pts.concat(p.pts)); if(!pts.length) return '';
-    let minx=1e9,maxx=-1e9,minz=1e9,maxz=-1e9; pts.forEach(q=>{minx=Math.min(minx,q.x);maxx=Math.max(maxx,q.x);minz=Math.min(minz,q.z);maxz=Math.max(maxz,q.z);});
-    const W=320,H=200,pad=16; const c=document.createElement('canvas'); c.width=W;c.height=H; const g=c.getContext('2d');
-    g.fillStyle='#0c0f1a'; g.fillRect(0,0,W,H);
-    const sc=Math.min((W-pad*2)/Math.max(1,maxx-minx),(H-pad*2)/Math.max(1,maxz-minz));
-    const ox=pad+((W-pad*2)-(maxx-minx)*sc)/2, oz=pad+((H-pad*2)-(maxz-minz)*sc)/2;
-    const X=q=>ox+(q.x-minx)*sc, Y=q=>H-(oz+(q.z-minz)*sc); g.lineCap='round'; g.lineJoin='round';
-    paths.forEach(({lane,pts})=>{ if(pts.length<2)return; g.strokeStyle=laneColor[lane]||'#39c8e0'; g.lineWidth=Math.max(3,WIDTH*sc*1.2);
-      g.beginPath(); pts.forEach((q,i)=>i?g.lineTo(X(q),Y(q)):g.moveTo(X(q),Y(q))); g.stroke(); });
-    return c.toDataURL('image/png');
-  }catch(_){ return ''; }
-}
-
-// ---- TOAST ----
+// ---- TOAST + BUTTONS ----
 let toastT=null; function toast(m){ const el=document.getElementById('toast'); el.textContent=m; el.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove('show'),2600); }
-
-// ---- BUTTONS ----
 document.getElementById('btn-clear').onclick=()=>{ if(track.length && !confirm('Clear the whole track?')) return; track=[]; openItem=-1; currentDraftId=null; refresh(); };
 document.getElementById('btn-test').onclick=()=>{ if(!validate()) return; try{ sessionStorage.setItem('zorbs_testmap',JSON.stringify(currentMap())); }catch(_){}; window.open('/beta/?map=test','_blank'); };
 document.getElementById('m-diff').querySelectorAll('button').forEach(b=>b.onclick=()=>{ difficulty=b.dataset.d; document.getElementById('m-diff').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b)); });
-
 document.getElementById('btn-save').onclick=async()=>{
-  if(!author){ toast('Sign in on the dashboard first to save drafts.'); return; }
-  if(!track.length){ toast('Nothing to save yet.'); return; }
+  if(!author){ toast('Sign in on the dashboard first to save drafts.'); return; } if(!track.length){ toast('Nothing to save yet.'); return; }
   const btn=document.getElementById('btn-save'); btn.disabled=true; const old=btn.textContent; btn.textContent='Saving…';
   try{ const map=Object.assign(currentMap(),{thumb:makeThumb()});
     const r=await fetch('/api/maps',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'draft-save',map,id:currentDraftId||undefined})});
-    const j=await r.json().catch(()=>({})); if(j&&j.ok){ currentDraftId=j.id; toast('💾 Draft saved.'); } else toast('Save failed: '+(j&&j.error||'try again'));
-  }catch(_){ toast('Network error.'); } btn.textContent=old; btn.disabled=false;
-};
+    const j=await r.json().catch(()=>({})); if(j&&j.ok){ currentDraftId=j.id; toast('💾 Draft saved.'); } else toast('Save failed: '+(j&&j.error||'try again')); }catch(_){ toast('Network error.'); } btn.textContent=old; btn.disabled=false; };
 document.getElementById('btn-submit').onclick=async()=>{
   if(!validate()) return; if(!author){ toast('Sign in on the dashboard first.'); return; }
   const btn=document.getElementById('btn-submit'); btn.disabled=true; const old=btn.textContent; btn.textContent='Submitting…';
   try{ const r=await fetch('/api/maps',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'submit',map:Object.assign(currentMap(),{thumb:makeThumb()})})});
-    const j=await r.json().catch(()=>({})); if(j&&j.ok) toast('✓ Submitted for review!'); else toast('Submit failed: '+(j&&j.error||'try again'));
-  }catch(_){ toast('Network error.'); } btn.textContent=old; btn.disabled=false; validate();
-};
-
+    const j=await r.json().catch(()=>({})); if(j&&j.ok) toast('✓ Submitted for review!'); else toast('Submit failed: '+(j&&j.error||'try again')); }catch(_){ toast('Network error.'); } btn.textContent=old; btn.disabled=false; validate(); };
 document.getElementById('btn-load').onclick=openDraftModal;
 function closeDraftModal(){ document.getElementById('draftModal').style.display='none'; }
 async function openDraftModal(){
   if(!author){ toast('Sign in on the dashboard first to load drafts.'); return; }
-  const modal=document.getElementById('draftModal'), list=document.getElementById('draftList');
-  modal.style.display='flex'; list.innerHTML='<div style="color:#9aa6c4;padding:20px;text-align:center">Loading…</div>';
-  try{ const r=await fetch('/api/maps?list=drafts&author='+encodeURIComponent(author)); const j=await r.json().catch(()=>({}));
-    const drafts=(j&&j.drafts)||[];
+  const modal=document.getElementById('draftModal'), list=document.getElementById('draftList'); modal.style.display='flex'; list.innerHTML='<div style="color:#9aa6c4;padding:20px;text-align:center">Loading…</div>';
+  try{ const r=await fetch('/api/maps?list=drafts&author='+encodeURIComponent(author)); const j=await r.json().catch(()=>({})); const drafts=(j&&j.drafts)||[];
     if(!drafts.length){ list.innerHTML='<div style="color:#9aa6c4;padding:24px;text-align:center">No saved drafts yet.</div>'; return; }
-    list.innerHTML=drafts.map(d=>{ const when=d.updated?new Date(d.updated).toLocaleString():'';
-      const img=d.thumb?`<img src="${d.thumb}">`:`<div style="width:80px;height:50px;border-radius:6px;background:#0c0f1a;flex:0 0 auto"></div>`;
-      const nm=(d.name||'Untitled Draft').replace(/[<>&]/g,'');
-      return `<div class="draftItem">${img}<div class="meta"><div class="t">${nm}</div><div class="s">${d.sectionCount} pieces · ${d.difficulty||'medium'}</div><div class="s" style="font-size:10px;color:#6b7596">${when}</div></div>
-        <button style="background:#2a6cff;color:#fff" onclick="loadDraft('${d.id}')">Load</button><button class="danger" onclick="delDraft('${d.id}')">🗑</button></div>`;
-    }).join('');
-  }catch(_){ list.innerHTML='<div style="color:#ff8a9c;padding:20px;text-align:center">Couldn’t load drafts.</div>'; }
-}
-async function loadDraft(id){ try{ const r=await fetch('/api/maps?draft='+encodeURIComponent(id)+'&author='+encodeURIComponent(author)); const j=await r.json().catch(()=>({}));
-  if(j&&j.ok&&j.draft){ currentDraftId=id; importMap(j.draft); closeDraftModal(); toast('Loaded draft.'); } else toast('Could not load that draft.'); }catch(_){ toast('Network error.'); } }
+    list.innerHTML=drafts.map(d=>{ const when=d.updated?new Date(d.updated).toLocaleString():''; const img=d.thumb?`<img src="${d.thumb}">`:`<div style="width:80px;height:50px;border-radius:6px;background:#0c0f1a;flex:0 0 auto"></div>`; const nm=(d.name||'Untitled Draft').replace(/[<>&]/g,'');
+      return `<div class="draftItem">${img}<div class="meta"><div class="t">${nm}</div><div class="s">${d.sectionCount} pieces · ${d.difficulty||'medium'}</div><div class="s" style="font-size:10px;color:#6b7596">${when}</div></div><button style="background:#2a6cff;color:#fff" onclick="loadDraft('${d.id}')">Load</button><button class="danger" onclick="delDraft('${d.id}')">🗑</button></div>`; }).join('');
+  }catch(_){ list.innerHTML='<div style="color:#ff8a9c;padding:20px;text-align:center">Couldn’t load drafts.</div>'; } }
+async function loadDraft(id){ try{ const r=await fetch('/api/maps?draft='+encodeURIComponent(id)+'&author='+encodeURIComponent(author)); const j=await r.json().catch(()=>({})); if(j&&j.ok&&j.draft){ currentDraftId=id; importMap(j.draft); closeDraftModal(); toast('Loaded draft.'); } else toast('Could not load that draft.'); }catch(_){ toast('Network error.'); } }
 async function delDraft(id){ if(!confirm('Delete this draft?')) return; try{ await fetch('/api/maps',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'draft-delete',id,author})}); openDraftModal(); }catch(_){} }
 window.loadDraft=loadDraft; window.delDraft=delDraft; window.closeDraftModal=closeDraftModal;
 
 // ---- INIT ----
-buildPalette();
-window.addEventListener('resize',resize);
-resize(); refresh();
+buildPalette(); window.addEventListener('resize',resize); resize(); refresh();
 </script>
 </body>
 </html>

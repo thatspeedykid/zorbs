@@ -137,7 +137,7 @@ async function adminOK(req, bodyAdmin) {
 
 // The set of section kinds the track builder understands. Anything else is dropped on save so a
 // malicious/buggy editor can't inject arbitrary fields into the generator.
-const SECTION_KINDS = ['straight', 'sweep', 'drop', 'funnel', 'narrower', 'moguls', 'spiral', 'tunnel', 'cascade', 'arena'];
+const SECTION_KINDS = ['straight', 'sweep', 'drop', 'tunneldrop', 'funnel', 'narrower', 'moguls', 'spiral', 'tunnel', 'cascade', 'arena'];
 
 // Sanitize one authored section into the minimal shape the generator reads. Numeric params are
 // clamped so no single section can blow up the node budget or the geometry.
@@ -149,6 +149,7 @@ function sanitizeSection(s) {
   if (kind === 'sweep') out.sharp = Math.max(0.01, Math.min(0.12, +s.sharp || 0.05));
   if (kind === 'funnel' || kind === 'narrower') out.min = Math.max(0.25, Math.min(0.9, +s.min || 0.45));
   if (kind === 'drop') out.drop = Math.max(0.4, Math.min(3, +s.drop || 1.2));
+  if (kind === 'tunneldrop') out.drop = Math.max(1.2, Math.min(4, +s.drop || 2.6));
   if (kind === 'cascade') out.steps = Math.max(2, Math.min(8, (s.steps | 0) || 4));
   if (kind === 'arena') out.w = Math.max(8, Math.min(30, +s.w || 14));
   if (s.split === true) out.split = true;

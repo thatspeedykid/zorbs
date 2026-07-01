@@ -204,6 +204,14 @@ const ZTRACK = (() => {
           targetBank = 0;
           extraDrop = sec.drop;
           segLeft = sec.len;
+        } else if (sec.kind === 'tunneldrop') {
+          // enclosed steep plunge: a tunnel roof + a much steeper descent, for speed.
+          moveKind = 'drop';
+          targetTurn = (rng() - 0.5) * 0.02;
+          targetBank = 0;
+          extraDrop = sec.drop || 2.6;
+          tunnel = true;
+          segLeft = sec.len;
         } else if (sec.kind === 'funnel') {
           moveKind = 'funnel';
           targetTurn = (rng() - 0.5) * 0.012;
@@ -553,6 +561,7 @@ const ZTRACK = (() => {
       if (mk === 'spiral')   { spiralTurn = (sec.dir||1)*0.030; spiralLen = len; targetTurn = spiralTurn; }
       if (mk === 'tunnel')   { targetTurn = (sec.dir||1)*0.012; tunnel = true; }
       if (mk === 'drop')     { extraDrop = sec.drop || 1.2; }
+      if (mk === 'tunneldrop'){ extraDrop = sec.drop || 2.6; tunnel = true; }
       if (mk === 'cascade')  { cascadeLen = len; cascadeSteps = Math.max(2,Math.min(8,(sec.steps|0)||4)); }
       if (mk === 'funnel')   { funnelMin = sec.min||0.45; funnelLen = len; }
       if (mk === 'narrower') { narrowMin = sec.min||0.38; narrowLen = len; }
@@ -577,7 +586,7 @@ const ZTRACK = (() => {
         else if (mk === 'narrower') { const r=Math.min(1,ap/0.22,(1-ap)/0.22); const e=r*r*(3-2*r); widthFactor=1-e*(1-narrowMin); }
         else if (mk === 'spiral')   { const r=Math.min(1,ap/0.25,(1-ap)/0.25); const e=r*r*(3-2*r); widthFactor=1+0.45*e; }
         else if (mk === 'arena')    { const r=Math.min(1,ap/0.15,(1-ap)/0.15); const e=r*r*(3-2*r); widthFactor=1+(arenaHalfW/WIDTH-1)*Math.max(0,e); }
-        else if (mk === 'tunnel')   widthFactor = 0.8;
+        else if (mk === 'tunnel' || mk === 'tunneldrop') widthFactor = 0.8;
         const halfW = WIDTH * widthFactor;
         const right = norm(cross(heading, worldUp));
         const up = norm(cross(right, heading));
