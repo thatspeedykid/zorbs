@@ -1020,12 +1020,12 @@ const ZPHYSICS = (() => {
       // above/below the centerline. Without this the snap height was wrong on every banked
       // turn, so the ball flickered on/off the surface and jittered like gravel (and scrubbed
       // speed). Add the bank lift so the resting height matches the real tilted floor.
-      // Taper the lift to ZERO as the bank steepens (cos term) and hard-cap it: on a strongly
-      // banked/twisting ribbon the raw curLat*sin(bank) swings wildly as the twist rotates and
-      // flings offset marbles UP the tilt ("rolling straight up"). Small gentle-turn correction
-      // stays; the runaway on spirals/corkscrews is killed.
-      const _bk = n.bank || 0;
-      const bankLift = Math.max(-1.1, Math.min(1.1, curLat * Math.sin(_bk) * Math.max(0, Math.cos(_bk))));
+      // BANKED-FLOOR HEIGHT (geometrically exact): a marble at lateral offset curLat on a floor
+      // banked by β rides curLat*sin(β) above the centerline. This MUST match the visual mesh or
+      // the marble sinks into the banked floor and slips under the outer wall (whose base sits at
+      // the higher mesh edge) — the "sinks / falls through / gets stuck on turns" bug. Capped only
+      // for numerical safety.
+      const bankLift = Math.max(-12, Math.min(12, curLat * Math.sin(n.bank || 0)));
       const floorY = smoothFloorY(tpos, b.hint, N) + BALL_R * 1.5 + bankLift;
       const gap = floorY - tpos.y;          // >0 means ball is below the surface
       const lv = b.body.linvel();
