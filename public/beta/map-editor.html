@@ -176,15 +176,26 @@ function isSplit(it){ return it && it.kind==='split'; }
 // ---- PALETTE ----
 function buildPalette(){
   document.getElementById('pal-list').innerHTML = TRACK_PIECES.map(p=>`
-    <div class="palItem" data-kind="${p.kind}"><div class="sw" style="background:${p.color}"></div>
+    <div class="palItem" draggable="true" data-kind="${p.kind}"><div class="sw" style="background:${p.color}"></div>
       <div><div class="nm">${p.name}</div><div class="ds">${p.desc}</div></div></div>`).join('');
   document.getElementById('pal-splits').innerHTML = SPLIT_PIECES.map(p=>`
-    <div class="palItem split" data-split="${p.type}"><div class="sw" style="background:#2a2410;color:#ffcc00;border:1px solid #ffcc00">${p.icon}</div>
+    <div class="palItem split" draggable="true" data-split="${p.type}"><div class="sw" style="background:#2a2410;color:#ffcc00;border:1px solid #ffcc00">${p.icon}</div>
       <div><div class="nm">${p.name}</div><div class="ds">${p.desc}</div></div></div>`).join('');
-  document.querySelectorAll('#pal-list .palItem').forEach(el=>el.onclick=()=>add(mkPiece(el.dataset.kind)));
-  document.querySelectorAll('#pal-splits .palItem').forEach(el=>el.onclick=()=>add(mkSplit(el.dataset.split)));
+  document.querySelectorAll('#pal-list .palItem').forEach(el=>{
+    el.onclick=()=>add(mkPiece(el.dataset.kind));
+    el.ondragstart=e=>{ ghost={kind:el.dataset.kind}; e.dataTransfer.effectAllowed='copy'; try{e.dataTransfer.setData('text/plain',el.dataset.kind);}catch(_){} };
+    el.ondragend=()=>{ ghost=null; draw(); };
+  });
+  document.querySelectorAll('#pal-splits .palItem').forEach(el=>{
+    el.onclick=()=>add(mkSplit(el.dataset.split));
+    el.ondragstart=e=>{ ghost={split:el.dataset.split}; e.dataTransfer.effectAllowed='copy'; try{e.dataTransfer.setData('text/plain',el.dataset.split);}catch(_){} };
+    el.ondragend=()=>{ ghost=null; draw(); };
+  });
 }
-function add(item){ track.push(item); openItem=track.length-1; pushUndo(); refresh(); }
+function add(item){ track.push(item); openItem=track.length-1; pushUndo(); refresh(); fit(); }
+// build-at-the-end drag: a ghost of the piece being dragged is previewed at the track tip.
+let ghost=null, ghostOver=false;
+function ghostItem(){ if(!ghost) return null; return ghost.split?mkSplit(ghost.split):mkPiece(ghost.kind); }
 
 // ---- 2D PREVIEW ----
 function layPieces(pieces, x, z, ang, laneId){
@@ -225,7 +236,19 @@ function buildPreview(){
     spine=spine.concat(r.pts); x=r.end.x; z=r.end.z; ang=r.end.ang;
   }
   paths.unshift({lane:'main',pts:spine});
-  return { paths, finishPt: spine[spine.length-1]||{x:0,z:0} };
+  return { paths, finishPt: spine[spine.length-1]||{x:0,z:0}, end:{x,z,ang} };
+}
+// preview one candidate piece laid at the current track tip (for the drag ghost)
+function ghostPaths(){
+  const g=ghostItem(); if(!g) return null;
+  const {end}=buildPreview(); const {x,z,ang}=end;
+  const out=[];
+  if(isSplit(g)){ const sp=bySplit(g.type); const rx=Math.cos(ang),rz=-Math.sin(ang); const lane=[{kind:'straight',len:g.len}];
+    if(sp.sides.includes('left'))  out.push({lane:'left', pts:layPieces(lane,x+rx*WIDTH*-0.95,z+rz*WIDTH*-0.95,ang,'g').pts});
+    if(sp.sides.includes('right')) out.push({lane:'right',pts:layPieces(lane,x+rx*WIDTH* 0.95,z+rz*WIDTH* 0.95,ang,'g').pts});
+    out.push({lane:'main',pts:layPieces([{kind:'straight',len:g.len}],x,z,ang,'g').pts});
+  } else { out.push({lane:'main',pts:layPieces([g],x,z,ang,'g').pts}); }
+  return out;
 }
 
 // ---- EXPORT ----
@@ -311,7 +334,32 @@ function draw(){
   const main=paths[0].pts;
   if(main.length) marker(W2S(main[0].x,main[0].z),'#2ec27e','START');
   marker(W2S(finishPt.x,finishPt.z),'#ff8800','FINISH');
+  // GHOST: preview the dragged piece snapping onto the track tip (RCT-style build-at-end)
+  if(ghost){
+    const gp=ghostPaths();
+    if(gp) gp.forEach(({pts})=>{
+      if(pts.length<2) return;
+      const left=[],right=[];
+      for(let i=0;i<pts.length;i++){ const a=pts[i],b=pts[Math.min(i+1,pts.length-1)];
+        let dx=b.x-a.x,dz=b.z-a.z;const l=Math.hypot(dx,dz)||1;dx/=l;dz/=l; const nx=-dz,nz=dx;
+        left.push(W2S(a.x+nx*a.w,a.z+nz*a.w)); right.push(W2S(a.x-nx*a.w,a.z-nz*a.w)); }
+      ctx.save(); ctx.setLineDash([7,5]); ctx.strokeStyle=ghostOver?'#7CFFb0':'#ffffff'; ctx.globalAlpha=ghostOver?0.95:0.55; ctx.lineWidth=2.5*devicePixelRatio;
+      ctx.beginPath(); left.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.stroke();
+      ctx.beginPath(); right.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.stroke();
+      ctx.restore();
+    });
+    // tip marker
+    const {end}=buildPreview(); const s=W2S(end.x,end.z);
+    ctx.save(); ctx.setLineDash([]); ctx.strokeStyle='#7CFFb0'; ctx.globalAlpha=0.9; ctx.lineWidth=2*devicePixelRatio;
+    ctx.beginPath(); ctx.arc(s.x,s.y,9*devicePixelRatio,0,7); ctx.stroke(); ctx.restore();
+  }
 }
+// stage drop target: dragging a palette piece over the canvas previews it at the tip;
+// dropping snaps it on (append). Works alongside click-to-add.
+const stage=document.getElementById('stage');
+stage.addEventListener('dragover',e=>{ if(!ghost) return; e.preventDefault(); e.dataTransfer.dropEffect='copy'; if(!ghostOver){ ghostOver=true; } draw(); });
+stage.addEventListener('dragleave',e=>{ if(e.target===stage||!stage.contains(e.relatedTarget)){ ghostOver=false; draw(); } });
+stage.addEventListener('drop',e=>{ e.preventDefault(); const g=ghostItem(); ghostOver=false; ghost=null; if(g){ add(g); } });
 function marker(s,col,label){
   ctx.beginPath(); ctx.arc(s.x,s.y,5*devicePixelRatio,0,7); ctx.fillStyle=col; ctx.fill();
   ctx.fillStyle=col; ctx.font=`bold ${11*devicePixelRatio}px system-ui`; ctx.textAlign='left'; ctx.textBaseline='middle';
