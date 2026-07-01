@@ -2424,6 +2424,20 @@ function wireArtistLink(){
   el.onclick = () => { if (MUSIC.spotify) window.open(MUSIC.spotify, '_blank', 'noopener'); };
 }
 let wantPlay = false;   // user pressed play before the player was ready
+// AUTOSTART: browsers block audio until a real user gesture. Arm a page-level listener
+// IMMEDIATELY (before the playlist even loads) so the FIRST interaction anywhere — clicking
+// the nickname box, the play menu, anything — starts the theme song on the menu. It then just
+// CONTINUES into the race (same <audio>), so the current song never restarts. wantPlay makes
+// loadSelf autoplay too, covering the case where audio becomes ready after the first gesture.
+let _gestured = false;
+function _armAudio(){
+  if (_gestured) return; _gestured = true; wantPlay = true;
+  if (typeof _OBS !== 'undefined' && _OBS) return;
+  if (audioEl && audioEl.paused) { try { setupAnalyser(); } catch(_){} audioEl.play().catch(()=>{}); }
+}
+window.addEventListener('pointerdown', _armAudio, { capture:true });
+window.addEventListener('keydown',     _armAudio, { capture:true });
+window.addEventListener('touchstart',  _armAudio, { capture:true, passive:true });
 function shuffle(a){ a=a.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
 
 function noMusic(msg){ const el = document.getElementById('m-song'); if (el) el.textContent = msg || 'music coming soon'; }
@@ -2465,18 +2479,8 @@ function initSelfHosted(){
     _sidx++; if (_sidx >= _slist.length) { _slist = shuffle(MUSIC.TRACKS); _sidx = 0; }
     loadSelf(_sidx, true);
   });
-  // AUTOSTART on the first user interaction anywhere (autoplay policy needs a gesture), so the
-  // theme song is already playing on the play menu and simply CONTINUES into the race when they
-  // hit PLAY — same <audio> element, so the current song never restarts.
-  if (!_OBS) {
-    const kick = () => {
-      if (audioEl && audioEl.paused) { const p = audioEl.play(); if (p && p.catch) p.catch(()=>{}); }
-      window.removeEventListener('pointerdown', kick, true);
-      window.removeEventListener('keydown', kick, true);
-    };
-    window.addEventListener('pointerdown', kick, true);
-    window.addEventListener('keydown', kick, true);
-  }
+  // if the user already interacted before the playlist finished loading, start now.
+  if (_gestured && !_OBS && audioEl.paused) { setupAnalyser(); audioEl.play().catch(()=>{}); }
   audioEl.addEventListener('play',  () => { setupAnalyser(); document.getElementById('m-play').textContent = '⏸'; });
   audioEl.addEventListener('pause', () => document.getElementById('m-play').textContent = '▶');
   audioEl.addEventListener('error', () => document.getElementById('m-song').textContent = 'track unavailable');
