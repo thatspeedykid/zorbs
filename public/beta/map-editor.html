@@ -526,41 +526,49 @@ async function loadDraft(id){ try{ const r=await fetch('/api/maps?draft='+encode
 async function delDraft(id){ if(!confirm('Delete this draft?')) return; try{ await fetch('/api/maps',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'draft-delete',id,author})}); openDraftModal(); }catch(_){} }
 window.loadDraft=loadDraft; window.delDraft=delDraft; window.closeDraftModal=closeDraftModal;
 
-// ---- RANDOM GENERATOR ----
-// Builds a full track from ALL piece types. Two flavours, picked per roll:
-//   • "multi-finish" — a couple of splits whose lanes mostly run to their OWN finish
-//   • "one finish" — more splits, but their lanes rejoin the main so there's a single finish
+// ---- RANDOM GENERATOR (course director) ----
+// A NAIVE random pick spirals back over itself and tangles. This paces the track like the
+// main game's director: turns ALTERNATE direction (so it snakes, never coils), every feature
+// is followed by a recovery straight, heavy pieces never stack, and splits are spaced with
+// straights around them. Two flavours: multi-finish, or one finish with more splits.
 function generateRandom(){
   const pick = a => a[Math.floor(Math.random()*a.length)];
   const chance = p => Math.random() < p;
-  const laneIds = ['straight','turnL','turnR','sharpL','sharpR','drop','tunneldrop','funnel',
-    'narrower','moguls','spiralL','spiralR','tunnelL','tunnelR','tturnL','tturnR','tsharpL','tsharpR','cascade','arena'];
-  const rp = () => mkPiece(pick(laneIds));
-  track = [ mkPiece('straight') ];                     // intro runway
+  let turnDir = chance(0.5) ? 1 : -1;                  // flips each turn so the track weaves
+  const gentle = () => { const d = turnDir; turnDir = -turnDir; return d < 0 ? 'turnL' : 'turnR'; };
+  const sharp  = () => { const d = turnDir; turnDir = -turnDir; return d < 0 ? 'sharpL' : 'sharpR'; };
+  const tunnelT= () => { const d = turnDir; turnDir = -turnDir; return d < 0 ? 'tturnL' : 'tturnR'; };
+  // a calm connector: a straight or a gentle alternating sweep
+  const calm = () => mkPiece(chance(0.5) ? 'straight' : gentle());
+  // a single feature (used sparingly, always followed by a recovery straight)
+  const feature = () => mkPiece(pick(['drop','tunneldrop','funnel','narrower','moguls','cascade', sharp(), tunnelT()]));
+
+  track = [ mkPiece('straight'), mkPiece('straight') ];   // intro runway
   const multiFinish = chance(0.5);
-  const segCount = 6 + Math.floor(Math.random()*5);
-  let splits = multiFinish ? (1 + Math.floor(Math.random()*2)) : (2 + Math.floor(Math.random()*2));
-  let placed = 0;
-  for (let i=0; i<segCount; i++){
-    if (splits>0 && i>0 && chance(0.42)){
+  const beats = 5 + Math.floor(Math.random()*4);
+  let splits = multiFinish ? (1 + Math.floor(Math.random()*2)) : 2;
+  let placed = 0, sinceSplit = 9;
+
+  for (let i=0; i<beats; i++){
+    track.push(calm());                                  // flow
+    if (chance(0.55)) { track.push(feature()); track.push(mkPiece('straight')); }   // feature + recovery
+    if (splits>0 && sinceSplit>=2 && i>0 && chance(0.5)){
       const sp = mkSplit(pick(['split3','split2','splitML','splitMR']));
       bySplit(sp.type).sides.forEach(sd=>{
-        const k = 1 + Math.floor(Math.random()*3);
-        for (let j=0;j<k;j++) sp.lanes[sd].push(rp());
-        sp.end[sd] = multiFinish ? (chance(0.6)?'finish':'rejoin') : 'rejoin';
+        // each lane: a gentle turn or straight, then a straight run — clean, no tangle
+        sp.lanes[sd] = [ mkPiece(chance(0.5) ? 'straight' : gentle()), mkPiece('straight') ];
+        sp.end[sd] = multiFinish ? (chance(0.6) ? 'finish' : 'rejoin') : 'rejoin';
       });
-      track.push(sp); splits--; placed++;
-      track.push(mkPiece('straight'));                 // short runout after a split
-    } else {
-      track.push(rp());
-    }
+      track.push(sp); track.push(mkPiece('straight'));   // runout after the split
+      splits--; placed++; sinceSplit = 0;
+    } else sinceSplit++;
   }
-  if (placed === 0){                                   // guarantee at least one split
+  if (placed === 0){                                     // guarantee a split
     const sp = mkSplit('split3');
-    bySplit(sp.type).sides.forEach(sd=>{ sp.lanes[sd].push(rp()); sp.lanes[sd].push(mkPiece('straight')); sp.end[sd] = multiFinish?'finish':'rejoin'; });
-    track.splice(Math.min(2, track.length), 0, sp);
+    bySplit(sp.type).sides.forEach(sd=>{ sp.lanes[sd] = [ mkPiece('straight'), mkPiece('straight') ]; sp.end[sd] = multiFinish?'finish':'rejoin'; });
+    track.splice(Math.min(3, track.length), 0, sp, mkPiece('straight'));
   }
-  track.push(mkPiece('straight'));                     // outro to the finish
+  track.push(mkPiece('straight'));                       // outro to the finish
   openItem=-1; _lopen=null; currentDraftId=null; undoStack=[]; redoStack=[];
   refresh(); fit();
   toast(multiFinish ? '🎲 Random track — multiple finishes!' : '🎲 Random track — one finish, multiple splits!');
