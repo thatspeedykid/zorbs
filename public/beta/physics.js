@@ -407,9 +407,9 @@ const ZPHYSICS = (() => {
     const b = balls.get(id); if (b) b.boost = Math.min(2.5, b.boost + (amount || 1));
   }
 
-  const DRIVE_FORCE = 10.5;  // base forward push — futuristic space racer: fast & punchy
-  const LANE_PULL = 2.4;     // how strongly a ball seeks its preferred lane (a touch firmer at higher speed)
-  const MAX_SPEED = 34;      // higher ceiling so the pack actually screams down the track
+  const DRIVE_FORCE = 9.5;   // base forward push — fast space-racer, but not so hot it climbs banks
+  const LANE_PULL = 2.6;     // firmer lane hold so the pack doesn't ride up the outside of turns
+  const MAX_SPEED = 30;      // fast ceiling; drops/boosts still stack on top via the momentum cap
   const SPIRAL_DOWNFORCE = 6.0;     // extra downforce on spiral coils (keeps balls planted)
   const BOOST_PAD_STRENGTH = 1.3;   // forward boost from a side pad (MEDIUM mode tuning)
 
@@ -1018,7 +1018,12 @@ const ZPHYSICS = (() => {
       // above/below the centerline. Without this the snap height was wrong on every banked
       // turn, so the ball flickered on/off the surface and jittered like gravel (and scrubbed
       // speed). Add the bank lift so the resting height matches the real tilted floor.
-      const bankLift = curLat * Math.sin(n.bank || 0);
+      // Taper the lift to ZERO as the bank steepens (cos term) and hard-cap it: on a strongly
+      // banked/twisting ribbon the raw curLat*sin(bank) swings wildly as the twist rotates and
+      // flings offset marbles UP the tilt ("rolling straight up"). Small gentle-turn correction
+      // stays; the runaway on spirals/corkscrews is killed.
+      const _bk = n.bank || 0;
+      const bankLift = Math.max(-1.1, Math.min(1.1, curLat * Math.sin(_bk) * Math.max(0, Math.cos(_bk))));
       const floorY = smoothFloorY(tpos, b.hint, N) + BALL_R * 1.5 + bankLift;
       const gap = floorY - tpos.y;          // >0 means ball is below the surface
       const lv = b.body.linvel();
