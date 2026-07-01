@@ -1035,10 +1035,11 @@ const ZPHYSICS = (() => {
       // and "falls = elimination" could never trigger. On the track: smooth floor. Past
       // the edge: nothing under you — gravity takes over, checkFalls() eliminates you.
       // Platform is exempt (wide flat staging area, always supported).
-      // HYSTERESIS: once a ball is grounded, let it hang a bit further over the lip before we
-      // call it airborne. Without this, a ball riding the outer line of a banked turn sat
-      // right at the edge threshold and flickered on/off-surface frame to frame — the bounce.
-      const edgeMargin = BALL_R * 1.6 + (b._grounded ? 1.4 : 0);
+      // HYSTERESIS: a tiny sticky margin while grounded to stop the on/off-surface flicker at a
+      // turn's outer edge. Kept SMALL — a big margin let balls ride the infinite analytic floor
+      // well past the real track lip, so they floated out "under/beside the map". The bank +
+      // forward-slope fixes already kill most of the flicker; this just adds a hair of stick.
+      const edgeMargin = BALL_R * 1.4 + (b._grounded ? 0.4 : 0);
       // On fork lanes the floor spans the whole widened corridor (n.corridorHalfW,
       // measured from the MAIN centerline) — only the divider separates lanes.
       const onSurface = n.isPlatform || (n.corridorHalfW != null
