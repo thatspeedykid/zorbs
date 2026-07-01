@@ -1006,7 +1006,13 @@ const ZPHYSICS = (() => {
       // Compute how far the ball is from the smooth surface, and set its vertical
       // velocity to close that gap smoothly this step. Clamp upward pop so it can't hop.
       const tpos = b.body.translation();
-      const floorY = smoothFloorY(tpos, b.hint, N) + BALL_R * 1.5;
+      // BANK COMPENSATION: the analytic floor only knows the CENTERLINE height, but a banked
+      // turn's floor is tilted — a ball sitting at lateral offset curLat rides curLat*sin(bank)
+      // above/below the centerline. Without this the snap height was wrong on every banked
+      // turn, so the ball flickered on/off the surface and jittered like gravel (and scrubbed
+      // speed). Add the bank lift so the resting height matches the real tilted floor.
+      const bankLift = curLat * Math.sin(n.bank || 0);
+      const floorY = smoothFloorY(tpos, b.hint, N) + BALL_R * 1.5 + bankLift;
       const gap = floorY - tpos.y;          // >0 means ball is below the surface
       const lv = b.body.linvel();
       // THE FLOOR ENDS AT THE TRACK EDGE. The analytic floor is infinite math — without
@@ -1015,7 +1021,10 @@ const ZPHYSICS = (() => {
       // and "falls = elimination" could never trigger. On the track: smooth floor. Past
       // the edge: nothing under you — gravity takes over, checkFalls() eliminates you.
       // Platform is exempt (wide flat staging area, always supported).
-      const edgeMargin = BALL_R * 1.6;      // a ball can hang slightly over the lip
+      // HYSTERESIS: once a ball is grounded, let it hang a bit further over the lip before we
+      // call it airborne. Without this, a ball riding the outer line of a banked turn sat
+      // right at the edge threshold and flickered on/off-surface frame to frame — the bounce.
+      const edgeMargin = BALL_R * 1.6 + (b._grounded ? 1.4 : 0);
       // On fork lanes the floor spans the whole widened corridor (n.corridorHalfW,
       // measured from the MAIN centerline) — only the divider separates lanes.
       const onSurface = n.isPlatform || (n.corridorHalfW != null
@@ -1048,12 +1057,15 @@ const ZPHYSICS = (() => {
         b._launchRecoverT = 0;   // re-caught — recovery window spent
         // place on the surface
         b.body.setTranslation({ x: tpos.x, y: floorY, z: tpos.z }, true);
-        // SLOPE-FOLLOWING vertical velocity: look at where the floor is one step ahead
-        // along the ball's actual motion, and descend at exactly that rate. The ball
-        // rides the slope like a rail - it never separates, never flickers airborne.
-        const aheadX = tpos.x + lv.x * dt;
-        const aheadZ = tpos.z + lv.z * dt;
-        const floorAhead = smoothFloorY({ x: aheadX, y: tpos.y, z: aheadZ }, b.hint, N) + BALL_R * 1.5;
+        // SLOPE-FOLLOWING vertical velocity: sample the floor one step ahead ALONG THE TRACK
+        // FORWARD direction (fx/fz), not the ball's raw velocity. On a turn the raw velocity
+        // carries a big sideways component, so sampling along it read the banked/curved floor
+        // at a laterally-offset point and produced a noisy slopeVy — vertical chatter (gravel).
+        // Forward-only sampling gives the true descent rate and rides smooth.
+        const spd = Math.hypot(lv.x, lv.z) || 0.001;
+        const aheadX = tpos.x + fx * spd * dt;
+        const aheadZ = tpos.z + fz * spd * dt;
+        const floorAhead = smoothFloorY({ x: aheadX, y: tpos.y, z: aheadZ }, b.hint, N) + BALL_R * 1.5 + bankLift;
         const slopeVy = (floorAhead - floorY) / dt;   // feed-forward, not feedback
         b.body.setLinvel({ x: lv.x, y: slopeVy, z: lv.z }, true);
       } else {
