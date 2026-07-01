@@ -231,10 +231,12 @@ const ZTRACK = (() => {
           funnelLen = sec.len;
         } else if (sec.kind === 'spiral') {
           moveKind = 'spiral';
-          spiralTurn = sec.dir * 0.030;
+          // a REAL coil, not a gentle bend: 0.10 rad/node over ~32 nodes ≈ 180°+ of wrap, banked
+          // hard so the ball holds the tight helix while it descends (SPIRAL_DOWNFORCE plants it).
+          spiralTurn = sec.dir * 0.10;
           targetTurn = spiralTurn;
-          targetBank = sec.dir * 0.18;
-          extraDrop = 0.3 + rng() * 0.18;
+          targetBank = sec.dir * 0.5;
+          extraDrop = 0.35 + rng() * 0.2;
           segLeft = sec.len;
           spiralLen = sec.len;
         } else if (sec.kind === 'tunnel') {

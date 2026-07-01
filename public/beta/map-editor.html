@@ -123,7 +123,7 @@
 <div id="draftModal"><div id="draftBox"><h3>Your saved drafts</h3><div id="draftList"></div>
   <button class="full" style="background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:9px;margin-top:6px" onclick="closeDraftModal()">Close</button></div></div>
 
-<script src="/beta/telemetry.js?v=b15"></script>
+<script src="/beta/telemetry.js?v=b16"></script>
 <script>
 // ============================================================================
 // ZORBS Map Editor v0.8 — RCT-style build-at-the-tip with drag & drop.
@@ -234,7 +234,7 @@ function layPieces(pieces, x, z, ang, laneId){
     const len=s.len|0; let target=0;
     if(s.kind==='sweep')  target=(s.dir||1)*(s.sharp||0.028);
     if(s.kind==='tunnelturn') target=(s.dir||1)*(s.sharp||0.05);
-    if(s.kind==='spiral') target=(s.dir||1)*0.030;
+    if(s.kind==='spiral') target=(s.dir||1)*0.10;   // real coil so spirals READ as spirals in the map
     if(s.kind==='tunnel') target=(s.dir||1)*0.012;
     for(let i=0;i<len;i++){
       turn+=(target-turn)*0.12; ang+=turn;
@@ -244,7 +244,7 @@ function layPieces(pieces, x, z, ang, laneId){
       if(s.kind==='narrower') w=WIDTH*(t<0.5?1-(1-(s.min||0.38))*(t*2):(s.min||0.38));
       if(s.kind==='tunnel')   w=WIDTH*0.8;
       if(s.kind==='arena'){ const r=Math.min(1,t/0.15,(1-t)/0.15); const e=r*r*(3-2*r); w=WIDTH*(1+((s.w||14)/WIDTH-1)*Math.max(0,e)); }
-      pts.push({x,z,w,lane:laneId});
+      pts.push({x,z,w,lane:laneId,kind:s.kind});
     }
   }
   return { pts, end:{x,z,ang} };
@@ -354,6 +354,16 @@ function draw(){
   tips.forEach(tp=>{ const s=W2S(tp.x,tp.z); const isT=dropTarget&&sameTarget(dropTarget,tp.target);
     ctx.save(); ctx.strokeStyle=isT?'#7CFFb0':(laneColor[tp.side]||'#39c8e0'); ctx.globalAlpha=isT?0.95:0.5; ctx.lineWidth=2*devicePixelRatio; ctx.setLineDash(isT?[]:[3,3]);
     ctx.beginPath(); ctx.arc(s.x,s.y,(isT?10:6)*devicePixelRatio,0,7); ctx.stroke(); ctx.restore(); });
+  // FEATURE TAGS: drops/moguls/cascades/tunneldrops are VERTICAL, so they don't bend the
+  // top-down path — label them so the map shows its thrills instead of looking like a plain line.
+  const FEAT={ drop:['⬇ DROP','#2ec27e'], tunneldrop:['⬇⬇ TUNNEL DROP','#37e0a8'], cascade:['⌵ CASCADE','#2ee0c2'], moguls:['∿ MOGULS','#c77dff'], spiral:['◉ SPIRAL','#ff5db0'] };
+  paths.forEach(({pts})=>{ let i=0; while(i<pts.length){ const k=pts[i].kind;
+    if(FEAT[k]){ let j=i; while(j<pts.length&&pts[j].kind===k) j++; const mid=pts[(i+j)>>1];
+      const s=W2S(mid.x,mid.z); const[lab,col]=FEAT[k];
+      ctx.fillStyle=col; ctx.font=`bold ${10*devicePixelRatio}px system-ui`; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(lab,s.x,s.y-10*devicePixelRatio);
+      ctx.beginPath(); ctx.arc(s.x,s.y,3.5*devicePixelRatio,0,7); ctx.fillStyle=col; ctx.fill();
+      i=j; } else i++; } });
   const main=paths[0].pts; if(main.length) marker(W2S(main[0].x,main[0].z),'#2ec27e','START');
   marker(W2S(finishPt.x,finishPt.z),'#ff8800','FINISH');
   // GHOST at the current drop target
