@@ -547,12 +547,14 @@ function generateRandom(){
   // DISTINCT LANE COURSES: each themed lane has its own character and is biased TOWARD its own
   // side (side=-1 left / +1 right) so lanes diverge into their own space instead of crossing.
   // Used when the split gives every lane its OWN finish — one's a spiral, one's a plunge, etc.
+  // Themed lanes use GENTLE turns only (sharp turns jam a lane the same way they jam the main
+  // line). Bias each lane's turns toward its own side so lanes still diverge into their own space.
   const THEMES = [
-    s => ['straight', s<0?'spiralL':'spiralR', 'straight', s<0?'spiralL':'spiralR'],   // helix run
+    s => ['straight', s<0?'turnL':'turnR', 'straight', s<0?'turnL':'turnR'],             // sweeping run
     s => ['tunneldrop','straight','drop','straight','tunneldrop'],                       // speed plunge
     s => ['straight', s<0?'tturnL':'tturnR', 'straight', s<0?'tunnelL':'tunnelR','straight'], // tunnel course
     s => ['moguls','straight','cascade','straight','moguls'],                            // bumpy tumble
-    s => ['drop','straight', s<0?'sharpL':'sharpR', 'straight', s<0?'sharpL':'sharpR'],  // drop + hairpins
+    s => ['drop','straight', s<0?'turnL':'turnR', 'straight', 'drop'],                   // drop run
   ];
   const themedLane = (side, tIdx) => THEMES[tIdx](side).map(id=>mkPiece(id));
   // rejoin lanes stay parallel (straight) so they hug the main and merge back cleanly
