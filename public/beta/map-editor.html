@@ -538,12 +538,22 @@ function generateRandom(){
   const gentle = () => { const d = turnDir; turnDir = -turnDir; return d < 0 ? 'turnL' : 'turnR'; };
   const sharp  = () => { const d = turnDir; turnDir = -turnDir; return d < 0 ? 'sharpL' : 'sharpR'; };
   const tunnelT= () => { const d = turnDir; turnDir = -turnDir; return d < 0 ? 'tturnL' : 'tturnR'; };
+  const spiral = () => { const d = turnDir; turnDir = -turnDir; return d < 0 ? 'spiralL' : 'spiralR'; };
   // a calm connector: a straight or a gentle alternating sweep
   const calm = () => mkPiece(chance(0.45) ? 'straight' : gentle());
-  // a single feature — FLOW pieces only (no funnel/narrower/arena width-flares, which blob out),
-  // always followed by a recovery straight.
-  const feature = () => mkPiece(pick(['drop','tunneldrop','moguls','cascade', sharp(), tunnelT()]));
   const shuffle = a => { a=a.slice(); for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; };
+  // EXCITEMENT DECK: every track is guaranteed a real spread of big features — spirals, drops,
+  // sharp/tunnel turns, cascades, moguls — not just gentle weaving. We deal from a shuffled deck
+  // (refilled when spent) so one track has spirals AND plunges AND big turns instead of the same
+  // flat sweep. Directional pieces (spiral/sharp/tunnelturn) alternate side via their helpers.
+  let _deck = [];
+  const refillDeck = () => { _deck = shuffle(['spiral','spiral','drop','tunneldrop','cascade','moguls','sharp','tunnelturn','sharp','spiral']); };
+  const feature = () => {
+    if (!_deck.length) refillDeck();
+    const kind = _deck.pop();
+    const id = kind==='spiral' ? spiral() : kind==='sharp' ? sharp() : kind==='tunnelturn' ? tunnelT() : kind;
+    return mkPiece(id);
+  };
   // DISTINCT LANE COURSES: each themed lane has its own character and is biased TOWARD its own
   // side (side=-1 left / +1 right) so lanes diverge into their own space instead of crossing.
   // Used when the split gives every lane its OWN finish — one's a spiral, one's a plunge, etc.
@@ -555,8 +565,9 @@ function generateRandom(){
   const IN  = s => s<0?'turnL':'turnR';     // peel toward own side
   const OUT = s => s<0?'turnR':'turnL';     // weave back
   const TIN = s => s<0?'tturnL':'tturnR';
+  const SPIN = s => s<0?'spiralL':'spiralR';
   const THEMES = [
-    s => [IN(s),'straight', OUT(s),'straight', IN(s),'straight', OUT(s),'straight'],            // sweeping run
+    s => [IN(s),'straight', SPIN(s),'straight', SPIN(s),'straight','straight'],                  // spiral course
     s => [IN(s),'straight','tunneldrop','straight','drop','straight','tunneldrop','straight'],  // speed plunge
     s => [TIN(s),'straight', s<0?'tunnelL':'tunnelR','straight', TIN(s),'straight','straight'],  // tunnel course
     s => [IN(s),'straight','moguls','straight','cascade','straight','moguls','straight'],        // bumpy tumble
@@ -586,14 +597,16 @@ function generateRandom(){
     return sp;
   };
 
+  refillDeck();
   for (let i=0; i<beats; i++){
-    // a TURN every beat, ALTERNATING direction (so it weaves, never coils). Use GENTLE turns for
-    // the main weave — sharp turns jam a full field (balls overspeed the bank and fly off / pile
-    // up), so those only appear as spaced 'features' with recovery straights around them.
-    track.push(mkPiece(gentle()));
-    track.push(mkPiece('straight'));
+    // a TURN every beat, ALTERNATING direction (so it weaves, never coils). Mostly gentle, but
+    // every so often a BIG (sharp) turn so the track has real character — recovery straight after.
+    if (chance(0.35)) { track.push(mkPiece(sharp()), mkPiece('straight')); }   // a big banked turn
+    else track.push(mkPiece(gentle()), mkPiece('straight'));
     track.push(mkPiece(gentle()), mkPiece('straight'));   // a SECOND weaving turn each beat → more turns
-    if (chance(0.7)) { track.push(feature()); track.push(mkPiece('straight')); }   // feature + recovery
+    // a real FEATURE nearly every beat (spiral / drop / cascade / big turn), dealt from the deck
+    // so the whole track gets a spread — then a recovery straight.
+    if (chance(0.85)) { track.push(feature()); track.push(mkPiece('straight')); }
     if (splits>0 && sinceSplit>=3 && i>1 && i<beats-1 && chance(0.5)){
       track.push(mkPiece('straight'), buildSplit(), mkPiece('straight'), mkPiece('straight'));
       splits--; placed++; sinceSplit = 0;
