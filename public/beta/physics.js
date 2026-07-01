@@ -409,7 +409,7 @@ const ZPHYSICS = (() => {
 
   const DRIVE_FORCE = 9.5;   // base forward push — also RESTORES cruise speed if anything slows a ball
   const LANE_PULL = 2.6;     // firmer lane hold so the pack doesn't ride up the outside of turns
-  const MAX_SPEED = 30;      // CRUISE speed on the flat; drops add real momentum on top of this
+  const MAX_SPEED = 28;      // CRUISE speed on the flat; drops add real momentum on top of this
   const ENERGY_G = 28;       // gravity used to convert height lost -> forward speed (coaster feel)
   const SPEED_CEILING = 64;  // absolute safety cap so momentum can't run away
   const SPIRAL_DOWNFORCE = 6.0;     // extra downforce on spiral coils (keeps balls planted)
@@ -1129,9 +1129,35 @@ const ZPHYSICS = (() => {
       // back to cruise over a couple of seconds. A high absolute ceiling just stops runaway.
       const v = b.body.linvel();
       const hs = Math.hypot(v.x, v.z);
-      const cruise = MAX_SPEED * (1 + b.boost * 0.5);   // drops/pads lift the cruise while active
+      // CORNER SPEED LIMIT: a sharp turn can only hold so much speed before centrifugal force
+      // climbs a ball over the outer wall (the "balls fly off sharp turns" bug). Look a few
+      // nodes AHEAD for the sharpest bend, work out the safe speed the bank there can hold
+      // (v_safe = sqrt(r·g·(tan(bank)+grip))), and cap cruise to it — so marbles slow FOR the
+      // corner, in anticipation, then power back out.
+      let cornerCap = SPEED_CEILING;
+      { let maxAng = 0, sharpBank = 0;
+        for (let k=1; k<=10; k++){
+          const a = N[Math.min(b.hint+k-1, N.length-1)], c = N[Math.min(b.hint+k, N.length-1)];
+          const dd = a.dir.x*c.dir.x + a.dir.z*c.dir.z;
+          const ang = Math.acos(Math.max(-1, Math.min(1, dd)));      // heading change per node
+          if (ang > maxAng){ maxAng = ang; sharpBank = Math.abs(c.bank || 0); }
+        }
+        if (maxAng > 0.014){
+          const radius = 1.3 / maxAng;                                // node spacing / turn angle
+          // bank + generous grip (the taller walls also help contain), so we trim the top speed
+          // for a turn WITHOUT over-braking the pack to a crawl.
+          const hold = Math.tan(Math.min(1.2, sharpBank)) + 0.5;
+          cornerCap = Math.sqrt(Math.max(1, radius) * 9.8 * hold) * 1.12;
+        }
+      }
+      const cruise = Math.min(MAX_SPEED * (1 + b.boost * 0.5), cornerCap);
       let ns = hs;
-      if (hs > cruise) ns = cruise + (hs - cruise) * 0.9925;   // bleed only the excess (~13%/s)
+      if (hs > cruise){
+        // bleed the excess when a corner is forcing the slowdown (so the ball makes the turn),
+        // gently otherwise (so drop momentum flows).
+        const rate = (cornerCap < MAX_SPEED) ? 0.93 : 0.9925;
+        ns = cruise + (hs - cruise) * rate;
+      }
       if (ns > SPEED_CEILING) ns = SPEED_CEILING;
       if (ns !== hs && hs > 0.001) {
         const s = ns / hs;

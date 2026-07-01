@@ -437,8 +437,8 @@ const ZTRACK = (() => {
       const bankUp = applyBank(n);
       const lf = add(n.pos, scale(n.right, -n.halfW)); // left floor
       const rf = add(n.pos, scale(n.right, n.halfW));  // right floor
-      const lw = add(lf, scale(bankUp, 2.8));          // left wall top (taller for more substance)
-      const rw = add(rf, scale(bankUp, 2.8));          // right wall top
+      const lw = add(lf, scale(bankUp, 3.8));          // left wall top — tall enough to contain balls flung up a banked turn
+      const rw = add(rf, scale(bankUp, 3.8));          // right wall top
       const lc = add(lf, scale(bankUp, 4.5));          // left ceiling
       const rc = add(rf, scale(bankUp, 4.5));          // right ceiling
       const ld = add(lf, scale(bankUp, -2.2));         // left underside (skirt hides bumpers)

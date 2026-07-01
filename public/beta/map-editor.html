@@ -579,9 +579,10 @@ function generateRandom(){
   };
 
   for (let i=0; i<beats; i++){
-    // a TURN every beat, ALTERNATING direction (so it weaves, never coils), mixing gentle and
-    // sharp for a visible slalom — this is what was missing (track read as a flat line).
-    track.push(mkPiece(chance(0.45) ? sharp() : gentle()));
+    // a TURN every beat, ALTERNATING direction (so it weaves, never coils). Use GENTLE turns for
+    // the main weave — sharp turns jam a full field (balls overspeed the bank and fly off / pile
+    // up), so those only appear as spaced 'features' with recovery straights around them.
+    track.push(mkPiece(gentle()));
     track.push(mkPiece('straight'));
     if (chance(0.55)) { track.push(feature()); track.push(mkPiece('straight')); }   // feature + recovery
     if (splits>0 && sinceSplit>=3 && i>1 && i<beats-1 && chance(0.5)){
