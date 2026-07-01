@@ -875,6 +875,13 @@ const ZPHYSICS = (() => {
       // forward direction = toward the next node (down the track), NEVER sideways
       let fx = nx.pos.x - n.pos.x, fy = nx.pos.y - n.pos.y, fz = nx.pos.z - n.pos.z;
       const fl = Math.hypot(fx, fy, fz) || 1; fx /= fl; fy /= fl; fz /= fl;
+      // HORIZONTAL forward (xz only, re-normalised). The drive is a HORIZONTAL push, and the
+      // descent (slopeVy) is tied to horizontal progress — so on a steep/vertical drop the
+      // 3-D forward is almost all 'down' and its xz part collapses toward zero, the ball stops
+      // progressing, and it stalls/slows on the drop. Driving along the horizontal track
+      // direction at FULL strength keeps forward progress (and thus descent speed) on any
+      // slope, so drops stay fast and nothing slows for gravity's sake.
+      const hl = Math.hypot(fx, fz) || 1e-4; const hx = fx / hl, hz = fz / hl;
 
       // lane-seek: nudge toward this ball's preferred offset from centerline (lateral only)
       const r = n.right;
@@ -997,9 +1004,9 @@ const ZPHYSICS = (() => {
       // fixed step (consistent), and kept modest so ball-ball contacts still win.
       const drive = DRIVE_FORCE * b.speedMul * (1 + b.boost);
       b.body.addForce({
-        x: fx * drive + laneFx,
+        x: hx * drive + laneFx,          // drive along HORIZONTAL track dir (full strength on slopes)
         y: -downforce,                   // gravity + (on spirals) a little extra downforce
-        z: fz * drive + laneFz,
+        z: hz * drive + laneFz,
       }, true);
 
       // ANALYTIC SMOOTH FLOOR via VELOCITY (no teleport = no fake motion = no hop).
@@ -1063,8 +1070,8 @@ const ZPHYSICS = (() => {
         // at a laterally-offset point and produced a noisy slopeVy — vertical chatter (gravel).
         // Forward-only sampling gives the true descent rate and rides smooth.
         const spd = Math.hypot(lv.x, lv.z) || 0.001;
-        const aheadX = tpos.x + fx * spd * dt;
-        const aheadZ = tpos.z + fz * spd * dt;
+        const aheadX = tpos.x + hx * spd * dt;
+        const aheadZ = tpos.z + hz * spd * dt;
         const floorAhead = smoothFloorY({ x: aheadX, y: tpos.y, z: aheadZ }, b.hint, N) + BALL_R * 1.5 + bankLift;
         const slopeVy = (floorAhead - floorY) / dt;   // feed-forward, not feedback
         b.body.setLinvel({ x: lv.x, y: slopeVy, z: lv.z }, true);
