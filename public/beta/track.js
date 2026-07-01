@@ -700,6 +700,23 @@ const ZTRACK = (() => {
               }
             }
             rejoinIdx[branchId] = bestIdx; anyRejoin = true;
+            // CONVERGE the branch's tail back ONTO the main rejoin node. Without this a straight
+            // offset lane ends ~a track-width to the side, so physics snapped the ball onto the
+            // MAIN line at its far edge and it fell off (the "branches drop balls at the rejoin"
+            // bug). Ease the last CONVERGE nodes from their own path to the main node so the lane
+            // visibly merges back and the ball arrives centred.
+            const target = nodes[bestIdx];
+            if (target && last) {
+              const CONVERGE = Math.min(18, bnodes.length - 1);
+              const start = bnodes.length - 1 - CONVERGE;
+              for (let k = start + 1; k < bnodes.length; k++) {
+                const e = (k - start) / (CONVERGE || 1);   // 0..1
+                const es = e * e * (3 - 2 * e);
+                bnodes[k].pos.x = bnodes[k].pos.x * (1 - es) + target.pos.x * es;
+                bnodes[k].pos.y = bnodes[k].pos.y * (1 - es) + target.pos.y * es;
+                bnodes[k].pos.z = bnodes[k].pos.z * (1 - es) + target.pos.z * es;
+              }
+            }
           }
         }
         // Insert the main sentinel in the MIDDLE of the lane order so the main path stays

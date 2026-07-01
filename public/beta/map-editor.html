@@ -562,7 +562,7 @@ function generateRandom(){
   // ONE consistent split style per track: either every lane rejoins the single finish, or every
   // lane is its own distinct course to its own finish.
   const ownExits = chance(0.5);
-  const beats = 9 + Math.floor(Math.random()*5);
+  const beats = 5 + Math.floor(Math.random()*3);   // keeps tracks a sane length (~600-900 nodes)
   let splits = ownExits ? 1 : (1 + Math.floor(Math.random()*2));
   let placed = 0, sinceSplit = 9;
 
