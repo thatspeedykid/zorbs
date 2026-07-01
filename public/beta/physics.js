@@ -960,6 +960,16 @@ const ZPHYSICS = (() => {
         if (onPad) b.boost = Math.min(2.2, Math.max(b.boost, BOOST_PAD_STRENGTH));
       }
 
+      // DROP SPEEDUP: plunging down a drop should FEEL fast — feed the descent into the
+      // forward boost so the ball accelerates through it and carries the speed out (boost
+      // decays after). Reuses the boost system, which also lifts the speed cap. The enclosed
+      // tunnel drop is the fast one. (Main-line tunneldrops are stored as kind 'drop' with
+      // tunnel=true; branch tunneldrops keep kind 'tunneldrop' — cover both.)
+      const _isTunnelDrop = n.kind === 'tunneldrop' || (n.kind === 'drop' && n.tunnel);
+      if (_isTunnelDrop)            b.boost = Math.max(b.boost, 1.9);
+      else if (n.kind === 'drop')   b.boost = Math.max(b.boost, 1.1);
+      else if (n.kind === 'cascade')b.boost = Math.max(b.boost, 0.6);
+
       // LAUNCH-PINS: a discrete one-time pop, not a continuous force. Triggers once per
       // pad crossing (cooldown via b._launchCD keyed to this node range so re-entering
       // the SAME pad next frame can't re-fire, but a different pad later still can).
