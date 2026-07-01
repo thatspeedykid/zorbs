@@ -557,7 +557,7 @@ const ZTRACK = (() => {
       const right = norm(cross(heading, worldUp));
       pos = { x: pos.x + right.x*targetOff, y: pos.y, z: pos.z + right.z*targetOff };
     }
-    let turn = 0;
+    let turn = 0, bank = 0;
     let funnelMin = 0.45, funnelLen = 1;
     let spiralTurn = 0, spiralLen = 1;
     let narrowMin = 0.38, narrowLen = 1;
@@ -577,10 +577,19 @@ const ZTRACK = (() => {
       if (mk === 'funnel')   { funnelMin = sec.min||0.45; funnelLen = len; }
       if (mk === 'narrower') { narrowMin = sec.min||0.38; narrowLen = len; }
       if (mk === 'arena')    { arenaHalfW = Math.max(8,Math.min(30,+sec.w||14)); arenaLen = len; }
+      // BANK the branch turns (they were built dead-flat, so the pack got flung to the outer
+      // wall of every curve at speed). Mirrors the main-track banking so branches carve too.
+      let bankTarget = 0;
+      if (mk === 'sweep' || mk === 'tunnelturn') bankTarget = (sec.dir||1) * Math.min(0.9, (sec.sharp||0.05) * 13);
+      else if (mk === 'spiral') bankTarget = (sec.dir||1) * 0.18;
       let segLeft = len;
       while (segLeft > 0) {
         if (mk === 'spiral') targetTurn = spiralTurn;
         turn += (targetTurn - turn) * 0.12;
+        bank += (bankTarget - bank) * 0.10;
+        // never bank harder than the current turn can hold (avoid dumping the pack off the low side)
+        const _bc = Math.abs(turn) * 13 + 0.05;
+        if (bank >  _bc) bank =  _bc; if (bank < -_bc) bank = -_bc;
         const cosT = Math.cos(turn), sinT = Math.sin(turn);
         heading = norm({ x: heading.x*cosT - heading.z*sinT, y: heading.y, z: heading.x*sinT + heading.z*cosT });
         let eDrop = extraDrop;
@@ -602,7 +611,7 @@ const ZTRACK = (() => {
         const right = norm(cross(heading, worldUp));
         const up = norm(cross(right, heading));
         nodes.push({ pos:{x:pos.x,y:pos.y,z:pos.z}, dir:{x:heading.x,y:heading.y,z:heading.z},
-          right, up, halfW, bank:0, kind:mk, tunnel, branchId });
+          right, up, halfW, bank, kind:mk, tunnel, branchId });
         segLeft--;
       }
     }
