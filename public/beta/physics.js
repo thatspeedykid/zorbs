@@ -407,9 +407,9 @@ const ZPHYSICS = (() => {
     const b = balls.get(id); if (b) b.boost = Math.min(2.5, b.boost + (amount || 1));
   }
 
-  const DRIVE_FORCE = 7.5;   // base forward push
-  const LANE_PULL = 2.2;     // how strongly a ball seeks its preferred lane
-  const MAX_SPEED = 26;
+  const DRIVE_FORCE = 10.5;  // base forward push — futuristic space racer: fast & punchy
+  const LANE_PULL = 2.4;     // how strongly a ball seeks its preferred lane (a touch firmer at higher speed)
+  const MAX_SPEED = 34;      // higher ceiling so the pack actually screams down the track
   const SPIRAL_DOWNFORCE = 6.0;     // extra downforce on spiral coils (keeps balls planted)
   const BOOST_PAD_STRENGTH = 1.3;   // forward boost from a side pad (MEDIUM mode tuning)
 
