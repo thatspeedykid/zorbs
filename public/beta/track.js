@@ -198,14 +198,14 @@ const ZTRACK = (() => {
           targetTurn = sec.dir * sec.sharp;
           // bank hard on sharp turns so the pack leans into the wall and holds the line at
           // speed instead of climbing over the outside edge. Cap raised 0.66 -> 0.95 (~54°).
-          targetBank = sec.dir * Math.min(0.95, sec.sharp * 13);
+          targetBank = sec.dir * Math.min(0.7, sec.sharp * 10);
           segLeft = sec.len;
         } else if (sec.kind === 'tunnelturn') {
           // an ENCLOSED banked turn — the tunnel roof means a ball physically cannot fly out,
           // so it can be taken really sharp at speed. Strong bank + roof = no fall-off.
           moveKind = 'tunnelturn';
           targetTurn = sec.dir * (sec.sharp || 0.05);
-          targetBank = sec.dir * Math.min(0.95, (sec.sharp || 0.05) * 13);
+          targetBank = sec.dir * Math.min(0.7, (sec.sharp || 0.05) * 10);
           tunnel = true;
           segLeft = sec.len;
         } else if (sec.kind === 'drop') {
@@ -302,7 +302,7 @@ const ZTRACK = (() => {
       // rare "everyone falls at one node" wipe (bank lags the turn as a sweep eases into a
       // straight/spiral, leaving an over-banked flat). Capping bank to the turn rate means
       // it always eases out together with the turn. Banking on real turns is unaffected.
-      const bankCap = Math.abs(turn) * 13 + 0.05;
+      const bankCap = Math.abs(turn) * 10 + 0.05;
       if (bank >  bankCap) bank =  bankCap;
       if (bank < -bankCap) bank = -bankCap;
       // inside a split-zone, damp stray BANK but let the gentle wind turn stand (the loop bends).
@@ -580,7 +580,7 @@ const ZTRACK = (() => {
       // BANK the branch turns (they were built dead-flat, so the pack got flung to the outer
       // wall of every curve at speed). Mirrors the main-track banking so branches carve too.
       let bankTarget = 0;
-      if (mk === 'sweep' || mk === 'tunnelturn') bankTarget = (sec.dir||1) * Math.min(0.9, (sec.sharp||0.05) * 13);
+      if (mk === 'sweep' || mk === 'tunnelturn') bankTarget = (sec.dir||1) * Math.min(0.7, (sec.sharp||0.05) * 10);
       else if (mk === 'spiral') bankTarget = (sec.dir||1) * 0.18;
       let segLeft = len;
       while (segLeft > 0) {

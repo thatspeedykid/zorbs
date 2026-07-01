@@ -549,12 +549,18 @@ function generateRandom(){
   // Used when the split gives every lane its OWN finish — one's a spiral, one's a plunge, etc.
   // Themed lanes use GENTLE turns only (sharp turns jam a lane the same way they jam the main
   // line). Bias each lane's turns toward its own side so lanes still diverge into their own space.
+  // Each lane starts with ONE turn toward its own side (to peel away into its own space), then
+  // WEAVES forward with alternating turns and ends on a straight pointing downtrack — so a lane
+  // reads as a full alternate route to its finish, never a short stub that U-turns back on itself.
+  const IN  = s => s<0?'turnL':'turnR';     // peel toward own side
+  const OUT = s => s<0?'turnR':'turnL';     // weave back
+  const TIN = s => s<0?'tturnL':'tturnR';
   const THEMES = [
-    s => ['straight', s<0?'turnL':'turnR', 'straight', s<0?'turnL':'turnR'],             // sweeping run
-    s => ['tunneldrop','straight','drop','straight','tunneldrop'],                       // speed plunge
-    s => ['straight', s<0?'tturnL':'tturnR', 'straight', s<0?'tunnelL':'tunnelR','straight'], // tunnel course
-    s => ['moguls','straight','cascade','straight','moguls'],                            // bumpy tumble
-    s => ['drop','straight', s<0?'turnL':'turnR', 'straight', 'drop'],                   // drop run
+    s => [IN(s),'straight', OUT(s),'straight', IN(s),'straight', OUT(s),'straight'],            // sweeping run
+    s => [IN(s),'straight','tunneldrop','straight','drop','straight','tunneldrop','straight'],  // speed plunge
+    s => [TIN(s),'straight', s<0?'tunnelL':'tunnelR','straight', TIN(s),'straight','straight'],  // tunnel course
+    s => [IN(s),'straight','moguls','straight','cascade','straight','moguls','straight'],        // bumpy tumble
+    s => [IN(s),'straight','drop','straight', OUT(s),'straight','drop','straight'],              // drop run
   ];
   const themedLane = (side, tIdx) => THEMES[tIdx](side).map(id=>mkPiece(id));
   // rejoin lanes stay parallel (straight) so they hug the main and merge back cleanly
@@ -564,7 +570,7 @@ function generateRandom(){
   // ONE consistent split style per track: either every lane rejoins the single finish, or every
   // lane is its own distinct course to its own finish.
   const ownExits = chance(0.5);
-  const beats = 5 + Math.floor(Math.random()*3);   // keeps tracks a sane length (~600-900 nodes)
+  const beats = 8 + Math.floor(Math.random()*3);   // more turns / a fuller track (~900-1300 nodes)
   let splits = ownExits ? 1 : (1 + Math.floor(Math.random()*2));
   let placed = 0, sinceSplit = 9;
 
@@ -586,7 +592,8 @@ function generateRandom(){
     // up), so those only appear as spaced 'features' with recovery straights around them.
     track.push(mkPiece(gentle()));
     track.push(mkPiece('straight'));
-    if (chance(0.55)) { track.push(feature()); track.push(mkPiece('straight')); }   // feature + recovery
+    track.push(mkPiece(gentle()), mkPiece('straight'));   // a SECOND weaving turn each beat → more turns
+    if (chance(0.7)) { track.push(feature()); track.push(mkPiece('straight')); }   // feature + recovery
     if (splits>0 && sinceSplit>=3 && i>1 && i<beats-1 && chance(0.5)){
       track.push(mkPiece('straight'), buildSplit(), mkPiece('straight'), mkPiece('straight'));
       splits--; placed++; sinceSplit = 0;

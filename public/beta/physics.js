@@ -1023,16 +1023,17 @@ const ZPHYSICS = (() => {
       // velocity to close that gap smoothly this step. Clamp upward pop so it can't hop.
       const tpos = b.body.translation();
       // BANK COMPENSATION: the analytic floor only knows the CENTERLINE height, but a banked
-      // turn's floor is tilted — a ball sitting at lateral offset curLat rides curLat*sin(bank)
+      // turn's floor is tilted — a ball sitting at lateral offset curLat rides curLat*tan(bank)
       // above/below the centerline. Without this the snap height was wrong on every banked
       // turn, so the ball flickered on/off the surface and jittered like gravel (and scrubbed
       // speed). Add the bank lift so the resting height matches the real tilted floor.
-      // BANKED-FLOOR HEIGHT (geometrically exact): a marble at lateral offset curLat on a floor
-      // banked by β rides curLat*sin(β) above the centerline. This MUST match the visual mesh or
-      // the marble sinks into the banked floor and slips under the outer wall (whose base sits at
-      // the higher mesh edge) — the "sinks / falls through / gets stuck on turns" bug. Capped only
-      // for numerical safety.
-      const bankLift = Math.max(-12, Math.min(12, curLat * Math.sin(n.bank || 0)));
+      // BANKED-FLOOR HEIGHT (geometrically exact): the floor plane is spanned by the heading and
+      // the TILTED right vector rr = right·cos β + up·sin β. A ball at HORIZONTAL lateral offset
+      // curLat sits at parameter t = curLat/cos β along rr, so its height above the centerline is
+      // t·sin β = curLat·TAN β — not curLat·sin β. Using sin (the old bug) placed the resting height
+      // too LOW on every banked turn, so the marble sank into the tilted floor and slipped under the
+      // outer wall (the "sinks / falls through on turns" bug). tan is exact; cap for safety.
+      const bankLift = Math.max(-12, Math.min(12, curLat * Math.tan(n.bank || 0)));
       const floorY = smoothFloorY(tpos, b.hint, N) + BALL_R * 1.5 + bankLift;
       const gap = floorY - tpos.y;          // >0 means ball is below the surface
       const lv = b.body.linvel();
