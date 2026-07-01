@@ -539,39 +539,58 @@ function generateRandom(){
   const sharp  = () => { const d = turnDir; turnDir = -turnDir; return d < 0 ? 'sharpL' : 'sharpR'; };
   const tunnelT= () => { const d = turnDir; turnDir = -turnDir; return d < 0 ? 'tturnL' : 'tturnR'; };
   // a calm connector: a straight or a gentle alternating sweep
-  const calm = () => mkPiece(chance(0.5) ? 'straight' : gentle());
-  // a single feature (used sparingly, always followed by a recovery straight)
-  const feature = () => mkPiece(pick(['drop','tunneldrop','funnel','narrower','moguls','cascade', sharp(), tunnelT()]));
+  const calm = () => mkPiece(chance(0.45) ? 'straight' : gentle());
+  // a single feature — FLOW pieces only (no funnel/narrower/arena width-flares, which blob out),
+  // always followed by a recovery straight.
+  const feature = () => mkPiece(pick(['drop','tunneldrop','moguls','cascade', sharp(), tunnelT()]));
+  const shuffle = a => { a=a.slice(); for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; };
+  // DISTINCT LANE COURSES: each themed lane has its own character and is biased TOWARD its own
+  // side (side=-1 left / +1 right) so lanes diverge into their own space instead of crossing.
+  // Used when the split gives every lane its OWN finish — one's a spiral, one's a plunge, etc.
+  const THEMES = [
+    s => ['straight', s<0?'spiralL':'spiralR', 'straight', s<0?'spiralL':'spiralR'],   // helix run
+    s => ['tunneldrop','straight','drop','straight','tunneldrop'],                       // speed plunge
+    s => ['straight', s<0?'tturnL':'tturnR', 'straight', s<0?'tunnelL':'tunnelR','straight'], // tunnel course
+    s => ['moguls','straight','cascade','straight','moguls'],                            // bumpy tumble
+    s => ['drop','straight', s<0?'sharpL':'sharpR', 'straight', s<0?'sharpL':'sharpR'],  // drop + hairpins
+  ];
+  const themedLane = (side, tIdx) => THEMES[tIdx](side).map(id=>mkPiece(id));
+  // rejoin lanes stay parallel (straight) so they hug the main and merge back cleanly
+  const rejoinLane = () => [ mkPiece('straight'), mkPiece('straight') ];
 
   track = [ mkPiece('straight'), mkPiece('straight') ];   // intro runway
-  const multiFinish = chance(0.5);
-  const beats = 5 + Math.floor(Math.random()*4);
-  let splits = multiFinish ? (1 + Math.floor(Math.random()*2)) : 2;
+  // ONE consistent split style per track: either every lane rejoins the single finish, or every
+  // lane is its own distinct course to its own finish.
+  const ownExits = chance(0.5);
+  const beats = 6 + Math.floor(Math.random()*4);
+  let splits = ownExits ? 1 : (1 + Math.floor(Math.random()*2));
   let placed = 0, sinceSplit = 9;
+
+  const buildSplit = () => {
+    const sp = mkSplit(pick(['split3','split2','splitML','splitMR']));
+    const sides = bySplit(sp.type).sides;
+    const themeOrder = shuffle([0,1,2,3,4]);              // distinct theme per lane
+    sides.forEach((sd,k)=>{
+      const side = sd==='left'?-1:1;
+      if (ownExits){ sp.lanes[sd] = themedLane(side, themeOrder[k]); sp.end[sd]='finish'; }
+      else { sp.lanes[sd] = rejoinLane(); sp.end[sd]='rejoin'; }
+    });
+    return sp;
+  };
 
   for (let i=0; i<beats; i++){
     track.push(calm());                                  // flow
-    if (chance(0.55)) { track.push(feature()); track.push(mkPiece('straight')); }   // feature + recovery
-    if (splits>0 && sinceSplit>=2 && i>0 && chance(0.5)){
-      const sp = mkSplit(pick(['split3','split2','splitML','splitMR']));
-      bySplit(sp.type).sides.forEach(sd=>{
-        // each lane: a gentle turn or straight, then a straight run — clean, no tangle
-        sp.lanes[sd] = [ mkPiece(chance(0.5) ? 'straight' : gentle()), mkPiece('straight') ];
-        sp.end[sd] = multiFinish ? (chance(0.6) ? 'finish' : 'rejoin') : 'rejoin';
-      });
-      track.push(sp); track.push(mkPiece('straight'));   // runout after the split
+    if (chance(0.5)) { track.push(feature()); track.push(mkPiece('straight')); }   // feature + recovery
+    if (splits>0 && sinceSplit>=3 && i>1 && i<beats-1 && chance(0.5)){
+      track.push(mkPiece('straight'), buildSplit(), mkPiece('straight'), mkPiece('straight'));
       splits--; placed++; sinceSplit = 0;
     } else sinceSplit++;
   }
-  if (placed === 0){                                     // guarantee a split
-    const sp = mkSplit('split3');
-    bySplit(sp.type).sides.forEach(sd=>{ sp.lanes[sd] = [ mkPiece('straight'), mkPiece('straight') ]; sp.end[sd] = multiFinish?'finish':'rejoin'; });
-    track.splice(Math.min(3, track.length), 0, sp, mkPiece('straight'));
-  }
-  track.push(mkPiece('straight'));                       // outro to the finish
+  if (placed === 0) track.splice(Math.min(3, track.length), 0, mkPiece('straight'), buildSplit(), mkPiece('straight'), mkPiece('straight'));
+  track.push(mkPiece('straight'), mkPiece('straight'));  // outro to the finish
   openItem=-1; _lopen=null; currentDraftId=null; undoStack=[]; redoStack=[];
   refresh(); fit();
-  toast(multiFinish ? '🎲 Random track — multiple finishes!' : '🎲 Random track — one finish, multiple splits!');
+  toast(ownExits ? '🎲 Random track — split lanes each race to their own finish!' : '🎲 Random track — splits rejoin to one finish!');
 }
 document.getElementById('btn-gen').onclick = () => {
   if (track.length && !confirm('Generate a new random track? This replaces the current one.')) return;
