@@ -1082,12 +1082,18 @@ const ZPHYSICS = (() => {
         b._stuckT = 0;
       }
 
-      // horizontal speed clamp so balls don't run away (vertical handled by floor logic)
+      // MOMENTUM CAP: a plain hard clamp snapped fast balls straight back to base speed the
+      // instant a drop's boost faded — that's the "slows down at the bottom" feel. Instead
+      // each ball carries a dynamic cap that RISES fast (a drop instantly makes room for the
+      // new speed) and FALLS slowly (momentum bleeds off gently like real gravity/coasting),
+      // so speed built on a drop actually flows down the following track.
       const v = b.body.linvel();
       const hs = Math.hypot(v.x, v.z);
-      const cap = MAX_SPEED * (b.boost > 0 ? 1.5 : 1);
-      if (hs > cap) {
-        const s = cap / hs;
+      const targetCap = MAX_SPEED * (1 + b.boost * 0.5);   // drops/pads raise the ceiling
+      if (b._cap == null) b._cap = MAX_SPEED;
+      b._cap += (targetCap - b._cap) * (targetCap > b._cap ? 0.5 : 0.012);  // rise fast, bleed slow
+      if (hs > b._cap) {
+        const s = Math.max(b._cap / hs, 0.99);   // ease toward the cap, never a hard snap
         b.body.setLinvel({ x: v.x * s, y: v.y, z: v.z * s }, true);
       }
     }

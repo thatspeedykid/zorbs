@@ -129,6 +129,10 @@ const PAL = [
   { id:'straight', kind:'straight', name:'Straight',    desc:'flat run',      color:'#5b7cff', def:{len:30} },
   { id:'turnL',    kind:'sweep',    name:'Turn Left',    desc:'banked curve',  color:'#39c8e0', def:{len:40,dir:-1,sharp:0.028} },
   { id:'turnR',    kind:'sweep',    name:'Turn Right',   desc:'banked curve',  color:'#39c8e0', def:{len:40,dir:1,sharp:0.028} },
+  { id:'sharpL',   kind:'sweep',    name:'Sharp Turn Left',  desc:'tight banked turn', color:'#22b8d8', def:{len:26,dir:-1,sharp:0.075} },
+  { id:'sharpR',   kind:'sweep',    name:'Sharp Turn Right', desc:'tight banked turn', color:'#22b8d8', def:{len:26,dir:1,sharp:0.075} },
+  { id:'tturnL',   kind:'tunnelturn',name:'Tunnel Turn Left', desc:'enclosed sharp turn', color:'#6f8cff', def:{len:34,dir:-1,sharp:0.055} },
+  { id:'tturnR',   kind:'tunnelturn',name:'Tunnel Turn Right',desc:'enclosed sharp turn', color:'#6f8cff', def:{len:34,dir:1,sharp:0.055} },
   { id:'funnel',   kind:'funnel',   name:'Funnel',       desc:'wide → narrow', color:'#ffb020', def:{len:22,min:0.45} },
   { id:'narrower', kind:'narrower', name:'Narrower',     desc:'bottleneck',    color:'#ff7a45', def:{len:20,min:0.38} },
   { id:'moguls',   kind:'moguls',   name:'Moguls',       desc:'washboard',     color:'#b06bff', def:{len:28} },
@@ -149,9 +153,10 @@ const SPLITS = [
 ];
 const byId = id => PAL.find(p=>p.id===id);
 const bySplit = t => SPLITS.find(p=>p.type===t);
-const KCOLOR = { straight:'#5b7cff', sweep:'#39c8e0', funnel:'#ffb020', narrower:'#ff7a45', moguls:'#b06bff', drop:'#2ec27e', tunneldrop:'#3aa0ff', cascade:'#5ad1a0', arena:'#f5c518', spiral:'#ff5db0', tunnel:'#7f8cad' };
+const KCOLOR = { straight:'#5b7cff', sweep:'#39c8e0', tunnelturn:'#6f8cff', funnel:'#ffb020', narrower:'#ff7a45', moguls:'#b06bff', drop:'#2ec27e', tunneldrop:'#3aa0ff', cascade:'#5ad1a0', arena:'#f5c518', spiral:'#ff5db0', tunnel:'#7f8cad' };
 function pieceName(s){
-  if(s.kind==='sweep')  return (s.dir<0?'Turn Left':'Turn Right');
+  if(s.kind==='sweep')  return ((s.sharp||0)>=0.06?'Sharp Turn ':'Turn ')+(s.dir<0?'Left':'Right');
+  if(s.kind==='tunnelturn') return 'Tunnel Turn '+(s.dir<0?'Left':'Right');
   if(s.kind==='spiral') return (s.dir<0?'Spiral Left':'Spiral Right');
   if(s.kind==='tunnel') return (s.dir<0?'Tunnel Left':'Tunnel Right');
   return {straight:'Straight',funnel:'Funnel',narrower:'Narrower',moguls:'Moguls',drop:'Drop',tunneldrop:'Tunnel Drop',cascade:'Cascade',arena:'Arena'}[s.kind]||s.kind;
@@ -215,6 +220,7 @@ function layPieces(pieces, x, z, ang, laneId){
     if(isSplit(s)) continue;
     const len=s.len|0; let target=0;
     if(s.kind==='sweep')  target=(s.dir||1)*(s.sharp||0.028);
+    if(s.kind==='tunnelturn') target=(s.dir||1)*(s.sharp||0.05);
     if(s.kind==='spiral') target=(s.dir||1)*0.030;
     if(s.kind==='tunnel') target=(s.dir||1)*0.012;
     for(let i=0;i<len;i++){
@@ -411,7 +417,7 @@ function renderTrack(){
 function propsHTML(s){
   const rng=(k,label,min,max,step,val)=>`<div class="rng"><label>${label}</label><input type="range" data-k="${k}" min="${min}" max="${max}" step="${step}" value="${val}"><span class="v" id="v-${k}">${val}</span></div>`;
   let h=rng('len','Length',6,200,1,s.len);
-  if(s.kind==='sweep'){ h+=rng('sharp','Sharpness',0.01,0.12,0.002,s.sharp); }
+  if(s.kind==='sweep'||s.kind==='tunnelturn'){ h+=rng('sharp','Sharpness',0.01,0.12,0.002,s.sharp); }
   if(s.kind==='funnel'||s.kind==='narrower'){ h+=rng('min','Throat',0.25,0.9,0.01,s.min); }
   if(s.kind==='drop'){ h+=rng('drop','Steepness',0.4,3,0.1,s.drop); }
   if(s.kind==='tunneldrop'){ h+=rng('drop','Steepness',1.2,4,0.1,s.drop); }

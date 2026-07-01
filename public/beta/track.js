@@ -196,7 +196,17 @@ const ZTRACK = (() => {
         curFinish = !!sec.isFinish;
         if (sec.kind === 'sweep') {
           targetTurn = sec.dir * sec.sharp;
-          targetBank = sec.dir * Math.min(0.66, sec.sharp * 11);   // stronger bank → balls carry speed through
+          // bank hard on sharp turns so the pack leans into the wall and holds the line at
+          // speed instead of climbing over the outside edge. Cap raised 0.66 -> 0.95 (~54°).
+          targetBank = sec.dir * Math.min(0.95, sec.sharp * 13);
+          segLeft = sec.len;
+        } else if (sec.kind === 'tunnelturn') {
+          // an ENCLOSED banked turn — the tunnel roof means a ball physically cannot fly out,
+          // so it can be taken really sharp at speed. Strong bank + roof = no fall-off.
+          moveKind = 'tunnelturn';
+          targetTurn = sec.dir * (sec.sharp || 0.05);
+          targetBank = sec.dir * Math.min(0.95, (sec.sharp || 0.05) * 13);
+          tunnel = true;
           segLeft = sec.len;
         } else if (sec.kind === 'drop') {
           moveKind = 'drop';
@@ -560,6 +570,7 @@ const ZTRACK = (() => {
       if (mk === 'sweep')    { targetTurn = (sec.dir||1) * (sec.sharp||0.028); }
       if (mk === 'spiral')   { spiralTurn = (sec.dir||1)*0.030; spiralLen = len; targetTurn = spiralTurn; }
       if (mk === 'tunnel')   { targetTurn = (sec.dir||1)*0.012; tunnel = true; }
+      if (mk === 'tunnelturn'){ targetTurn = (sec.dir||1)*(sec.sharp||0.05); tunnel = true; }
       if (mk === 'drop')     { extraDrop = sec.drop || 1.2; }
       if (mk === 'tunneldrop'){ extraDrop = sec.drop || 2.6; tunnel = true; }
       if (mk === 'cascade')  { cascadeLen = len; cascadeSteps = Math.max(2,Math.min(8,(sec.steps|0)||4)); }
