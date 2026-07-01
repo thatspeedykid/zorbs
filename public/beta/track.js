@@ -597,7 +597,7 @@ const ZTRACK = (() => {
         else if (mk === 'narrower') { const r=Math.min(1,ap/0.22,(1-ap)/0.22); const e=r*r*(3-2*r); widthFactor=1-e*(1-narrowMin); }
         else if (mk === 'spiral')   { const r=Math.min(1,ap/0.25,(1-ap)/0.25); const e=r*r*(3-2*r); widthFactor=1+0.45*e; }
         else if (mk === 'arena')    { const r=Math.min(1,ap/0.15,(1-ap)/0.15); const e=r*r*(3-2*r); widthFactor=1+(arenaHalfW/WIDTH-1)*Math.max(0,e); }
-        else if (mk === 'tunnel' || mk === 'tunneldrop') widthFactor = 0.8;
+        else if (mk === 'tunnel' || mk === 'tunneldrop') widthFactor = 0.92;   // roomier so the pack doesn't scrape/scrub speed
         const halfW = WIDTH * widthFactor;
         const right = norm(cross(heading, worldUp));
         const up = norm(cross(right, heading));

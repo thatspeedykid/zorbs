@@ -407,9 +407,11 @@ const ZPHYSICS = (() => {
     const b = balls.get(id); if (b) b.boost = Math.min(2.5, b.boost + (amount || 1));
   }
 
-  const DRIVE_FORCE = 9.5;   // base forward push — fast space-racer, but not so hot it climbs banks
+  const DRIVE_FORCE = 9.5;   // base forward push — also RESTORES cruise speed if anything slows a ball
   const LANE_PULL = 2.6;     // firmer lane hold so the pack doesn't ride up the outside of turns
-  const MAX_SPEED = 30;      // fast ceiling; drops/boosts still stack on top via the momentum cap
+  const MAX_SPEED = 30;      // CRUISE speed on the flat; drops add real momentum on top of this
+  const ENERGY_G = 28;       // gravity used to convert height lost -> forward speed (coaster feel)
+  const SPEED_CEILING = 64;  // absolute safety cap so momentum can't run away
   const SPIRAL_DOWNFORCE = 6.0;     // extra downforce on spiral coils (keeps balls planted)
   const BOOST_PAD_STRENGTH = 1.3;   // forward boost from a side pad (MEDIUM mode tuning)
 
@@ -1069,11 +1071,24 @@ const ZPHYSICS = (() => {
         b._launchRecoverT = 0;   // re-caught — recovery window spent
         // place on the surface
         b.body.setTranslation({ x: tpos.x, y: floorY, z: tpos.z }, true);
-        // SLOPE-FOLLOWING vertical velocity: sample the floor one step ahead ALONG THE TRACK
-        // FORWARD direction (fx/fz), not the ball's raw velocity. On a turn the raw velocity
-        // carries a big sideways component, so sampling along it read the banked/curved floor
-        // at a laterally-offset point and produced a noisy slopeVy — vertical chatter (gravel).
-        // Forward-only sampling gives the true descent rate and rides smooth.
+        // ENERGY / GRAVITY MOMENTUM: convert the height LOST since last frame into forward
+        // speed (v' = sqrt(v^2 + 2·g·Δh)), and pay back height gained. This is what makes a
+        // drop actually accelerate the ball and the speed CARRY — real coaster physics on every
+        // track, instead of a drive-to-a-cap that resets to base at the bottom of every drop.
+        // Uses the clean centerline height so bank/twist inject no noise; per-frame Δ is clamped
+        // so a re-catch after a hop can't spike.
+        const cy = smoothFloorY(tpos, b.hint, N);
+        let dDown = (b._prevFloorY != null ? b._prevFloorY : cy) - cy;   // >0 = descending
+        b._prevFloorY = cy;
+        dDown = Math.max(-2.5, Math.min(3.0, dDown));
+        let hsp = Math.hypot(lv.x, lv.z);
+        if (hsp > 0.05) {
+          const newHsp = Math.sqrt(Math.max(9, hsp*hsp + 2 * ENERGY_G * dDown));
+          const k = newHsp / hsp; lv.x *= k; lv.z *= k;
+        }
+        // SLOPE-FOLLOWING vertical velocity, sampled one step ahead ALONG THE TRACK FORWARD
+        // direction (hx/hz) — not the ball's sideways-heavy velocity — so it stays smooth
+        // through curves instead of chattering (the gravel bounce).
         const spd = Math.hypot(lv.x, lv.z) || 0.001;
         const aheadX = tpos.x + hx * spd * dt;
         const aheadZ = tpos.z + hz * spd * dt;
@@ -1082,9 +1097,9 @@ const ZPHYSICS = (() => {
         b.body.setLinvel({ x: lv.x, y: slopeVy, z: lv.z }, true);
       } else {
         b._grounded = false;
-        // genuinely airborne (knocked up / off a drop / past the edge) - gravity wins
+        b._prevFloorY = null;   // reset so re-catching after an airborne arc can't spike the energy calc
       }
-      if (b.boost > 0) b.boost = Math.max(0, b.boost - dt * 0.8);
+      if (b.boost > 0) b.boost = Math.max(0, b.boost - dt * 0.5);   // drop/boost lingers a bit longer
 
       // STUCK WATCHDOG: a live, grounded ball crawling below walking pace for several
       // seconds is wedged (pile-up jam, wall pin, funnel throat). Give it a firm shove
@@ -1106,18 +1121,19 @@ const ZPHYSICS = (() => {
         b._stuckT = 0;
       }
 
-      // MOMENTUM CAP: a plain hard clamp snapped fast balls straight back to base speed the
-      // instant a drop's boost faded — that's the "slows down at the bottom" feel. Instead
-      // each ball carries a dynamic cap that RISES fast (a drop instantly makes room for the
-      // new speed) and FALLS slowly (momentum bleeds off gently like real gravity/coasting),
-      // so speed built on a drop actually flows down the following track.
+      // CRUISE + MOMENTUM: the drive above already RESTORES a ball to cruise speed whenever
+      // anything (a turn, a tunnel, a pile-up, wall scrape) slows it below cruise — so nothing
+      // can stay slow. Speed ABOVE cruise (built from drops via the energy model) is NOT
+      // clamped away; it only bleeds gently, so drop momentum flows down the track and settles
+      // back to cruise over a couple of seconds. A high absolute ceiling just stops runaway.
       const v = b.body.linvel();
       const hs = Math.hypot(v.x, v.z);
-      const targetCap = MAX_SPEED * (1 + b.boost * 0.5);   // drops/pads raise the ceiling
-      if (b._cap == null) b._cap = MAX_SPEED;
-      b._cap += (targetCap - b._cap) * (targetCap > b._cap ? 0.5 : 0.012);  // rise fast, bleed slow
-      if (hs > b._cap) {
-        const s = Math.max(b._cap / hs, 0.99);   // ease toward the cap, never a hard snap
+      const cruise = MAX_SPEED * (1 + b.boost * 0.5);   // drops/pads lift the cruise while active
+      let ns = hs;
+      if (hs > cruise) ns = cruise + (hs - cruise) * 0.9925;   // bleed only the excess (~13%/s)
+      if (ns > SPEED_CEILING) ns = SPEED_CEILING;
+      if (ns !== hs && hs > 0.001) {
+        const s = ns / hs;
         b.body.setLinvel({ x: v.x * s, y: v.y, z: v.z * s }, true);
       }
     }

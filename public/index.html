@@ -144,7 +144,11 @@
   body.fs #fsbtn .fslabel { display:none; }
   #minimap { position:fixed; bottom:84px; left:12px; z-index:30; width:190px; height:132px; border-radius:10px;
     background:rgba(6,12,26,.78); border:1px solid rgba(60,180,255,.4); box-shadow:0 0 18px rgba(0,120,255,.25); }
-  #music { position:fixed; bottom:10px; right:12px; z-index:30; display:flex; align-items:center; gap:10px;
+  #menu-dash { position:fixed; bottom:14px; left:14px; z-index:55; font-family:inherit; font-size:13px; letter-spacing:1px;
+    color:#7fe9ff; text-decoration:none; padding:9px 14px; border-radius:9px; border:1px solid rgba(0,200,255,.4);
+    background:rgba(6,12,26,.82); }
+  #menu-dash:hover { background:rgba(0,150,255,.25); border-color:rgba(120,220,255,.8); }
+  #music { position:fixed; bottom:10px; right:12px; z-index:60; display:flex; align-items:center; gap:10px;
     background:rgba(6,12,26,.82); border:1px solid rgba(60,180,255,.4); border-radius:10px; padding:8px 10px;
     backdrop-filter:blur(4px); box-shadow:0 0 18px rgba(0,120,255,.25); max-width:300px; }
   #music .meta { min-width:0; flex:1; }
@@ -267,7 +271,9 @@
   <div class="mystats"></div>
   <button class="again">RACE AGAIN</button>
 </div></div>
-<div id="arm"><div class="box">
+<div id="arm">
+  <a id="menu-dash" href="/dashboard">📊 Dashboard</a>
+  <div class="box">
   <div class="title">ZORBS</div>
   <div class="sub">live browser marble racing</div>
   <input id="nick" maxlength="16" placeholder="enter a nickname" autocomplete="off" spellcheck="false" />
@@ -2442,15 +2448,35 @@ fetch('/v2/music/playlist.json', { cache:'no-store' })
 
 /* ===== SELF-HOSTED (HTML5 audio) — block-proof ===== */
 let audioEl = null, _slist = [], _sidx = 0;
+// THEME-FIRST ORDER: play "Infectious" first (the theme song), then shuffle everything else.
+// After that first cycle it just shuffles normally.
+function themeFirstOrder(){
+  const tracks = MUSIC.TRACKS.slice();
+  const i = tracks.findIndex(t => /infectious/i.test(t.title || ''));
+  if (i >= 0) { const [theme] = tracks.splice(i, 1); return [theme, ...shuffle(tracks)]; }
+  return shuffle(tracks);
+}
 function initSelfHosted(){
   audioEl = document.getElementById('m-audio');
   if (_OBS) { try { audioEl.muted = true; } catch(_){} }   // OBS overlay: music off until host enables it
-  _slist = shuffle(MUSIC.TRACKS); _sidx = 0;
+  _slist = themeFirstOrder(); _sidx = 0;   // Infectious first, then shuffle
   loadSelf(0, false);
   audioEl.addEventListener('ended', () => {
     _sidx++; if (_sidx >= _slist.length) { _slist = shuffle(MUSIC.TRACKS); _sidx = 0; }
     loadSelf(_sidx, true);
   });
+  // AUTOSTART on the first user interaction anywhere (autoplay policy needs a gesture), so the
+  // theme song is already playing on the play menu and simply CONTINUES into the race when they
+  // hit PLAY — same <audio> element, so the current song never restarts.
+  if (!_OBS) {
+    const kick = () => {
+      if (audioEl && audioEl.paused) { const p = audioEl.play(); if (p && p.catch) p.catch(()=>{}); }
+      window.removeEventListener('pointerdown', kick, true);
+      window.removeEventListener('keydown', kick, true);
+    };
+    window.addEventListener('pointerdown', kick, true);
+    window.addEventListener('keydown', kick, true);
+  }
   audioEl.addEventListener('play',  () => { setupAnalyser(); document.getElementById('m-play').textContent = '⏸'; });
   audioEl.addEventListener('pause', () => document.getElementById('m-play').textContent = '▶');
   audioEl.addEventListener('error', () => document.getElementById('m-song').textContent = 'track unavailable');
