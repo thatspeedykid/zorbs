@@ -1025,7 +1025,14 @@ const ZPHYSICS = (() => {
       // the track. _launchRecoverT gives a short, separate window AFTER a launch where the
       // re-catch tolerance is much looser (it can snap back to the floor from further away),
       // recovering from a long arc instead of leaving it purely to gravity vs. a fixed band.
-      const recoverGap = (b._launchRecoverT > 0) ? -4.0 : -0.35;
+      // STEEP DROPS: the floor plunges faster than the ball can fall, so the default tight
+      // gap>-0.35 band reads the ball as airborne and lets gravity fling it off the (often
+      // narrow) drop — that's the "marbles fall on sharp drops" bug. On drop/tunneldrop/
+      // cascade nodes, loosen the re-catch a lot so the ball snaps down onto the slope and
+      // RIDES it (grounded → lane-pull keeps it centred) instead of going ballistic and
+      // drifting over the edge. slopeVy below still descends it at the true slope rate.
+      const steepDrop = (n.kind === 'drop' || n.kind === 'tunneldrop' || n.kind === 'cascade');
+      const recoverGap = (b._launchRecoverT > 0) ? -4.0 : steepDrop ? -8.0 : -0.35;
       if (!inLaunchGrace && onSurface && gap > recoverGap) {        // touching or pressed into floor
         b._grounded = true;
         b._launchRecoverT = 0;   // re-caught — recovery window spent
